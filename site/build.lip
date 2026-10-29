@@ -1,15 +1,39 @@
 ;; site/build.lip -- generate the blip website into site_out/.
+;;
+;; Reads the content pages and wraps each in the shared layout, writing one
+;; .html per page. Run with:  mkdir -p site_out && blip run site/build.lip
 
-(define (wrap-page title body)
+(define (layout title body)
   (string-append
-    "<!DOCTYPE html>\n<html>\n<head>\n"
-    "<meta charset=\"utf-8\">\n"
-    "<title>" (html-escape title) "</title>\n"
-    "</head>\n<body>\n"
-    "<main>\n" body "\n</main>\n"
-    "</body>\n</html>\n"))
+    "<!DOCTYPE html>\n"
+    "<html lang=\"en\">\n"
+    "<head>\n"
+    "  <meta charset=\"utf-8\">\n"
+    "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+    "  <title>" (html-escape title) " -- blip</title>\n"
+    "  <link rel=\"stylesheet\" href=\"/assets/style.css\">\n"
+    "</head>\n"
+    "<body>\n"
+    "  <nav><a href=\"/index.html\">blip</a> <a href=\"/about.html\">about</a> "
+    "<a href=\"/getting-started.html\">getting started</a></nav>\n"
+    "  <main>\n" body "\n  </main>\n"
+    "</body>\n"
+    "</html>\n"))
 
+;; index
 (use (read-file "site/content/index.md")
   (use (write-file "site_out/index.html"
-          (wrap-page "blip" (html-escape read-file)))
+          (layout "blip" (html-escape read-file)))
     (print "wrote site_out/index.html")))
+
+;; about
+(use (read-file "site/content/about.md")
+  (use (write-file "site_out/about.html"
+          (layout "About" (html-escape read-file)))
+    (print "wrote site_out/about.html")))
+
+;; getting started
+(use (read-file "site/content/getting-started.md")
+  (use (write-file "site_out/getting-started.html"
+          (layout "Getting started" (html-escape read-file)))
+    (print "wrote site_out/getting-started.html")))
