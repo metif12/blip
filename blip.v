@@ -324,14 +324,23 @@ fn main() {
 			}
 			exit_code(run_files([prog]))
 		}
-		'new' {
-			if args.len < 2 {
-				eprintln('blip: new needs a name')
-				eprintln('run `blip help new` for usage')
+		'fmt' {
+			mut write := false
+			mut file := ''
+			for a in args[1..] {
+				if a == '-w' {
+					write = true
+				} else {
+					file = a
+				}
+			}
+			if file == '' {
+				eprintln('blip: fmt needs a file')
+				eprintln('run `blip help fmt` for usage')
 				exit_code(2)
 				return
 			}
-			exit_code(scaffold(args[1]))
+			exit_code(fmt_file(file, write))
 		}
 		'doc' {
 			if args.len < 2 {
@@ -341,6 +350,15 @@ fn main() {
 				return
 			}
 			exit_code(doc_file(args[1]))
+		}
+		'new' {
+			if args.len < 2 {
+				eprintln('blip: new needs a name')
+				eprintln('run `blip help new` for usage')
+				exit_code(2)
+				return
+			}
+			exit_code(scaffold(args[1]))
 		}
 		'pkg' {
 			exit_code(pkg_command(args[1..]))
@@ -642,6 +660,170 @@ fn doc_file(path string) int {
 	return 0
 }
 
+// ---- fmt ----------------------------------------------------------------
+
+// fmt_file pretty-prints a blip source file. With write=true it overwrites
+// the file; otherwise it prints to stdout.
+fn fmt_file(path string, write bool) int {
+	src := os.read_file(path) or {
+		eprintln('blip: cannot read ${path}: ${err.msg()}')
+		return 1
+	}
+	res := reader.read_all(src)
+	if res.diags.len > 0 {
+		d := res.diags[0]
+		eprintln('${path}:${d.line}:${d.col}: ${d.msg}')
+		return 1
+	}
+	mut out := ''
+	for i, id in res.forms {
+		if i > 0 {
+			out += '\n\n'
+		}
+		out += pp_form(res.arena, id, 0)
+	}
+	out += '\n'
+	if write {
+		os.write_file(path, out) or {
+			eprintln('blip: cannot write ${path}: ${err.msg()}')
+			return 1
+		}
+	} else {
+		print(out)
+	}
+	return 0
+}
+
+fn pp_form(a &reader.Arena, id reader.NodeId, depth int) string {
+	d := a.node(id)
+	match d.tag {
+		.nil { return 'nil' }
+		.bool { return if d.i == 1 { '#t' } else { '#f' } }
+		.int { return d.i.str() }
+		.float { return d.f.str() }
+		.str { return quote_string(d.value) }
+		.sym { return d.value }
+		.kw { return ':' + d.value }
+		.list {
+			kids := a.kids(id)
+			if kids.len == 0 {
+				return '()'
+			}
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1)
+				ki++
+			}
+			line := '(' + parts.join(' ') + ')'
+			if line.len <= 80 {
+				return line
+			}
+			mut s := '('
+			for i, p in parts {
+				if i == 0 {
+					s += p
+				} else {
+					s += '\n' + '  '.repeat(depth + 1) + p
+				}
+			}
+			s += ')'
+			return s
+		}
+		.vector {
+			kids := a.kids(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1)
+				ki++
+			}
+			return '[' + parts.join(' ') + ']'
+		}
+		.table {
+			kids := a.kids(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1) + ' ' + pp_form(a, kids[ki + 1], depth + 1)
+				ki += 2
+			}
+			return '{' + parts.join(' ') + '}'
+		}
+		.array {
+			kids := a.kids(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1)
+				ki++
+			}
+			return '@[' + parts.join(' ') + ']'
+		}
+		.bytes {
+			kids := a.kids(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1)
+				ki++
+			}
+			return '#(' + parts.join(' ') + ')'
+		}
+		.quoted {
+			kids := a.kids(id)
+			if kids.len == 0 {
+				return "'()"
+			}
+			return "'" + pp_form(a, kids[0], depth)
+		}
+		.quasi {
+			kids := a.kids(id)
+			if kids.len == 0 {
+				return '`()'
+			}
+			return '`' + pp_form(a, kids[0], depth)
+		}
+		.unquote {
+			kids := a.kids(id)
+			if kids.len == 0 {
+				return ',()'
+			}
+			return ',' + pp_form(a, kids[0], depth)
+		}
+		.unquote_splice {
+			kids := a.kids(id)
+			if kids.len == 0 {
+				return ',@()'
+			}
+			return ',@' + pp_form(a, kids[0], depth)
+		}
+		else {
+			return '#<datum>'
+		}
+	}
+}
+
+fn quote_string(s string) string {
+	mut sb := '"'
+	for ch in s.runes() {
+		match ch {
+			`"` { sb += '\\"' }
+			`\\` { sb += '\\\\' }
+			`\n` { sb += '\\n' }
+			`\r` { sb += '\\r' }
+			`\t` { sb += '\\t' }
+			else { sb += ch.str() }
+		}
+	}
+	sb += '"'
+	return sb
+}
+
+// ---- doc -----------------------------------------------------------------
+
+// doc_file extracts `;;` doc comments preceding definitions and prints them
+// as Markdown.
 // ---- pkg ----------------------------------------------------------------
 
 const lock_name = 'blip.lock'
