@@ -156,29 +156,42 @@ Prints the version and the compiler it was built with.')
 // It is loaded into the same machine as the program, so a program can rebind any
 // of it and the change is visible to a later file.
 fn std_path() string {
-	exe := os.executable()
-	dir := os.dir(exe)
-	// The binary sits in the repository root when built with the documented
-	// command, and one level up when it is put in tools/ during development.
-	for candidate in [os.join_path(dir, 'lib${os.path_separator}std.lip'),
-		os.join_path(os.dir(dir), 'lib${os.path_separator}std.lip')] {
-		if os.exists(candidate) {
-			return candidate
+	$if wasm32 {
+		if os.exists('lib/std.lip') {
+			return 'lib/std.lip'
 		}
+		return ''
+	} $else {
+		exe := os.executable()
+		dir := os.dir(exe)
+		for candidate in [os.join_path(dir, 'lib${os.path_separator}std.lip'),
+			os.join_path(os.dir(dir), 'lib${os.path_separator}std.lip')] {
+			if os.exists(candidate) {
+				return candidate
+			}
+		}
+		return ''
 	}
-	return ''
 }
 
 fn programs_path(name string) string {
-	exe := os.executable()
-	dir := os.dir(exe)
-	for candidate in [os.join_path(dir, 'programs${os.path_separator}${name}'),
-		os.join_path(os.dir(dir), 'programs${os.path_separator}${name}')] {
-		if os.exists(candidate) {
-			return candidate
+	$if wasm32 {
+		p := 'programs/${name}'
+		if os.exists(p) {
+			return p
 		}
+		return ''
+	} $else {
+		exe := os.executable()
+		dir := os.dir(exe)
+		for candidate in [os.join_path(dir, 'programs${os.path_separator}${name}'),
+			os.join_path(os.dir(dir), 'programs${os.path_separator}${name}')] {
+			if os.exists(candidate) {
+				return candidate
+			}
+		}
+		return ''
 	}
-	return ''
 }
 fn run_files(paths []string) int {
 	h := &host.ConsoleHost{}
@@ -352,33 +365,37 @@ fn main() {
 			exit_code(doc_file(args[1]))
 		}
 		'build' {
-			if args.len < 2 {
-				eprintln('blip: build needs a file')
-				eprintln('run `blip help build` for usage')
-				exit_code(2)
-				return
-			}
+			mut target := 'js'
 			mut out := ''
 			mut file := ''
-			for a in args[1..] {
-				if a == '-o' {
-					// next arg is output; handled below
-				} else if file == '' {
-					file = a
-				} else if out == '' {
-					out = a
-				}
-			}
-			// handle -o out
-			mut i := 0
+			mut i := 1
 			for i < args.len {
-				if args[i] == '-o' && i + 1 < args.len {
+				a := args[i]
+				if a == '-o' && i + 1 < args.len {
 					out = args[i + 1]
+					i += 2
+					continue
+				}
+				if a == '--target' && i + 1 < args.len {
+					target = args[i + 1]
+					i += 2
+					continue
+				}
+				if file == '' {
+					file = a
 				}
 				i++
 			}
 			if file == '' {
 				eprintln('blip: build needs a file')
+				eprintln('run blip help build for usage')
+				exit_code(2)
+				return
+			}
+			if target == 'wasm' {
+				eprintln('blip: WASM backend is not yet available (P8).')
+				eprintln('V WASM backend lacks os.read_file/os.exists, which blip needs.')
+				eprintln('Use blip build file for a JavaScript module instead.')
 				exit_code(2)
 				return
 			}
