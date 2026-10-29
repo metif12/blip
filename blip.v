@@ -19,6 +19,7 @@ import vlib.blip.repl
 //   blip test <file.lip> ...  evaluate and check the `;=>` expectations
 //   blip lsp                  serve the language server over stdio
 //   blip new <name>           scaffold a project
+//   blip doc <file.lip>       generate documentation from doc comments
 //   blip pkg <sub>            install, list and remove packages
 //   blip version | help       about, and about a command
 //
@@ -43,6 +44,7 @@ usage:
   blip test <file.lip> ...  evaluate and check the `;=>` expectations
   blip lsp                  serve the language server over stdio
   blip new <name>           scaffold a project
+  blip doc <file.lip>       generate documentation from doc comments
   blip pkg install <repo>   install a package from GitHub
   blip pkg list             list installed packages
   blip pkg remove <name>    remove an installed package
@@ -116,12 +118,6 @@ when it is not, so it works as a git commit-msg hook:
 
 The rules live in programs/lint_commit.lip, which is also runnable on its
 own: blip run programs/lint_commit.lip')
-		}
-		'new' {
-			println('blip new <name> -- scaffold a project
-
-Creates a directory holding a main.lip with a working program, a README.md
-saying what the project is, and a .gitignore. The program runs as written.')
 		}
 		'pkg' {
 			println('blip pkg -- package management
@@ -316,6 +312,15 @@ fn main() {
 				exit_code(2)
 			}
 			exit_code(scaffold(args[1]))
+		}
+		'doc' {
+			if args.len < 2 {
+				eprintln('blip: doc needs a file')
+				eprintln('run `blip help doc` for usage')
+				exit_code(2)
+				return
+			}
+			exit_code(doc_file(args[1]))
 		}
 		'pkg' {
 			exit_code(pkg_command(args[1..]))
@@ -537,6 +542,83 @@ fn scaffold(name string) int {
 	println('  main.lip')
 	println('  README.md')
 	println('  .gitignore')
+	return 0
+}
+
+// ---- doc -----------------------------------------------------------------
+
+// doc_file extracts `;;` doc comments preceding definitions and prints them
+// as Markdown. A `;;` block immediately above a `(define ...)`, `(def ...)`,
+// `(defmacro ...)` or `(struct ...)` form becomes that entry's documentation.
+fn doc_file(path string) int {
+	src := os.read_file(path) or {
+		eprintln('blip: cannot read ${path}: ${err.msg()}')
+		return 1
+	}
+	lines := src.split('\n')
+	mut doc_lines := []string{}
+	for i, line in lines {
+		trimmed := line.trim_space()
+		if trimmed.starts_with(';;') {
+			doc_lines << trimmed[2..].trim_space()
+			continue
+		}
+		// A definition line: flush the accumulated doc as an entry.
+		is_def := trimmed.starts_with('(define') || trimmed.starts_with('(def ') || trimmed.starts_with('(defmacro') || trimmed.starts_with('(struct')
+		if is_def {
+			// Extract the name: second token after the opening paren.
+			mut name := ''
+			mut rest := trimmed.trim_left('(').trim_space()
+			// skip keyword
+			space_idx := rest.index(' ') or { -1 }
+			if space_idx >= 0 {
+				rest = rest[space_idx + 1..].trim_space()
+			}
+			// name is the next token, possibly parenthesized signature
+			if rest.starts_with('(') {
+				mut end := rest.index(')') or { -1 }
+				if end >= 0 {
+					sig := rest[1..end]
+					parts := sig.split(' ')
+					if parts.len > 0 {
+						name = parts[0]
+					}
+					println('## ' + name)
+					println('')
+					println('```blip')
+					println('(${name} ${parts[1..].join(' ')})')
+					println('```')
+					println('')
+				}
+			} else {
+				mut end := rest.index(' ') or { rest.len }
+				if end < 0 { end = rest.len }
+				name = rest[..end]
+				println('## ' + name)
+				println('')
+			}
+			// Print doc text (skip empty leading lines).
+			mut started := false
+			for dl in doc_lines {
+				if dl == '' {
+					if started { println('') }
+					continue
+				}
+				started = true
+				println(dl)
+			}
+			if started { println('') }
+			doc_lines = []
+			continue
+		}
+		// Non-doc, non-def line resets the doc buffer (blank lines keep it).
+		if trimmed == '' {
+			// keep doc_lines (blank line inside doc is already stored as '')
+		} else {
+			doc_lines = []
+		}
+	}
+	// Trailing doc with no definition: ignore.
 	return 0
 }
 
