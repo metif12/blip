@@ -305,11 +305,31 @@ fn main() {
 			}
 			exit_code(run_files([prog]))
 		}
+		'vet' {
+			mut file := 'COMMIT_EDITMSG'
+			if args.len >= 2 {
+				file = args[1]
+			}
+			if !os.exists(file) {
+				eprintln('blip: cannot read ${file}')
+				exit_code(2)
+				return
+			}
+			os.setenv('BLIP_LINT_FILE', file, true)
+			prog := programs_path('lint_commit.lip')
+			if prog == '' {
+				eprintln('blip: cannot find programs/lint_commit.lip')
+				exit_code(2)
+				return
+			}
+			exit_code(run_files([prog]))
+		}
 		'new' {
 			if args.len < 2 {
 				eprintln('blip: new needs a name')
 				eprintln('run `blip help new` for usage')
 				exit_code(2)
+				return
 			}
 			exit_code(scaffold(args[1]))
 		}
