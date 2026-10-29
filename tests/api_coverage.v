@@ -131,11 +131,10 @@ fn main() {
 			corpus_files << cli
 		}
 	}
-	for extra in [os.join_path('examples', '01_basics.lip'),
-		os.join_path('examples', '02_data.lip'), os.join_path('examples', '03_match.lip'),
-		os.join_path('examples', '04_errors.lip'), os.join_path('examples', '05_pipelines.lip'),
-		os.join_path('examples', '06_modules.lip'), os.join_path('programs', 'brainfuck.lip'),
-		os.join_path('programs', 'json.lip')] {
+	for extra in [os.join_path('examples', '01_basics.lip'), os.join_path('examples', '02_data.lip'),
+		os.join_path('examples', '03_match.lip'), os.join_path('examples', '04_errors.lip'),
+		os.join_path('examples', '05_pipelines.lip'), os.join_path('examples', '06_modules.lip'),
+		os.join_path('programs', 'brainfuck.lip'), os.join_path('programs', 'json.lip')] {
 		if os.exists(extra) {
 			corpus_files << extra
 		}
@@ -163,14 +162,15 @@ fn main() {
 	// The corpus must not be trivially satisfied: a suite that reads its own
 	// list of names and stops there would pass with nothing tested. Check that
 	// the real suites are present in it.
-	for required in ['tail_calls.v', 'binding_forms.v', 'embedding.v', 'repl_golden.v',
-		'examples_run.v', 'programs_run.v', 'genprims.v'] {
+	for required in ['tail_calls.v', 'binding_forms.v', 'embedding.v', 'repl_golden.v', 'examples_run.v',
+		'programs_run.v', 'genprims.v'] {
 		s.record(corpus_files.any(os.file_name(it) == required),
 			'${required} is in the corpus', '${required} is missing from the corpus')
 	}
 
 	if s.fails > 0 {
 		println('${s.fails} FAILURE(S)')
+		exit(1)
 		return
 	}
 	println('api coverage: all checks passed')

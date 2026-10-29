@@ -214,7 +214,7 @@ fn (mut s Suite) print_goes_to_the_host_and_to_out() bool {
 		return false
 	}
 	// `display` differs from `print` in exactly one way: no quotes on strings.
-	m.run_str('(display "raw" :kw)') or { }
+	m.run_str('(display "raw" :kw)') or {}
 	if m.out.len != 2 || m.out[1] != 'raw :kw' {
 		s.fail('display shows strings raw', 'machine.out = ${m.out}')
 		return false
@@ -225,8 +225,8 @@ fn (mut s Suite) print_goes_to_the_host_and_to_out() bool {
 
 fn (mut s Suite) output_stays_with_its_machine() bool {
 	a, b, ha, hb := pair()
-	a.run_str('(print "from a")') or { }
-	b.run_str('(print "from b")') or { }
+	a.run_str('(print "from a")') or {}
+	b.run_str('(print "from b")') or {}
 	ok := ha.lines().len == 1 && ha.lines()[0] == '"from a"' && hb.lines().len == 1 && hb.lines()[0] == '"from b"'
 	return s.record('output stays with its machine', ok, 'each host saw only its own line',
 		'a=${ha.lines()} b=${hb.lines()}')
@@ -313,6 +313,7 @@ fn main() {
 
 	if s.fails > 0 {
 		println('${s.fails} FAILURE(S)')
+		exit(1)
 		return
 	}
 	println('embedding: all checks passed')

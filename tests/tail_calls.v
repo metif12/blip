@@ -85,7 +85,7 @@ fn main() {
 	check('dotimes', '(dotimes i 3 (print i)) 8', '8')
 	check('and-short', '(and 1 #f 3)', '#f')
 	check('and-value', '(and 1 2 3)', '3')
-	check('or-value', "(or #f #f 7)", '7')
+	check('or-value', '(or #f #f 7)', '7')
 	// The three known failures this file used to name -- `let*`, rest
 	// parameters, and callable keywords -- are fixed, and tests/binding_forms.v
 	// covers them properly. A note describing a fixed bug is worse than no note,

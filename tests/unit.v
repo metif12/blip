@@ -593,6 +593,7 @@ fn main() {
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')
+		exit(1)
 		return
 	}
 	println('unit: all ${s.checks} checks passed')

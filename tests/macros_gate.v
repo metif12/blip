@@ -73,12 +73,14 @@ fn main() {
 	res := emit.expand_macro_at_embed('(+ 1 2)', h) or {
 		s.fail('expand_macro_at_embed', err.msg())
 		println('${s.fails} FAILURE(S)')
+		exit(1)
 		return
 	}
 	s.ok('expand_macro_at_embed', res)
 
 	if s.fails > 0 {
 		println('${s.fails} FAILURE(S)')
+		exit(1)
 		return
 	}
 	println('macros_gate: all checks passed')
