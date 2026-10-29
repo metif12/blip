@@ -1,6 +1,9 @@
 module emit
 
 import os
+import vlib.blip
+import vlib.blip.host
+import vlib.blip.machine
 import vlib.blip.reader
 
 // Blip to JavaScript.
@@ -64,19 +67,41 @@ pub fn compile_file(path string) !Result {
 // compile_with_base is the real implementation: `base` is the directory the
 // source lives in, used to resolve `require`.
 pub fn compile_with_base(src string, base string) !Result {
-	res := reader.read_all(src)
+	mut res := reader.read_all(src)
 	if res.diags.len > 0 {
 		d := res.diags[0]
 		return error('${d.line}:${d.col}: ${d.msg}')
 	}
+	// Macro pre-pass: defmacro forms register their macro in an embedded
+	// machine and are dropped from the output; macro calls (registered
+	// macros and explicit macex/macex1) are expanded through that machine
+	// and re-read, so the emitter only ever sees ordinary forms. A macro
+	// that expands to itself, or one that fails to register, is a compile
+	// error rather than a silently dropped form.
+	mut mach := machine.new_machine_with(res.arena, host.new_capture())
+	mut expanded_forms := []reader.NodeId{}
+	for id in res.forms {
+		if is_defmacro_form(res.arena, id) {
+			txt := form_text(src, res.arena, id)
+			mach.run_str(txt) or {
+				return error('macro registration failed: ${err.msg()}')
+			}
+			continue
+		}
+		nid := expand_form(mut mach, res.arena, id) or {
+			return error('macro expansion failed: ${err.msg()}')
+		}
+		expanded_forms << nid
+	}
+	res.forms = expanded_forms
 	mut e := Emitter{
-		arena:         res.arena
-		top:           map[string]bool{}
-		mangled:       map[string]string{}
-		collided:      map[string]string{}
-		takes_kwargs:  map[string]bool{}
-		base:          base
-		loaded:        map[string]bool{}
+		arena:        res.arena
+		top:          map[string]bool{}
+		mangled:      map[string]string{}
+		collided:     map[string]string{}
+		takes_kwargs: map[string]bool{}
+		base:         base
+		loaded:       map[string]bool{}
 	}
 	// Two passes, because a function may refer to a name defined later in the
 	// file -- ordinary in blip, impossible in a `const` declaration.
@@ -115,6 +140,7 @@ pub fn compile_with_base(src string, base string) !Result {
 // could terminate the string silently -- which is exactly what happened twice
 // while adding a trampoline.
 const prelude = $embed_file('prelude.js').to_string()
+
 struct Emitter {
 mut:
 	arena   &reader.Arena
@@ -160,7 +186,7 @@ mut:
 	// `require "lib/x.vl"` resolves next to THIS file rather than next to
 	// the process's working directory -- the same rule resolve_path uses in
 	// the machine.
-	base    string
+	base string
 	// loaded remembers which module paths have already been inlined, so a
 	// file required twice is emitted once.
 	loaded map[string]bool
@@ -291,6 +317,29 @@ fn (mut e Emitter) form(id reader.NodeId) {
 	}
 	head := e.node(kids[0])
 	if head.tag == .sym {
+		if head.value.contains('.') {
+			dot := head.value.last_index('.') or { 0 }
+			base := e.mangle_name(head.value[..dot])
+			field := e.mangle_name(head.value[dot + 1..])
+			if kids.len == 3 {
+				marker := e.node(kids[1])
+				if (marker.tag == .kw && marker.value == '=') || (marker.tag == .sym && marker.value == ':=') {
+					val := e.value(kids[2])
+					e.emit('${base} = Object.assign({}, ${base}, { ${field}: ${val} });')
+					return
+				}
+			}
+			if kids.len <= 1 {
+				e.emit('${base}.${field};')
+			} else {
+				mut args := []string{}
+				for k in kids[1..] {
+					args << e.value(k)
+				}
+				e.emit('${base}.${field}(${args.join(', ')});')
+			}
+			return
+		}
 		if e.special(head.value, id, kids) {
 			return
 		}
@@ -334,7 +383,7 @@ fn (mut e Emitter) special(name string, id reader.NodeId, kids []reader.NodeId) 
 		e.emit_if(kids)
 		return true
 	}
-	if name == 'begin' {
+	if name == 'begin' || name == 'do' {
 		for k in kids[1..] {
 			e.stmt(k)
 		}
@@ -374,7 +423,8 @@ fn (mut e Emitter) special(name string, id reader.NodeId, kids []reader.NodeId) 
 	}
 	// `use` in statement position is the same IIFE followed by a semicolon. Listed
 	// as unsupported until now, so a top-level `use` emitted nothing at all.
-	if name == 'use' {		e.emit('${e.value(id)};')
+	if name == 'use' {
+		e.emit('${e.value(id)};')
 		return true
 	}
 	if name == 'try' {
@@ -489,10 +539,8 @@ fn (mut e Emitter) special(name string, id reader.NodeId, kids []reader.NodeId) 
 // needs them GONE from this list to reach `special` at all -- a name listed here
 // is skipped before the special-form dispatch runs, so a top-level `match` used
 // to emit nothing and look like a silent success.
-const unsupported_forms = ['loop', 'dotimes',
-	'struct',
-	'do', 'defmacro', 'macex', 'macex1', 'as->',
-	'cond->', 'import', 'quasiquote', 'unquote', 'unquote-splicing']
+const unsupported_forms = ['loop', 'dotimes', 'struct', 'as->', 'cond->', 'import', 'quasiquote',
+	'unquote', 'unquote-splicing']
 
 fn (mut e Emitter) emit_define(kids []reader.NodeId) {
 	if kids.len < 3 {
@@ -710,7 +758,7 @@ fn (mut e Emitter) emit_let(kind string, kids []reader.NodeId) {
 		return
 	}
 	bindings := e.kids(kids[1])
-mut body := kids[2..]
+	mut body := kids[2..]
 	// `(let NAME VALUE body...)` is the same thing as `(let ([NAME VALUE])
 	// body...)`, and std.lip uses the short form everywhere -- every one of
 	// parse-in, lookup-sym, validate and connect is written that way. Reading
@@ -835,19 +883,30 @@ fn (mut e Emitter) emit_struct(kids []reader.NodeId) {
 		}
 		field_names << fd.value
 	}
+	mut mutable := false
+	mut mi := 3
+	for mi < kids.len {
+		kd := e.node(kids[mi])
+		if kd.tag == .kw && kd.value == 'mutable' {
+			mutable = true
+		}
+		mi++
+	}
 	low := name.to_lower()
-	// The constructor. It is a plain function, so `(Point 3 4)` is an ordinary
-	// application and needs no special case at the call site.
+	// constructor, predicate, accessors (as before)
 	e.emit('function ${e.mangle_name(name)}(${field_names.map(e.mangle_name).join(', ')}) {')
 	e.depth++
 	e.emit('return { blip_struct: "${name}", ${field_names.map(e.mangle_name).join(', ')} };')
 	e.depth--
 	e.emit('}')
-	// The predicate and the accessors, mangled with the same rule every other
-	// identifier uses, so `point?` is `point_q` here and wherever it is called.
 	e.emit('function ${e.mangle_name('${low}?')}(v) { return !!v && v.blip_struct === "${name}"; }')
 	for f in field_names {
 		e.emit('function ${e.mangle_name('${low}-${f}')}(v) { return v.${e.mangle_name(f)}; }')
+	}
+	if mutable {
+		for f in field_names {
+			e.emit('function ${e.mangle_name('set-${low}-${f}!')}(v, val) { v.${e.mangle_name(f)} = val; return null; }')
+		}
 	}
 }
 
@@ -877,14 +936,22 @@ fn (mut e Emitter) value(id reader.NodeId) string {
 		}
 		.char { return '"${escape(rune(d.i))}"' }
 		.str { return '"${escape_all(d.value)}"' }
-		.sym { return e.symbol(d.value) }
+		.sym {
+			if d.value.contains('.') {
+				dot := d.value.last_index('.') or { return 'null' }
+				base := e.mangle_name(d.value[..dot])
+				field := e.mangle_name(d.value[dot + 1..])
+				return '${base}.${field}'
+			}
+			return e.symbol(d.value)
+		}
 		// A keyword datum is a KEYWORD, not a string: `:dog` is a value the printer
-	// writes `:dog`, and `{:kind :dog}` stores one. It used to emit as a bare
-	// string, which is invisible for a table KEY -- which is why it survived
-	// until a keyword appeared in a table VALUE and printed as `"dog"` where
-	// blip prints `:dog`. Lookups normalise the key, so `blip.get(t, :a)` and
-	// `blip.get(t, "a")` reach the same entry.
-	.kw { return 'blip.kw("${escape_all(d.value)}")' }
+		// writes `:dog`, and `{:kind :dog}` stores one. It used to emit as a bare
+		// string, which is invisible for a table KEY -- which is why it survived
+		// until a keyword appeared in a table VALUE and printed as `"dog"` where
+		// blip prints `:dog`. Lookups normalise the key, so `blip.get(t, :a)` and
+		// `blip.get(t, "a")` reach the same entry.
+		.kw { return 'blip.kw("${escape_all(d.value)}")' }
 		.list {
 			return e.application(id, kids_of(e, id))
 		}
@@ -969,7 +1036,7 @@ fn (mut e Emitter) expression_form(name string, kids []reader.NodeId) ?string {
 		// quoted form as source produces.
 		return e.data(kids[1])
 	}
-if (name == 'fn' || name == 'lambda') && kids.len >= 2 {
+	if (name == 'fn' || name == 'lambda') && kids.len >= 2 {
 		params := e.kids(kids[1])
 		mut ps := []string{}
 		for p in params {
@@ -1088,10 +1155,13 @@ if (name == 'fn' || name == 'lambda') && kids.len >= 2 {
 	if name == 'case' && kids.len >= 2 {
 		return e.case_expr(kids)
 	}
-	if name == 'begin' {
+	if name == 'begin' || name == 'do' {
+		if kids.len <= 1 {
+			return 'null'
+		}
 		return '(${e.seq_values(kids[1..]).join(', ')})'
 	}
-	// `defined?` probes whether a name is bound. The compiler does NOT evaluate
+	// defined? probes whether a name is bound. The compiler does NOT evaluate
 	// the name -- this is the whole point of the form -- so it compiles the name
 	// as a reference probe, not as a value.
 	if name == 'defined?' {
@@ -1215,8 +1285,7 @@ fn (mut e Emitter) case_expr(kids []reader.NodeId) string {
 }
 
 // literal_tags are the datums case and match can compare by equality.
-const literal_tags = [reader.DatumTag.int, .float, .str, .char, .bool, .nil, .kw,
-	.rat]
+const literal_tags = [reader.DatumTag.int, .float, .str, .char, .bool, .nil, .kw, .rat]
 
 // match_expr builds `(match subject [pattern result] ...)` as nested tests.
 //
@@ -1353,7 +1422,7 @@ fn (mut e Emitter) sequence_pattern(kids []reader.NodeId) Pat {
 	if kids.len == 0 {
 		return pat('["lit", null]', [])
 	}
-head := e.node(kids[0])
+	head := e.node(kids[0])
 	// A headless pattern, `(1 2 x)`, is the shape a match* clause becomes. It is
 	// NOT the same rule as the `list`-headed form: measured, `(a b c)` on
 	// '(1 2 3) binds c to (2 3) while `(list a b c)` binds it to 3. blip's
@@ -1363,7 +1432,7 @@ head := e.node(kids[0])
 		return e.positional_pattern(kids, 'pos')
 	}
 	match head.value {
-'list', 'vector' {
+		'list', 'vector' {
 			return e.positional_pattern(kids[1..], 'list')
 		}
 		'cons' {
@@ -1371,7 +1440,7 @@ head := e.node(kids[0])
 				e.refuse('cons pattern')
 				return bad_pat()
 			}
-h := e.pattern(kids[1])
+			h := e.pattern(kids[1])
 			t := e.pattern(kids[2])
 			if !h.ok || !t.ok {
 				return bad_pat()
@@ -1408,7 +1477,7 @@ h := e.pattern(kids[1])
 			mut names := []string{}
 			mut i := 2
 			for i < kids.len {
-f := e.node(kids[i])
+				f := e.node(kids[i])
 				mut field := ''
 				if f.tag == .kw {
 					field = f.value
@@ -1438,7 +1507,7 @@ f := e.node(kids[i])
 			// first argument (match.v pushes the subject, then the operands).
 			// Recognised by name from match.v's own list, so a user function
 			// named `list` cannot change what a pattern means.
-if !pattern_predicate(head.value) {
+			if !pattern_predicate(head.value) {
 				return e.positional_pattern(kids, 'pos')
 			}
 			mut parts := ['"pred"', e.symbol(head.value)]
@@ -1475,6 +1544,7 @@ fn (mut e Emitter) positional_pattern(kids []reader.NodeId, node string) Pat {
 	}
 	return pat('[${parts.join(', ')}]', names)
 }
+
 // binding_pattern compiles a pattern used to DESTROY rather than to match, in a
 // `let` binding or a function parameter. It is not `pattern`, and the difference
 // is not cosmetic: `machine/mod.v` destructuring is positional with NO tail
@@ -1663,10 +1733,9 @@ fn (mut e Emitter) pattern_let(bindings []reader.NodeId, body []reader.NodeId) {
 // imported: the emitter is a separate module and matching one name here against
 // that list is what keeps `(list 1 2)` a list pattern rather than a predicate.
 fn pattern_predicate(name string) bool {
-	return name in ['<', '>', '<=', '>=', '=', 'not=', 'eq?', 'zero?', 'even?', 'odd?',
-		'positive?', 'negative?', 'list?', 'pair?', 'vector?', 'table?', 'array?',
-		'string?', 'symbol?', 'keyword?', 'integer?', 'float?', 'number?',
-		'boolean?', 'rune?', 'nil?', 'null?', 'function?']
+	return name in ['<', '>', '<=', '>=', '=', 'not=', 'eq?', 'zero?', 'even?', 'odd?', 'positive?',
+		'negative?', 'list?', 'pair?', 'vector?', 'table?', 'array?', 'string?', 'symbol?', 'keyword?',
+		'integer?', 'float?', 'number?', 'boolean?', 'rune?', 'nil?', 'null?', 'function?']
 }
 
 // match_expr emits a whole `match` or `match*` as ONE IIFE.
@@ -2028,7 +2097,7 @@ fn (mut e Emitter) use_expr(kids []reader.NodeId) string {
 	slot := '__blip_use${e.gensym}_v'
 	m := e.push_local(callee, slot)
 	mut names := []string{}
-	for i in 0..use_arity_max {
+	for i in 0 .. use_arity_max {
 		names << 'r${i + 1}'
 	}
 	e.push_locals(names)
@@ -2040,7 +2109,7 @@ fn (mut e Emitter) use_expr(kids []reader.NodeId) string {
 	decls << 'if (!is_result(__blip_use${e.gensym}, "ok")) { return __blip_use${e.gensym}; }'
 	decls << 'const __blip_use${e.gensym}i = unvec(__blip_use${e.gensym});'
 	decls << 'let ${slot} = __blip_use${e.gensym}i.length > 1 ? __blip_use${e.gensym}i[1] : null;'
-	for i in 0..use_arity_max {
+	for i in 0 .. use_arity_max {
 		decls << 'let r${i + 1} = __blip_use${e.gensym}i.length > ${i + 1} ? __blip_use${e.gensym}i[${i + 1}] : null;'
 	}
 	decls << 'return ${body};'
@@ -2064,6 +2133,7 @@ fn (mut e Emitter) use_body(forms []reader.NodeId) string {
 	}
 	return parts.join(', ')
 }
+
 // `@{:n 0}`. A table and a buffer both take keyword/value PAIRS, so their
 // children alternate, while an array takes plain values -- and blip prints an
 // array as `[1 2 3]`, which is the VECTOR spelling, so an array literal is
@@ -2292,6 +2362,26 @@ fn (mut e Emitter) application(id reader.NodeId, kids []reader.NodeId) string {
 		// `(print (let ([a 1]) a))` -- has to be emitted as an expression. The
 		// statement forms cannot go there, so the ones that have an expression
 		// spelling are dispatched to a helper that has it.
+		if head.value.contains('.') {
+			dot := head.value.last_index('.') or { 0 }
+			base := e.mangle_name(head.value[..dot])
+			field := e.mangle_name(head.value[dot + 1..])
+			if kids.len == 3 {
+				marker := e.node(kids[1])
+				if (marker.tag == .kw && marker.value == '=') || (marker.tag == .sym && marker.value == ':=') {
+					val := e.value(kids[2])
+					return 'Object.assign({}, ${base}, { ${field}: ${val} })'
+				}
+			}
+			if kids.len <= 1 {
+				return '${base}.${field}'
+			}
+			mut args := []string{}
+			for k in kids[1..] {
+				args << e.value(k)
+			}
+			return '${base}.${field}(${args.join(', ')})'
+		}
 		if inner := e.expression_form(head.value, kids) {
 			return inner
 		}
@@ -2517,6 +2607,7 @@ fn mangle(name string) string {
 		'<=' { return 'lte' }
 		'>=' { return 'gte' }
 		'print' { return 'print' }
+		'echo' { return 'echo' }
 		'apply' { return 'apply' }
 		'car' { return 'car' }
 		'cdr' { return 'cdr' }
@@ -2538,11 +2629,13 @@ fn mangle(name string) string {
 		'|>' { return 'pipe' }
 		'map' { return 'map' }
 		'filter' { return 'filter' }
+		'keep' { return 'filter' }
 		'fold' { return 'fold' }
 		'for-each' { return 'for_each' }
 		'vector-map' { return 'vector_map' }
 		'reverse' { return 'reverse' }
 		'sort' { return 'sort' }
+		'sort-by' { return 'sort_by' }
 		'string-length' { return 'string_length' }
 		'vector-rev' { return 'reverse' }
 		// The collection forms. Without these a call fell through to the default
@@ -2650,113 +2743,116 @@ fn mangle(name string) string {
 // and a primitive such as `print` has no definition in the emitted module, so
 // both must be routed or the output is a ReferenceError waiting to happen.
 const prim_names = {
-	'+':              true
-	'-':              true
-	'*':              true
-	'/':              true
-	'<':              true
-	'>':              true
-	'<=':             true
-	'>=':             true
-	'=':              true
-	'print':          true
-	'apply':          true
-	'car':            true
-	'cdr':            true
-	'cons':           true
-	'null?':          true
-	'not':            true
-	'equal?':         true
-	'length':         true
-	'vector-ref':     true
-	'string-upcase':  true
-	'string-downcase': true
-	'string-append':  true
-	'vector-length':  true
-	'even?':          true
-	'odd?':           true
-	'|>':             true
-	'map':            true
-	'filter':         true
-	'fold':           true
-	'for-each':       true
-	'vector-map':     true
-	'reverse':        true
-	'sort':           true
-	'string-length':  true
-	'vector-rev':     true
-		'table':          true
-		'buffer':         true
-		'get':            true
-		'table-keys':     true
-		'list':           true
-		'append':         true
-		'array-length':   true
-		'array-ref':      true
-		'put':            true
-		'remove':         true
-		'string-split':   true
-		'string-trim':    true
-		'string-index-of': true
-		'vector-append':  true
-		'array-push!':    true
-		'array-set!':     true
-		'put!':           true
-		'take':           true
-		'array?':         true
-		'table?':         true
-		'float?':         true
-		'integer?':       true
-		'keyword?':       true
-		'list?':          true
-		'negative?':      true
-		'number?':        true
-		'positive?':      true
-		'string?':        true
-		'symbol?':        true
-		'vector?':        true
-		'zero?':          true
-		'eq?':            true
-		'has-key?':       true
-		'format':         true
-		'string->number': true
-		'number->string': true
-		'ok':             true
-		'err':            true
-		'error':          true
-		'raise':          true
-		'ok?':            true
-		'err?':           true
-		'ok-value':       true
-		'err-value':      true
-		'unwrap-or':      true
-		'flatten-result': true
-		'all-results':    true
-		'map-result':     true
-		'try-result':     true
-		'lazy-map-result': true
-		'lazy-unwrap':    true
-		'assert':         true
-		'any?':           true
-		'every?':         true
-		'first':          true
-		'rest':           true
-		'last':           true
-		'count':          true
-		'list-ref':       true
-		'nil?':           true
-		'not=':           true
-		'zero':           true
-		'range':          true
-		'remainder':      true
-		'sqrt':           true
-		'str':            true
-		'string':         true
-		'symbol':         true
-		'keyword':        true
-		'vector':         true
-		'string-not-blank?': true
-		'frequencies':    true
+	'+':                 true
+	'-':                 true
+	'*':                 true
+	'/':                 true
+	'<':                 true
+	'>':                 true
+	'<=':                true
+	'>=':                true
+	'=':                 true
+	'print':             true
+	'echo':              true
+	'apply':             true
+	'car':               true
+	'cdr':               true
+	'cons':              true
+	'null?':             true
+	'not':               true
+	'equal?':            true
+	'length':            true
+	'vector-ref':        true
+	'string-upcase':     true
+	'string-downcase':   true
+	'string-append':     true
+	'vector-length':     true
+	'even?':             true
+	'odd?':              true
+	'|>':                true
+	'map':               true
+	'filter':            true
+	'keep':              true
+	'fold':              true
+	'for-each':          true
+	'vector-map':        true
+	'reverse':           true
+	'sort':              true
+	'sort-by':           true
+	'string-length':     true
+	'vector-rev':        true
+	'table':             true
+	'buffer':            true
+	'get':               true
+	'table-keys':        true
+	'list':              true
+	'append':            true
+	'array-length':      true
+	'array-ref':         true
+	'put':               true
+	'remove':            true
+	'string-split':      true
+	'string-trim':       true
+	'string-index-of':   true
+	'vector-append':     true
+	'array-push!':       true
+	'array-set!':        true
+	'put!':              true
+	'take':              true
+	'array?':            true
+	'table?':            true
+	'float?':            true
+	'integer?':          true
+	'keyword?':          true
+	'list?':             true
+	'negative?':         true
+	'number?':           true
+	'positive?':         true
+	'string?':           true
+	'symbol?':           true
+	'vector?':           true
+	'zero?':             true
+	'eq?':               true
+	'has-key?':          true
+	'format':            true
+	'string->number':    true
+	'number->string':    true
+	'ok':                true
+	'err':               true
+	'error':             true
+	'raise':             true
+	'ok?':               true
+	'err?':              true
+	'ok-value':          true
+	'err-value':         true
+	'unwrap-or':         true
+	'flatten-result':    true
+	'all-results':       true
+	'map-result':        true
+	'try-result':        true
+	'lazy-map-result':   true
+	'lazy-unwrap':       true
+	'assert':            true
+	'any?':              true
+	'every?':            true
+	'first':             true
+	'rest':              true
+	'last':              true
+	'count':             true
+	'list-ref':          true
+	'nil?':              true
+	'not=':              true
+	'zero':              true
+	'range':             true
+	'remainder':         true
+	'sqrt':              true
+	'str':               true
+	'string':            true
+	'symbol':            true
+	'keyword':           true
+	'vector':            true
+	'string-not-blank?': true
+	'frequencies':       true
 }
 
 // stmt emits a form as a statement, and drops a trailing `;` when the form is
@@ -2857,7 +2953,9 @@ fn escape_all(s string) string {
 // json_str wraps escape_all in the quotes the emitted JavaScript needs.
 fn json_str(s string) string {
 	return '"${escape_all(s)}"'
-}// ------------------------------------------------------------------ modules
+}
+
+// ------------------------------------------------------------------ modules
 //
 // `require` loads (evaluates) another file into the current machine. The
 // emitter mirrors that: it reads the file, compiles it with the same base

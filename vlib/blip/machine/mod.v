@@ -2675,7 +2675,7 @@ pub fn (mut m Machine) datum_to_value(id blip.NodeId) blip.Value {
 			}
 			work << Frame{
 				id:    f.kids[f.start]
-				kids:  []blip.NodeId{}
+				kids:  m.arena.kids(f.kids[f.start])
 				start: 0
 			}
 			continue
@@ -2791,11 +2791,20 @@ pub fn (mut m Machine) quasi_to_value(id blip.NodeId) blip.Value {
 	d := m.arena.node(id)
 	if d.tag == .unquote || d.tag == .unquote_splice {
 		inner := m.arena.kids(id)[0]
+		// Evaluate `inner` in the CURRENT environment, not a reset one:
+		// `eval_one` resets `m.env` to globals, which makes every unquoted
+		// name in a macro body unbound (and therefore nil). Saving and
+		// restoring `env` around it did not help, because the reset happened
+		// inside. Drive the form directly so the macro's bound parameters
+		// stay visible.
 		saved_k := m.kstack
 		saved_ctl := m.ctl
 		saved_form := m.form
 		saved_env := m.env
-		out := m.eval_one(inner) or { blip.nil_value() }
+		m.kstack = []blip.Kont{}
+		m.ctl = .eval_form
+		m.form = inner
+		out := m.drive() or { blip.nil_value() }
 		m.kstack = saved_k
 		m.ctl = saved_ctl
 		m.form = saved_form
@@ -3144,6 +3153,7 @@ fn (mut m Machine) eval_defmacro(kids []blip.NodeId) ! {
 	spec := m.parse_params(m.arena.kids(kids[2]), name)!
 	body := m.apply_destructures(spec, m.make_begin(kids[3..]))
 	m.envs.define(m.env, name, m.make_closure(spec, body, m.env, name))
+	m.macros << name
 	m.val = blip.symbol(name)
 	m.ret()
 }

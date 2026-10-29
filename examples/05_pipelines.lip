@@ -94,8 +94,8 @@
 ;; Everything so far used no macros at all. That is the point.
 
 ;; Define a macro: defmacro runs at compile time and returns code.
-(defmacro unless-zero (form value body)
-  ;; form is ignored here; value and body are the unevaluated arguments
+(defmacro unless-zero (value body)
+  ;; value and body are the unevaluated arguments
   (list 'if (list '= value 0) '(do) body))
 
 ;; macex1 expands one step -- the debugging window a macro language needs
