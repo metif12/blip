@@ -70,7 +70,7 @@ pub fn compile_with_base(src string, base string) !Result {
 		return error('${d.line}:${d.col}: ${d.msg}')
 	}
 	mut e := Emitter{
-		arena:         res.arena
+		arena:         &res.arena
 		top:           map[string]bool{}
 		mangled:       map[string]string{}
 		collided:      map[string]string{}
@@ -239,7 +239,7 @@ fn (mut e Emitter) kids(id reader.NodeId) []reader.NodeId {
 }
 
 fn (mut e Emitter) node(id reader.NodeId) reader.Datum {
-	return e.arena.node(id)
+	return *e.arena.node(id)
 }
 
 fn (mut e Emitter) emit(line string) {
@@ -2947,7 +2947,7 @@ fn (mut e Emitter) compile_module(src string, base string) ![]string {
 		return error('module has diagnostics')
 	}
 	mut me := Emitter{
-		arena:        res.arena
+		arena:        &res.arena
 		top:          map[string]bool{}
 		mangled:      map[string]string{}
 		collided:     map[string]string{}

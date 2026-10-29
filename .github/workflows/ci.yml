@@ -8,22 +8,26 @@ on:
 
 env:
   # The compiler this project is developed against, pinned. Not the 0.5.2
-  # release: vlang/v master at 0137eb5 also reports itself as "V 0.5.2", but it
+  # release: vlang/v master at 6dd8bb8 also reports itself as "V 0.5.2", but it
   # is a different build.
   #
   # A CI runner that installs a different compiler than the developer is worse
   # than no CI: it reports a failure that does not reproduce locally, or -- far
   # worse -- passes while checking something other than what is shipped.
-  V_COMMIT: 0137eb5d8ebc5d183259309ed08ea06ba9bc27d6
+  V_COMMIT: 6dd8bb85fc0f9bba05b6be5aad5df4d443c26cd5
 
   # vc is the C source V bootstraps itself from, and it is a SEPARATE repository
   # from V. The Makefile clones it at HEAD -- UNPINNED -- while V_COMMIT is
-  # pinned, so a vc snapshot generated from a newer V carries a parser that
-  # rejects the pinned V's own vlib. vc HEAD gained "reject `if` conditions that
-  # start with a parenthesized if expression" on 2026-10-05, and
-  # vlib/math/bits/bits.v at this V_COMMIT uses exactly that shape at line 621.
-  # This is the snapshot taken just after V_COMMIT, before that change.
-  VC_COMMIT: 64b1017fe300e1631d5b2ecd4d38092bba1802fd
+  # pinned, so a vc snapshot generated from a newer V can carry a parser rule
+  # that rejects the pinned V's own vlib. That exact mismatch already cost three
+  # CI runs at the previous pin (0137eb5): vc HEAD gained "reject `if`
+  # conditions that start with a parenthesized if expression" on 2026-10-05, and
+  # vlib/math/bits/bits.v at that pin used exactly that shape at line 621.
+  #
+  # This is the newest vc snapshot within a day of V_COMMIT (generated
+  # 2026-10-29 from v master just past the pin; the bootstrap at this exact
+  # pair was verified locally before it was recorded).
+  VC_COMMIT: 0027130e9850c9946fa2c21e9004f13d8e593595
 
   # On macOS, Linux and BSD `v` tries its experimental V3 compiler first and
   # silently falls back to the established one when V3 declines the program. The
@@ -95,16 +99,10 @@ jobs:
           git fetch -q --depth 1 origin "$V_COMMIT"
           git checkout -q FETCH_HEAD
           # vc is the C source the bootstrap compiles into `v`. The Makefile
-          # clones it at HEAD -- UNPINNED -- while V_COMMIT is pinned, so a vc
-          # snapshot generated from a newer V can carry a parser that rejects
-          # the pinned tree's own vlib. That is exactly what happened here: vc
-          # HEAD gained "reject `if` conditions that start with a parenthesized
-          # if expression" on 2026-10-05, and vlib/math/bits/bits.v at this
-          # V_COMMIT uses exactly that shape at line 621, so the build died
-          # compiling a file the pinned commit itself ships.
-          #
-          # So vc is cloned at its own pin: a snapshot taken after V_COMMIT but
-          # before that parser change. The `v` target is then built directly
+          # clones it at HEAD -- UNPINNED -- while V_COMMIT is pinned, so the
+          # snapshot is pinned too and taken just after V_COMMIT; see the
+          # VC_COMMIT note above for the parser-drift mismatch that cost three
+          # CI runs at the previous pin. The `v` target is then built directly
           # rather than through `all`, because `all` depends on download_vc,
           # which pulls vc back to HEAD and undoes this.
           git clone -q https://github.com/vlang/vc vc

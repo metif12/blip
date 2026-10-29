@@ -36,7 +36,7 @@ ENV PATH=/nix/var/nix/profiles/default/bin:/root/.nix-profile/bin:$PATH
 # The commit this project targets. Not the 0.5.2 release: vlang/v master at
 # this commit also reports itself as "V 0.5.2" and resolves modules
 # differently, which is the difference the project was bitten by.
-ARG V_COMMIT=0137eb5d8ebc5d183259309ed08ea06ba9bc27d6
+ARG V_COMMIT=6dd8bb85fc0f9bba05b6be5aad5df4d443c26cd5
 
 # vc is a SEPARATE repository from V and the Makefile clones it at HEAD,
 # unpinned. That is what broke this: a vc snapshot generated from a newer V
@@ -44,7 +44,7 @@ ARG V_COMMIT=0137eb5d8ebc5d183259309ed08ea06ba9bc27d6
 # "reject `if` conditions that start with a parenthesized if expression" on
 # 2026-10-05, and vlib/math/bits/bits.v at this V_COMMIT uses that shape at
 # line 621. This is the vc snapshot taken just after V_COMMIT.
-ARG VC_COMMIT=64b1017fe300e1631d5b2ecd4d38092bba1802fd
+ARG VC_COMMIT=0027130e9850c9946fa2c21e9004f13d8e593595
 
 WORKDIR /opt
 # V's own build runs git to stamp the version, and a container's repository has

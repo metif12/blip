@@ -272,7 +272,7 @@ fn v_version() string {
 	// otherwise stamps itself with whichever V is on PATH, which is a
 	// different build from the one running the script (local release install
 	// dd6834e vs the pinned v-pin 0137eb5 was a real mismatch).
-	r := os.execute('"${@VEXE}" version')
+	r := os.exec([@VEXE, 'version'])
 	if r.exit_code != 0 {
 		return 'unknown'
 	}
@@ -350,7 +350,7 @@ fn main() {
 		mut dupes := []string{}
 		for file in target.files {
 			path := os.join_path(vlib, target.module) + os.path_separator + file
-			r := os.execute('"${@VEXE}" ast -p ${path}')
+			r := os.exec([@VEXE, 'ast', '-p', path])
 			if r.exit_code != 0 {
 				eprintln('genprims: v ast failed on ${target.module}/${file}:')
 				eprintln(r.output)

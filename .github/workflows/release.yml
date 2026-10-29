@@ -21,13 +21,13 @@ permissions:
   contents: write
 
 env:
-  V_COMMIT: 0137eb5d8ebc5d183259309ed08ea06ba9bc27d6
+  V_COMMIT: 6dd8bb85fc0f9bba05b6be5aad5df4d443c26cd5
 
   # vc is the C source V bootstraps itself from, and it is a SEPARATE repository
   # from V. Pinning V without pinning vc is what broke this: the Makefile clones
   # vc at HEAD, so a snapshot built from a newer V was used to compile the
   # pinned V's own vlib. This is the snapshot taken just after V_COMMIT.
-  VC_COMMIT: 64b1017fe300e1631d5b2ecd4d38092bba1802fd
+  VC_COMMIT: 0027130e9850c9946fa2c21e9004f13d8e593595
   V_MACOS_V3_NO_FALLBACK: '1'
 
 jobs:
