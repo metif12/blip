@@ -540,7 +540,7 @@ fn (mut e Emitter) special(name string, id reader.NodeId, kids []reader.NodeId) 
 // is skipped before the special-form dispatch runs, so a top-level `match` used
 // to emit nothing and look like a silent success.
 const unsupported_forms = ['loop', 'dotimes', 'struct', 'as->', 'cond->', 'import', 'quasiquote',
-	'unquote', 'unquote-splicing', 'yield']
+	'unquote', 'unquote-splicing', 'yield', 'veb-route']
 
 fn (mut e Emitter) emit_define(kids []reader.NodeId) {
 	if kids.len < 3 {

@@ -66,6 +66,8 @@ pub mut:
 	out       []string
 	gensym    int
 	host      host.Host
+	// veb handlers registered by a blip program: path -> closure.
+	veb_handlers map[string]blip.Value
 	// source_name labels where the code being evaluated came from. It appears in
 	// every error message, and a REPL that reports "unbound identifier: x" with
 	// no indication of which of forty definitions introduced x is unusable.
@@ -112,6 +114,7 @@ pub fn new_machine_with(a &reader.Arena, h host.Host) &Machine {
 			env:     blip.no_env
 			prims:   prims.table()
 			host:    h
+			veb_handlers: map[string]blip.Value{}
 		}
 	}
 	// The global environment must be a real frame, not `no_env`: `no_env` is the
@@ -602,6 +605,7 @@ fn machine_builtin(name string) bool {
 		'print',
 		'display',
 		'echo',
+	'veb-route',
 	'yield',
 		'read-line',
 		'map',
@@ -1733,7 +1737,6 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 			return
 		}
 		'echo' {
-			// A pipeline tap: print the value and pass it on unchanged.
 			text := if args.len == 0 { '' } else { show_value(args[0], false) }
 			m.host.host_print(text)
 			if args.len == 0 {
@@ -1741,6 +1744,16 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 			} else {
 				m.val = args[0]
 			}
+			m.ret()
+			return
+		}
+		'veb-route' {
+			if args.len < 2 {
+				return error('veb-route needs a path and a handler')
+			}
+			path := args[0].as_string()
+			m.veb_route(path, args[1])
+			m.val = blip.nil_value()
 			m.ret()
 			return
 		}
