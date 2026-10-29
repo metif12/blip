@@ -25,7 +25,7 @@ RUN apt-get update \
 # "reject `if` conditions that start with a parenthesized if expression" on
 # 2026-10-05, and vlib/math/bits/bits.v at this V_COMMIT uses that shape at
 # line 621. This is the vc snapshot taken just after V_COMMIT.
-ARG V_COMMIT=7ec48941f8df47e5a0556c6365c6c873918f6c6b
+ARG V_COMMIT=b9ebf8baff04133e1cb131c6d77dfb28008217b6
 
 # Building the `v` target directly rather than `all`, because `all` depends on
 # download_vc, which clones vc at HEAD and undoes the pin.

@@ -14,7 +14,7 @@ env:
   # A CI runner that installs a different compiler than the developer is worse
   # than no CI: it reports a failure that does not reproduce locally, or -- far
   # worse -- passes while checking something other than what is shipped.
-  V_COMMIT: 7ec48941f8df47e5a0556c6365c6c873918f6c6b
+  V_COMMIT: b9ebf8baff04133e1cb131c6d77dfb28008217b6
 
   # vc is the C source V bootstraps itself from, and it is a SEPARATE repository
   # from V. The Makefile clones it at HEAD -- UNPINNED -- while V_COMMIT is
