@@ -3,9 +3,8 @@ module main
 // The macro embedded-machine gate (docs/macros-design.md Option 1).
 //
 // Exercises the real path: fresh embedded machine -> run_str -> value_to_datum
-// for every pure shape, plus expand_macro_at_embed end to end. Complex shapes
-// (table/closure) must still refuse — that is the documented deferral, not a
-// failure of this gate.
+// for every pure shape plus table and struct, plus expand_macro_at_embed end
+// to end. Closures and primitives still refuse — they are code, not data.
 
 import vlib.blip
 import vlib.blip.emit
@@ -44,6 +43,12 @@ fn main() {
 		blip.empty_list(),
 		blip.cons(blip.integer(1), blip.empty_list()),
 		blip.vector([blip.integer(1), blip.integer(2)]),
+		blip.table({
+			'a': blip.integer(1)
+		}),
+		blip.struct_value('P', ['x'], {
+			'x': blip.integer(7)
+		}),
 	]
 	for v in pure {
 		_ = blip.value_to_datum(mut m, v) or {
@@ -52,21 +57,35 @@ fn main() {
 		}
 	}
 	if s.fails == 0 {
-		s.ok('value_to_datum pure shapes', '11 shapes convert')
+		s.ok('value_to_datum pure shapes', '13 shapes convert')
 	}
 
-	// A complex shape must refuse with an error, not panic.
-	complex := blip.table({
-		'a': blip.integer(1)
-	})
+	// Complex shapes that are not data literals must still refuse with an
+	// error rather than panic (and rather than silently producing nonsense).
+	// Table and struct now convert (see value_to_datum); closures and
+	// primitives are code, not data, and stay refused.
+	closure_val := m.run_str('(fn [x] x)') or { blip.nil_value() }
 	mut did_refuse := false
-	_ = blip.value_to_datum(mut m, complex) or {
-		s.ok('value_to_datum complex refuses', err.msg())
+	_ = blip.value_to_datum(mut m, closure_val) or {
 		did_refuse = true
 		blip.NodeId(0)
 	}
-	if !did_refuse {
-		s.fail('value_to_datum complex refuses', 'table converted without error')
+	if did_refuse {
+		s.ok('value_to_datum closure refuses', 'refused as documented')
+	} else {
+		s.fail('value_to_datum closure refuses', 'closure converted without error')
+	}
+
+	primitive_val := m.run_str('car') or { blip.nil_value() }
+	did_refuse = false
+	_ = blip.value_to_datum(mut m, primitive_val) or {
+		did_refuse = true
+		blip.NodeId(0)
+	}
+	if did_refuse {
+		s.ok('value_to_datum primitive refuses', 'refused as documented')
+	} else {
+		s.fail('value_to_datum primitive refuses', 'primitive converted without error')
 	}
 
 	// End to end: embedded machine evaluates, then converts.
