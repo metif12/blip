@@ -602,6 +602,7 @@ fn machine_builtin(name string) bool {
 		'print',
 		'display',
 		'echo',
+	'yield',
 		'read-line',
 		'map',
 		'filter',
@@ -1732,11 +1733,19 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 			return
 		}
 		'echo' {
-			// A pipeline tap: print the value and pass it on unchanged. It costs
-			// nothing at runtime when a pipeline is not being debugged, which is the
-			// whole argument for having it in the language rather than in the reader.
+			// A pipeline tap: print the value and pass it on unchanged.
 			text := if args.len == 0 { '' } else { show_value(args[0], false) }
 			m.host.host_print(text)
+			if args.len == 0 {
+				m.val = blip.nil_value()
+			} else {
+				m.val = args[0]
+			}
+			m.ret()
+			return
+		}
+		'yield' {
+			// Green-continuation hook: passes its value through.
 			if args.len == 0 {
 				m.val = blip.nil_value()
 			} else {
