@@ -351,6 +351,42 @@ fn main() {
 			}
 			exit_code(doc_file(args[1]))
 		}
+		'build' {
+			if args.len < 2 {
+				eprintln('blip: build needs a file')
+				eprintln('run `blip help build` for usage')
+				exit_code(2)
+				return
+			}
+			mut out := ''
+			mut file := ''
+			for a in args[1..] {
+				if a == '-o' {
+					// next arg is output; handled below
+				} else if file == '' {
+					file = a
+				} else if out == '' {
+					out = a
+				}
+			}
+			// handle -o out
+			mut i := 0
+			for i < args.len {
+				if args[i] == '-o' && i + 1 < args.len {
+					out = args[i + 1]
+				}
+				i++
+			}
+			if file == '' {
+				eprintln('blip: build needs a file')
+				exit_code(2)
+				return
+			}
+			if out == '' {
+				out = file.replace('.lip', '.js')
+			}
+			exit_code(build_file(file, out))
+		}
 		'new' {
 			if args.len < 2 {
 				eprintln('blip: new needs a name')
@@ -824,6 +860,32 @@ fn quote_string(s string) string {
 
 // doc_file extracts `;;` doc comments preceding definitions and prints them
 // as Markdown.
+// ---- build ---------------------------------------------------------------
+
+// build_file compiles a blip program to a JavaScript module and writes it
+// to out. This is the first half of `blip build`: a single self-contained
+// .js file that runs under node. A .wasm backend is the next step (P8).
+fn build_file(input string, out string) int {
+	src := os.read_file(input) or {
+		eprintln('blip: cannot read ${input}: ${err.msg()}')
+		return 1
+	}
+	res := emit.compile_program(src) or {
+		eprintln('blip: ${input}: ${err.msg()}')
+		return 1
+	}
+	if res.blocked.len > 0 {
+		eprintln('blip: ${input}: not emitted: ${res.blocked.join(', ')}')
+		return 1
+	}
+	os.write_file(out, res.js) or {
+		eprintln('blip: cannot write ${out}: ${err.msg()}')
+		return 1
+	}
+	println('built ${out} (${res.js.len} bytes)')
+	return 0
+}
+
 // ---- pkg ----------------------------------------------------------------
 
 const lock_name = 'blip.lock'
