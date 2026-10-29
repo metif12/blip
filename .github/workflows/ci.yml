@@ -14,7 +14,7 @@ env:
   # A CI runner that installs a different compiler than the developer is worse
   # than no CI: it reports a failure that does not reproduce locally, or -- far
   # worse -- passes while checking something other than what is shipped.
-  V_COMMIT: 0137eb5d8ebc5d183259309ed08ea06ba9bc27d6
+  V_COMMIT: 7ec48941f8df47e5a0556c6365c6c873918f6c6b
 
   # vc is the C source V bootstraps itself from, and it is a SEPARATE repository
   # from V. The Makefile clones it at HEAD -- UNPINNED -- while V_COMMIT is
@@ -23,7 +23,7 @@ env:
   # start with a parenthesized if expression" on 2026-10-05, and
   # vlib/math/bits/bits.v at this V_COMMIT uses exactly that shape at line 621.
   # This is the snapshot taken just after V_COMMIT, before that change.
-  VC_COMMIT: 64b1017fe300e1631d5b2ecd4d38092bba1802fd
+  VC_COMMIT: 8fb9f78d04e564a4e556d9a4eaea63067d341030
 
   # On macOS, Linux and BSD `v` tries its experimental V3 compiler first and
   # silently falls back to the established one when V3 declines the program. The

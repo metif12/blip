@@ -78,7 +78,7 @@ pub fn compile_with_base(src string, base string) !Result {
 	// and re-read, so the emitter only ever sees ordinary forms. A macro
 	// that expands to itself, or one that fails to register, is a compile
 	// error rather than a silently dropped form.
-	mut mach := machine.new_machine_with(res.arena, host.new_capture())
+	mut mach := machine.new_machine_with(&res.arena, host.new_capture())
 	mut expanded_forms := []reader.NodeId{}
 	for id in res.forms {
 		if is_defmacro_form(res.arena, id) {
@@ -95,7 +95,7 @@ pub fn compile_with_base(src string, base string) !Result {
 	}
 	res.forms = expanded_forms
 	mut e := Emitter{
-		arena:        res.arena
+		arena:        &res.arena
 		top:          map[string]bool{}
 		mangled:      map[string]string{}
 		collided:     map[string]string{}
@@ -264,7 +264,7 @@ fn (mut e Emitter) kids(id reader.NodeId) []reader.NodeId {
 	return e.arena.kids(id)
 }
 
-fn (mut e Emitter) node(id reader.NodeId) reader.Datum {
+fn (mut e Emitter) node(id reader.NodeId) &reader.Datum {
 	return e.arena.node(id)
 }
 
@@ -3045,7 +3045,7 @@ fn (mut e Emitter) compile_module(src string, base string) ![]string {
 		return error('module has diagnostics')
 	}
 	mut me := Emitter{
-		arena:        res.arena
+		arena:        &res.arena
 		top:          map[string]bool{}
 		mangled:      map[string]string{}
 		collided:     map[string]string{}

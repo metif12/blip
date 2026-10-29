@@ -8,8 +8,8 @@ $ErrorActionPreference = 'Stop'
 # commits appear in both install scripts and CI.
 #
 # Keep these two lines in sync with ci.yml.
-$VCommit  = '0137eb5d8ebc5d183259309ed08ea06ba9bc27d6'
-$VCCommit = '64b1017fe300e1631d5b2ecd4d38092bba1802fd'
+$VCommit  = '7ec48941f8df47e5a0556c6365c6c873918f6c6b'
+$VCCommit = '8fb9f78d04e564a4e556d9a4eaea63067d341030'
 
 $BlipDir = if ($env:BLIP_INSTALL_DIR) { $env:BLIP_INSTALL_DIR } else { "$HOME\.blip" }
 $VDir    = if ($env:BLIP_V_DIR)       { $env:BLIP_V_DIR }       else { "$HOME\.blip-v" }
