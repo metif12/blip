@@ -1,0 +1,15 @@
+;; site/build.lip -- generate the blip website into site_out/.
+
+(define (wrap-page title body)
+  (string-append
+    "<!DOCTYPE html>\n<html>\n<head>\n"
+    "<meta charset=\"utf-8\">\n"
+    "<title>" (html-escape title) "</title>\n"
+    "</head>\n<body>\n"
+    "<main>\n" body "\n</main>\n"
+    "</body>\n</html>\n"))
+
+(use (read-file "site/content/index.md")
+  (use (write-file "site_out/index.html"
+          (wrap-page "blip" (html-escape read-file)))
+    (print "wrote site_out/index.html")))
