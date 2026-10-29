@@ -81,8 +81,16 @@ fn node_output(js string) string {
 // `sh: 1: blip: not found`, exit 127, on the runner — and for the example
 // checks both "engines" then failed identically, which compared EQUAL.
 // Path it explicitly; never compare two identical failure strings.
+//
+// The path is ABSOLUTE in both branches. The original Windows spelling was
+// `.\blip.exe`, whose backslash is a path separator only on Windows: on sh it
+// reached the shell as an unresolvable command and every example comparison
+// became want = got = the same 127 error, which a string comparison accepts.
+// An absolute path runs from the same three shells (cmd, PowerShell, sh) and
+// keeps the never-compare-two-failures rule meaningful.
 fn blip_cli() string {
-	return if os.exists('blip.exe') { '.\\blip.exe' } else { './blip' }
+	cli := if os.exists('blip.exe') { 'blip.exe' } else { 'blip' }
+	return os.real_path(cli)
 }
 
 // blip_file_output runs a FILE through the blip CLI, which loads lib/std.lip.
@@ -180,6 +188,14 @@ fn main() {
 	s.check('if in expression position', '(print (if #t "yes" "no"))')
 
 	s.check('begin sequences', '(print (begin 1 2 3))')
+
+	// `defined?` compiles to a `typeof` probe, so both engines can answer the
+	// same question and the comparison is on the printed "#t"/"#f".
+	s.check('defined? of an unbound name', '(print (defined? no-such-name))')
+	s.check('defined? of a defined global', '(define d1 1)(print (defined? d1))')
+	s.check('defined? of the quoted spelling', "(define d2 2)(print (defined? 'd2))")
+	s.check('defined? of a primitive', '(print (defined? car))')
+	s.check('defined? inside a let sees the binding', '(print (let ([y 2]) (defined? y)))')
 
 	s.check('quote is a literal', '(print (quote (1 2 3)))')
 

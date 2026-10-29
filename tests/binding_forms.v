@@ -213,6 +213,29 @@ fn main() {
 	s.check_err('dot must be last', '(define (f a . b c) b)', 'last parameter')
 	s.check_err('non-symbol parameter', '(define (f 1) f)', 'not a name')
 
+	// ---- defined? ------------------------------------------------------
+	// `(defined? name)` asks whether the machine would RESOLVE name where the
+	// form itself stands. The name is not evaluated -- that is the reason the
+	// form is special and not a primitive: evaluating the argument is exactly
+	// what turns "is this defined?" into "unbound identifier: name", and a
+	// primitive never sees the machine's environment to look it up.
+	s.check('defined? of an unbound name', '(defined? no-such-name)', '#f')
+	s.check('defined? of a global', '(define d1 1) (defined? d1)', '#t')
+	s.check('defined? of a function', '(define (d2) 1) (defined? d2)', '#t')
+	s.check('defined? of a primitive', '(defined? car)', '#t')
+	s.check('defined? accepts the reader-tagged quote', "(define d3 1) (defined? 'd3)", '#t')
+	s.check('defined? accepts (quote name)', '(define d3b 1) (defined? (quote d3b))', '#t')
+	s.check('defined? inside let sees the binding', '(let ([d4 1]) (defined? d4))', '#t')
+	// The second form is the one that does the asserting: the let frame is gone,
+	// so the same question at the top level answers #f.
+	s.check('defined? is scope-sensitive', '(let ([d5 1]) (defined? d5)) (defined? d5)', '#f')
+	s.check('defined? sees a let binding that shadows a global',
+		'(define d6 1) (let ([d6 2]) (defined? d6))', '#t')
+	s.check('defined? of a let-bound parameter sits inside the function',
+		'(define (f d7) (defined? d7)) (f 9)', '#t')
+	s.check_err('defined? without a name', '(defined?)', 'one name')
+	s.check_err('defined? of a non-symbol', '(defined? 1)', 'symbol name')
+
 	// ---- tail position -------------------------------------------------
 	// Every binding form has to leave the closing form in tail position, or the
 	// loop below stops being a loop. kont=0 is asserted by `check`.

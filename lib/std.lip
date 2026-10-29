@@ -82,6 +82,23 @@
   (cond [(= (get conn :session) nil) (err 'not-authenticated)]
         [else (ok 'committed)]))
 
+;; ---------------------------------------------------------------- arrays
+
+;; array-append! pushes every element of src onto the end of dst, in order, and
+;; returns dst. `array-push!` adds ONE value per call, so appending a whole array
+;; is an iteration over src's indexes -- which is all this wrapper is, walking
+;; the indexes with a tail call rather than a `loop` form, because the prelude is
+;; also compiled by the JS emitter and a `loop` there is refused by name.
+(define (array-append! dst src)
+  (array-append!-from dst src 0))
+
+;; The index-carrying half of `array-append!`, kept under its own name so the
+;; name a program writes stays the name that reads well at the call site.
+(define (array-append!-from dst src i)
+  (cond [(= i (array-length src)) dst]
+        [else (array-push! dst (array-ref src i))
+              (array-append!-from dst src (+ i 1))]))
+
 ;; ---------------------------------------------------------------- debug
 
 ;; *debug* is a variable, not a special form, so a program can rebind it and a

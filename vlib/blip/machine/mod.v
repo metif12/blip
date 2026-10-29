@@ -1894,7 +1894,7 @@ pub fn special_form(name string) bool {
 	return name in ['quote', 'if', 'define', 'set!', 'lambda', 'fn', 'begin', 'let', 'let*', 'letrec',
 		'and', 'or', 'when', 'unless', 'cond', 'case', 'loop', 'dotimes', 'use', 'match', 'match*',
 		'import', 'struct', 'struct-out', 'provide', 'require', 'let-assert', 'do', 'time', 'assert',
-		'->', '->>', '|>', 'as->', 'cond->', 'def', 'defmacro', 'try', 'macex', 'macex1']
+		'->', '->>', '|>', 'as->', 'cond->', 'def', 'defmacro', 'try', 'macex', 'macex1', 'defined?']
 }
 
 fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId) ! {
@@ -1962,6 +1962,9 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 		}
 		'lambda' {
 			return m.eval_lambda(kids)
+		}
+		'defined?' {
+			return m.eval_defined(kids)
 		}
 		'fn' {
 			// (fn [x] body) is (lambda (x) body): the short form every Lisp has.
@@ -2267,6 +2270,66 @@ fn (mut m Machine) eval_define(kids []blip.NodeId) ! {
 		return
 	}
 	return error('define needs a name or a (name . params) list')
+}
+
+// eval_defined answers `(defined? name)`: whether the machine would resolve
+// NAME as an identifier where the form itself appears. It is a special form
+// because the name must NOT be evaluated -- evaluating it is exactly what turns
+// "is this defined?" into "unbound identifier: name" -- and a primitive cannot
+// do the lookup at all, because a prim never sees the machine's environment.
+//
+// The answer covers everything a bare reference resolves to: a binding, a
+// primitive, or a machine builtin. It does NOT cover dotted names -- `p.x`
+// resolves through field access, not identifier lookup, so a form asking after
+// a field is a different question, one `has-key?` and `struct-ref` answer.
+fn (mut m Machine) eval_defined(kids []blip.NodeId) ! {
+	if kids.len != 2 {
+		return error('defined? needs one name: (defined? nope)')
+	}
+	name := m.defined_name(kids[1])!
+	// A literal resolves in eval_special before any environment lookup, so a
+	// form asking after it gets the same answer a reference would.
+	if name == 'nil' || name == 'none' || name == 'true' || name == 'false' {
+		m.val = blip.boolean(true)
+		m.ret()
+		return
+	}
+	if found := m.envs.lookup(m.env, name) {
+		_ = found
+		m.val = blip.boolean(true)
+		m.ret()
+		return
+	}
+	m.val = blip.boolean(name in m.prims || machine_builtin(name))
+	m.ret()
+}
+
+// defined_name reads the NAME argument of `defined?`. A bare symbol is the
+// ordinary spelling; the quoted spelling `(defined? 'name)` is accepted so a
+// name carried in a value reads the same either way -- but the quote here is
+// data, read out of the form, because none of `defined?`'s arguments are
+// evaluated.
+fn (mut m Machine) defined_name(id blip.NodeId) !string {
+	node := m.arena.node(id)
+	if node.tag == .sym {
+		return node.value
+	}
+	// The reader-tagged quote `'name` is a wrapper whose only child is the
+	// quoted form -- the same shape `quoted()` unwraps on the emitter side.
+	if node.tag == .quoted {
+		wrapped := m.arena.kids(id)
+		if wrapped.len == 1 {
+			return m.defined_name(wrapped[0])
+		}
+	}
+	if node.tag == .list {
+		kids := m.arena.kids(id)
+		if kids.len == 2 && m.arena.node(kids[0]).tag == .sym
+			&& m.arena.node(kids[0]).value == 'quote' {
+			return m.defined_name(kids[1])
+		}
+	}
+	return error('defined? needs a symbol name')
 }
 
 // ParamSpec is a parsed parameter list.

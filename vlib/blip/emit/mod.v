@@ -374,8 +374,7 @@ fn (mut e Emitter) special(name string, id reader.NodeId, kids []reader.NodeId) 
 	}
 	// `use` in statement position is the same IIFE followed by a semicolon. Listed
 	// as unsupported until now, so a top-level `use` emitted nothing at all.
-	if name == 'use' {
-		e.emit('${e.value(id)};')
+	if name == 'use' {		e.emit('${e.value(id)};')
 		return true
 	}
 	if name == 'try' {
@@ -399,6 +398,14 @@ fn (mut e Emitter) special(name string, id reader.NodeId, kids []reader.NodeId) 
 			}
 		}
 		e.refuse('set!')
+		return true
+	}
+	// `defined?` in statement position is the probe followed by a semicolon, the
+	// same rule `cond` follows. Left to the call path it emitted `defined_q(...)`
+	// -- a call to a name nothing defines, which is the silent-green shape the
+	// backend gate exists to catch.
+	if name == 'defined?' {
+		e.emit('${e.defined_probe(kids)};')
 		return true
 	}
 	// `dotimes` is a real loop, not a recursive call, so it becomes a real
@@ -1082,7 +1089,13 @@ if (name == 'fn' || name == 'lambda') && kids.len >= 2 {
 		return e.case_expr(kids)
 	}
 	if name == 'begin' {
-		return '(${kids[1..].map(e.value).join(', ')})'
+		return '(${e.seq_values(kids[1..]).join(', ')})'
+	}
+	// `defined?` probes whether a name is bound. The compiler does NOT evaluate
+	// the name -- this is the whole point of the form -- so it compiles the name
+	// as a reference probe, not as a value.
+	if name == 'defined?' {
+		return e.defined_probe(kids)
 	}
 	// The derived forms. Each is spelled so that blip's truthiness rule holds:
 	// ONLY `#f` is false, so `0`, `""`, `()`, and `null` are all true. JavaScript
@@ -1092,11 +1105,11 @@ if (name == 'fn' || name == 'lambda') && kids.len >= 2 {
 		return e.cond_expr(kids)
 	}
 	if name == 'when' && kids.len >= 2 {
-		body := kids[2..].map(e.value).join(', ')
+		body := e.seq_values(kids[2..]).join(', ')
 		return '(blip_truthy(${e.test_of(kids[1])}) ? (${body}) : null)'
 	}
 	if name == 'unless' && kids.len >= 2 {
-		body := kids[2..].map(e.value).join(', ')
+		body := e.seq_values(kids[2..]).join(', ')
 		return '(blip_truthy(${e.test_of(kids[1])}) ? null : (${body}))'
 	}
 	// `match` for the patterns that are unambiguous: a literal, `_`, or a bare
@@ -1164,7 +1177,7 @@ fn (mut e Emitter) case_expr(kids []reader.NodeId) string {
 		}
 		pattern := e.node(parts[0])
 		is_else := pattern.tag == .sym && pattern.value == 'else'
-		body := parts[1..].map(e.value).join(', ')
+		body := e.seq_values(parts[1..]).join(', ')
 		if is_else {
 			out = '(${body})'
 			continue
@@ -1754,8 +1767,11 @@ fn (mut e Emitter) match_expr(kids []reader.NodeId) string {
 		}
 		// The value of the clause is its LAST form. Earlier ones run for their
 		// effects, and the comma operator is what makes that true in an
-		// expression position.
-		body := parts[pi..].map(e.value).join(', ')
+		// expression position. seq_values keeps the earlier ones driven: built
+		// with `.map(e.value)`, a clause whose body was emitted whole in a tail
+		// position emitted `thunk(...)` operands the comma never forces, and
+		// the clause silently did nothing but look plausible.
+		body := e.seq_values(parts[pi..]).join(', ')
 		tag := '__blip_b${e.gensym}${i}'
 		lines << '{ const ${tag} = pat_match(${p.js}, ${subj});'
 		lines << 'if (${tag} !== "no") {'
@@ -2188,7 +2204,10 @@ fn (mut e Emitter) cond_expr(kids []reader.NodeId) string {
 		}
 		test := e.node(parts[0])
 		is_else := test.tag == .sym && test.value == 'else'
-		val := parts[1..].map(e.value).join(', ')
+		// Only the LAST form of a clause is its value; the earlier ones run for
+		// their effects and have to be DRIVEN, not left as thunk objects the
+		// comma never forces (see seq_values).
+		val := e.seq_values(parts[1..]).join(', ')
 		// The TEST is not a tail call: its value is consumed by blip_truthy, which
 		// does not drive a thunk -- so a test emitted in tail position would be
 		// handed a thunk object, always compare as true, and every `cond` would
@@ -2214,15 +2233,42 @@ fn (mut e Emitter) chain(items []reader.NodeId, is_and bool) string {
 	if items.len == 1 {
 		return e.value(items[0])
 	}
+	// The last operand is the result when nothing short-circuits, which is why
+	// it inherits tail position; the EARLIER ones are consumed by blip_truthy
+	// and must be driven (see seq_values).
 	mut out := e.value(items[items.len - 1])
+	saved := e.tail
 	for i := items.len - 2; i >= 0; i-- {
+		e.tail = 0
 		v := e.value(items[i])
+		e.tail = saved
 		// `and` returns the first FALSE value, so the short-circuit arm is the
 		// operand itself and the fall-through is the rest. `or` is the mirror.
 		out = '(blip_truthy(${v}) ? ${out} : ${v})'
 		_ = is_and
 	}
 	return out
+}
+
+// seq_values emits a body of forms into ONE comma expression: every form but
+// the last in EXPLICITLY non-tail position, and the last inheriting whatever
+// position the whole body stands in.
+//
+// It exists because `.map(e.value)` across a body left the tail flag set the
+// whole time: a body inside a tail-conditional emitted `array-push!` as a
+// `thunk(() => ...)` comma operand, which is never driven -- and the push was
+// lost while the emitted program looked green. Only the LAST form's value is
+// what the body produces; the others run for their effects and must be driven,
+// not left sitting in the comma as objects.
+fn (mut e Emitter) seq_values(ids []reader.NodeId) []string {
+	saved := e.tail
+	mut parts := []string{}
+	for i, id in ids {
+		e.tail = if i < ids.len - 1 { 0 } else { saved }
+		parts << e.value(id)
+	}
+	e.tail = saved
+	return parts
 }
 
 fn (mut e Emitter) application(id reader.NodeId, kids []reader.NodeId) string {
@@ -2376,6 +2422,70 @@ fn (mut e Emitter) data(id reader.NodeId) string {
 }
 
 // callable names how a blip primitive reaches JavaScript.
+// defined_probe compiles `(defined? name)` into a JavaScript reference probe.
+//
+// The name is NOT evaluated -- that is the point of the form -- so it is read
+// out of the form as data and compiled to what a reference to it would be:
+// `(typeof ${identifier} !== 'undefined')`. `typeof` is the one construct
+// JavaScript allows on an identifier that may be absent altogether, so the
+// probe answers without throwing where a plain read would.
+//
+// The bound shape is what typeof can express, and that divergence is stated
+// rather than hidden: typeof on a hoisted `function` declaration says "bound"
+// before the declaration has run, where the machine says unbound until define
+// proceeds -- a program written in strict textual order does not disagree.
+//
+// The quoted spelling `(defined? 'name)` compiles identically, and anything
+// the machine would reject -- wrong arity, a name that is not a symbol -- is
+// REFUSED, never guessed at: garbage in, `undefined` out is the failure mode
+// the backend gate exists to catch.
+fn (mut e Emitter) defined_probe(kids []reader.NodeId) string {
+	if kids.len != 2 {
+		e.refuse('defined?')
+		return 'null'
+	}
+	if js := e.defined_identifier_arg(kids[1]) {
+		return "(typeof ${js} !== 'undefined')"
+	}
+	e.refuse('defined?')
+	return 'null'
+}
+
+// defined_identifier_arg resolves the NAME argument of a `defined?` form: a
+// bare symbol, or the quoted spelling `(defined? 'name)`, where the quote is
+// DATA read out of the form because none of the form's arguments are evaluated.
+// The resolution follows `symbol` -- locals first, then prims, then the
+// mangling -- so the probe agrees with what the emitted program itself would
+// answer by referencing the name.
+fn (mut e Emitter) defined_identifier_arg(id reader.NodeId) ?string {
+	d := e.node(id)
+	if d.tag == .sym {
+		// `none` resolves to the same value `nil` does, so the probe asks after
+		// `null` rather than an identifier nothing defines.
+		if d.value == 'none' {
+			return e.symbol('nil')
+		}
+		return e.symbol(d.value)
+	}
+	// The reader-tagged quote `'name` is a wrapper whose only child is the
+	// symbol -- the same shape `quoted()` unwraps.
+	if d.tag == .quoted {
+		wrapped := e.kids(id)
+		if wrapped.len == 1 && e.node(wrapped[0]).tag == .sym {
+			return e.symbol(e.node(wrapped[0]).value)
+		}
+		return none
+	}
+	if d.tag == .list {
+		kids := e.kids(id)
+		if kids.len == 2 && e.node(kids[0]).tag == .sym
+			&& e.node(kids[0]).value == 'quote' && e.node(kids[1]).tag == .sym {
+			return e.symbol(e.node(kids[1]).value)
+		}
+	}
+	return none
+}
+
 fn (mut e Emitter) callable(name string) string {
 	if name in prim_names {
 		return 'blip.${mangle(name)}'

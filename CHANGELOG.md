@@ -4,6 +4,54 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### `(defined? name)` — ask whether a var exists, as a special form
+
+- There was no way to ask "is this name bound here?" without triggering the
+  error the question exists to avoid: evaluating the name is exactly what turns
+  "is this defined?" into "unbound identifier: name". `(defined? nope)` now
+  answers `#f`, `(defined? d)` answers `#t` for a name `define`, `def`, a
+  `let`/parameter binding — anything a bare reference resolves to — would find.
+  The quoted spelling `(defined? 'nope)` compiles identically.
+- A primitive cannot do this: the check is a lookup in the machine's CURRENT
+  environment, and a prim never sees the machine (prims/mod.v takes no
+  machine on purpose). So it is a special form, `eval_defined` in
+  machine/mod.v, routing through the same `m.envs.lookup` a bare-symbol
+  evaluation runs before it reports `unbound identifier`.
+- The emitter gets it too, or the prelude/program gate on "refused by name"
+  would reject every program that uses it: `defined_probe` compiles the name to
+  `(typeof X !== 'undefined')` — `typeof` being the one construct JavaScript
+  allows on a possibly-absent identifier — resolving the identifier the same
+  way `symbol()` does, so the probe agrees with what the emitted program itself
+  would answer by referencing the name. The stated divergence: `typeof` on a
+  hoisted `function` declaration says "bound" before the declaration has run,
+  where the machine says unbound until `define` proceeds — code in textual
+  order does not disagree.
+- Gate: `tests/binding_forms.v` gains the scope-sensitive section — unbound is
+  `#f`, a global/function/prim/quoted spelling is `#t`, and the same name that
+  was `#t` inside a `let` answers `#f` after it closes, which is the assertion
+  the old `(set! a nil)`-style leaks would have failed — and `tests/emit_js.v`
+  runs the same five snippets on both engines.
+
+### `array-append!` — append one array onto another, in the prelude
+
+- Arrays were mutable one value at a time: `array-push!` takes a single value,
+  so appending a whole array meant a hand-rolled index loop at every call site
+  (programs/json.lip and pratt.lip each carry their own). `lib/std.lip` now
+  ships `(array-append! dst src)`: a wrapper that pushes every element of `src`
+  onto `dst` in order and returns `dst`, over an index carried by a small
+  tail-recursive helper, `array-append!-from`.
+- Deliberately ordinary blip rather than a prim, and tail recursion rather than
+  a `loop` form: the prelude is also compiled by the JS emitter, which refuses
+  `loop` by name — a prelude the backend cannot compile would block every
+  emitted program. Tail calls are so real in blip (`kont=0`) that this is also
+  the loop form the language actually optimizes; and because every prim here
+  crosses the interpreter once per value, `array-push!` stays the loop's body,
+  which is exactly the shape the wrapper was meant to give the feature.
+- Gate: `examples/02_data.lip` — the spec — gained the call plus an `assert`
+  that `=` compares the mutated array contents, so `examples_run` fails without
+  the prelude function; `emit_js` compiles the same file through the backend,
+  which now also compiles the prelude's new definitions.
+
 ### CI and the Docker images now pass -d use_bundled_libgc to Makefile
 
 - The `make -f Makefile v` step used the wrong static library lookup path:
