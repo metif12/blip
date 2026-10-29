@@ -66,7 +66,7 @@ pub fn compile_file(path string) !Result {
 
 // compile_with_base is the real implementation: `base` is the directory the
 // source lives in, used to resolve `require`.
-pub fn compile_with_base(src string, base string) !Result {
+fn compile_with_base(src string, base string) !Result {
 	mut res := reader.read_all(src)
 	if res.diags.len > 0 {
 		d := res.diags[0]

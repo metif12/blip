@@ -24,7 +24,7 @@ import vlib.blip.printer
 import vlib.blip.reader
 
 // is_defmacro_form reports whether `id` is a (defmacro ...) form.
-pub fn is_defmacro_form(a &reader.Arena, id reader.NodeId) bool {
+fn is_defmacro_form(a &reader.Arena, id reader.NodeId) bool {
 	kids := a.kids(id)
 	if kids.len == 0 {
 		return false
@@ -61,7 +61,7 @@ fn is_registered_macro(m machine.Machine, name string) bool {
 // expand_value walks a Value and expands every macro call and every explicit
 // macex/macex1 it finds, recursively. Macros in blip are unhygienic and
 // their bodies return code as data, so expansion is a pure tree walk.
-pub fn expand_value(mut m machine.Machine, v blip.Value) !blip.Value {
+fn expand_value(mut m machine.Machine, v blip.Value) !blip.Value {
 	// Explicit expansion request: run it through the machine.
 	if v.tag == .pair {
 		car := v.as_pair().car
@@ -117,7 +117,7 @@ pub fn expand_value(mut m machine.Machine, v blip.Value) !blip.Value {
 
 // expand_form expands one reader form. Returns the original id unchanged
 // when nothing needed expanding, so ordinary programs produce no churn.
-pub fn expand_form(mut m machine.Machine, a &reader.Arena, id reader.NodeId) !reader.NodeId {
+fn expand_form(mut m machine.Machine, a &reader.Arena, id reader.NodeId) !reader.NodeId {
 	d := a.node(id)
 	if d.tag != .list {
 		return id
@@ -209,7 +209,7 @@ pub fn expand_form(mut m machine.Machine, a &reader.Arena, id reader.NodeId) !re
 // form_text extracts the original source text of one top-level form, using
 // its recorded line/column and a paren/bracket/brace balancer. Used to feed
 // defmacro forms to the embedded machine without re-rendering them.
-pub fn form_text(src string, a &reader.Arena, id reader.NodeId) string {
+fn form_text(src string, a &reader.Arena, id reader.NodeId) string {
 	d := a.node(id)
 	off := byte_offset(src, d.line, d.col)
 	if off >= src.len {
