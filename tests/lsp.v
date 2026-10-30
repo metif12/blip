@@ -213,7 +213,7 @@ fn (mut s Suite) positions() {
 	// closing bracket should have been. Asserting the concrete value rather
 	// than a shape is what stops a future refactor from quietly moving it.
 	d := lsp.diagnose('(+ 1')[0]
-	s.record('the position is the reader\'s, not a guess',
+	s.record("the position is the reader's, not a guess",
 		d.range.start.line == 0 && d.range.start.character == 4,
 		'line ${d.range.start.line} char ${d.range.start.character}')
 }
@@ -240,6 +240,7 @@ fn main() {
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')
+		exit(1)
 		return
 	}
 	println('lsp: all ${s.checks} checks passed')

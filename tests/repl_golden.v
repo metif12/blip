@@ -77,6 +77,7 @@ fn main() {
 
 	if s.fails > 0 {
 		println('${s.fails} FAILURE(S)')
+		exit(1)
 		return
 	}
 	println('repl: all checks passed')
@@ -231,7 +232,7 @@ fn (mut s Suite) golden_stdin_to_stdout() bool {
 		return false
 	}
 	if os.exists(got) {
-		os.rm(got) or { }
+		os.rm(got) or {}
 	}
 	// Shell redirection rather than an API call: V's os.execute has no stdin
 	// parameter, and the point of this half is that the REAL binary reads REAL
@@ -272,7 +273,11 @@ fn first_difference(expected string, actual string) string {
 		i++
 	}
 	if i < elines.len {
-		return 'the fixture has ${elines.len - i} more line(s) after line ${i}; got ends at "${if i < alines.len { alines[i] } else { "" }}"\nfull output:\n${actual}'
+		return 'the fixture has ${elines.len - i} more line(s) after line ${i}; got ends at "${if i < alines.len {
+			alines[i]
+		} else {
+			''
+		}}"\nfull output:\n${actual}'
 	}
 	return 'the output has ${alines.len - i} more line(s) than the fixture after line ${i}\nfull output:\n${actual}'
 }

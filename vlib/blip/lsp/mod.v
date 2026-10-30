@@ -151,13 +151,21 @@ fn (mut s Server) send_error(raw_id string, code int, message string) {
 }
 
 fn (mut s Server) publish(uri string, diags []LspDiagnostic) {
-	n := PublishNotification{
-		params: PublishDiagnosticsParams{
-			uri:         uri
-			diagnostics: diags
+	mut sb := '{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":'
+	sb += json2.encode(uri)
+	sb += ',"diagnostics":['
+	for i, d in diags {
+		if i > 0 {
+			sb += ','
 		}
+		sb += '{"range":{"start":{"line":${d.range.start.line},"character":${d.range.start.character}},"end":{"line":${d.range.end.line},"character":${d.range.end.character}}},"severity":${d.severity},"message":'
+		sb += json2.encode(d.message)
+		sb += ',"source":'
+		sb += json2.encode(d.source)
+		sb += '}'
 	}
-	s.send_framed(json2.encode(n))
+	sb += ']}}'
+	s.send_framed(sb)
 }
 
 fn extract_raw_id(content string) ?string {

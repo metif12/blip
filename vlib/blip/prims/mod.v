@@ -111,6 +111,7 @@ pub fn table() map[string]blip.PrimFn {
 	// "x") body)` and skip on failure, instead of aborting.
 	p['read-file'] = prim_read_file
 	p['write-file'] = prim_write_file
+	p['html-escape'] = prim_html_escape
 	p['file-exists?'] = prim_file_exists
 	p['env'] = prim_env
 	p['dissoc!'] = prim_dissoc_bang
@@ -1609,6 +1610,20 @@ fn prim_write_file(args []blip.Value) !blip.Value {
 			blip.string('write-file: cannot write ${path}: ${err.msg()}')])
 	}
 	return blip.list_from([blip.symbol('ok'), blip.nil_value()])
+}
+
+fn prim_html_escape(args []blip.Value) !blip.Value {
+	if args.len != 1 {
+		return error('html-escape expects 1 argument, got ${args.len}')
+	}
+	s := need_str('html-escape', args[0])!
+	mut out := s
+	out = out.replace('&', '&amp;')
+	out = out.replace('<', '&lt;')
+	out = out.replace('>', '&gt;')
+	out = out.replace('"', '&quot;')
+	out = out.replace("'", '&#39;')
+	return blip.string(out)
 }
 
 fn prim_file_exists(args []blip.Value) !blip.Value {

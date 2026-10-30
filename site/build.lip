@@ -1,0 +1,23 @@
+;; site/build.lip -- generate the blip website into site_out/.
+
+(define (render-page title body)
+  (use (read-file "site/layout.html")
+    (string-replace (string-replace read-file "{{title}}" title) "{{body}}" body)))
+
+;; index
+(use (read-file "site/content/index.md")
+  (use (write-file "site_out/index.html"
+          (render-page "blip" read-file))
+    (print "wrote site_out/index.html")))
+
+;; about
+(use (read-file "site/content/about.md")
+  (use (write-file "site_out/about.html"
+          (render-page "About" read-file))
+    (print "wrote site_out/about.html")))
+
+;; getting started
+(use (read-file "site/content/getting-started.md")
+  (use (write-file "site_out/getting-started.html"
+          (render-page "Getting started" read-file))
+    (print "wrote site_out/getting-started.html")))

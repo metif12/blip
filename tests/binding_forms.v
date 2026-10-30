@@ -294,6 +294,7 @@ fn main() {
 
 	if s.fails > 0 {
 		println('${s.fails} FAILURE(S)')
+		exit(1)
 		return
 	}
 	println('binding forms: all checks passed')

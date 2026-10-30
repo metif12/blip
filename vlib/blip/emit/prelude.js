@@ -26,6 +26,7 @@ const blip = {
     console.log(a.map(blip_show).join(" "));
     return null;
   },
+  echo: (x) => { console.log(blip_show(x)); return x; },
   missing: (...a) => {
     throw new Error("blip: unimplemented primitive");
   },
@@ -213,6 +214,16 @@ const blip = {
     return Array.isArray(items)
       ? rewrap(coll, items.slice().sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)))
       : coll;
+  },
+  sort_by: (f, coll) => {
+    const items = unvec(coll);
+    if (!Array.isArray(items)) return coll;
+    const keys = items.map((x) => tramp(f(x)));
+    const order = items.map((_, i) => i).sort((a, b) => {
+      const ka = keys[a], kb = keys[b];
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
+    return rewrap(coll, order.map((i) => items[i]));
   },
   // The type predicates. Each answers the tag check its prim does
   // (prims/mod.v `tag_is`): `array?` is the array tag, `table?` the table tag,

@@ -66,6 +66,8 @@ pub mut:
 	out       []string
 	gensym    int
 	host      host.Host
+	// veb handlers registered by a blip program: path -> closure.
+	veb_handlers map[string]blip.Value
 	// source_name labels where the code being evaluated came from. It appears in
 	// every error message, and a REPL that reports "unbound identifier: x" with
 	// no indication of which of forty definitions introduced x is unusable.
@@ -112,6 +114,7 @@ pub fn new_machine_with(a &reader.Arena, h host.Host) &Machine {
 			env:     blip.no_env
 			prims:   prims.table()
 			host:    h
+			veb_handlers: map[string]blip.Value{}
 		}
 	}
 	// The global environment must be a real frame, not `no_env`: `no_env` is the
@@ -602,6 +605,8 @@ fn machine_builtin(name string) bool {
 		'print',
 		'display',
 		'echo',
+	'veb-route',
+	'yield',
 		'read-line',
 		'map',
 		'filter',
@@ -1732,11 +1737,28 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 			return
 		}
 		'echo' {
-			// A pipeline tap: print the value and pass it on unchanged. It costs
-			// nothing at runtime when a pipeline is not being debugged, which is the
-			// whole argument for having it in the language rather than in the reader.
 			text := if args.len == 0 { '' } else { show_value(args[0], false) }
 			m.host.host_print(text)
+			if args.len == 0 {
+				m.val = blip.nil_value()
+			} else {
+				m.val = args[0]
+			}
+			m.ret()
+			return
+		}
+		'veb-route' {
+			if args.len < 2 {
+				return error('veb-route needs a path and a handler')
+			}
+			path := args[0].as_string()
+			m.veb_route(path, args[1])
+			m.val = blip.nil_value()
+			m.ret()
+			return
+		}
+		'yield' {
+			// Green-continuation hook: passes its value through.
 			if args.len == 0 {
 				m.val = blip.nil_value()
 			} else {
@@ -2675,7 +2697,7 @@ pub fn (mut m Machine) datum_to_value(id blip.NodeId) blip.Value {
 			}
 			work << Frame{
 				id:    f.kids[f.start]
-				kids:  []blip.NodeId{}
+				kids:  m.arena.kids(f.kids[f.start])
 				start: 0
 			}
 			continue
@@ -2791,11 +2813,20 @@ pub fn (mut m Machine) quasi_to_value(id blip.NodeId) blip.Value {
 	d := m.arena.node(id)
 	if d.tag == .unquote || d.tag == .unquote_splice {
 		inner := m.arena.kids(id)[0]
+		// Evaluate `inner` in the CURRENT environment, not a reset one:
+		// `eval_one` resets `m.env` to globals, which makes every unquoted
+		// name in a macro body unbound (and therefore nil). Saving and
+		// restoring `env` around it did not help, because the reset happened
+		// inside. Drive the form directly so the macro's bound parameters
+		// stay visible.
 		saved_k := m.kstack
 		saved_ctl := m.ctl
 		saved_form := m.form
 		saved_env := m.env
-		out := m.eval_one(inner) or { blip.nil_value() }
+		m.kstack = []blip.Kont{}
+		m.ctl = .eval_form
+		m.form = inner
+		out := m.drive() or { blip.nil_value() }
 		m.kstack = saved_k
 		m.ctl = saved_ctl
 		m.form = saved_form
@@ -3144,6 +3175,7 @@ fn (mut m Machine) eval_defmacro(kids []blip.NodeId) ! {
 	spec := m.parse_params(m.arena.kids(kids[2]), name)!
 	body := m.apply_destructures(spec, m.make_begin(kids[3..]))
 	m.envs.define(m.env, name, m.make_closure(spec, body, m.env, name))
+	m.macros << name
 	m.val = blip.symbol(name)
 	m.ret()
 }

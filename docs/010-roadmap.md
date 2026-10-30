@@ -5,11 +5,9 @@ so it records intent, not achievement.
 
 ## 1. Naming
 
-The working name `blip` is fine but reads as an abbreviation rather than a word,
-and it says nothing about what the project is. Before the repository goes public
-the name should be worth typing.
-
-Recommendation: **Vlam** - V + lambda.
+Decision (2026-10-29): keep `blip`. The working name stays; no rename to
+Vlam, Vexpr, or Vela. The recommendation below is superseded and the rename
+line in §6 is dropped.
 
 - Four letters, no vowel clusters, unambiguous to pronounce.
 - Names the one idea the project is actually about: closures with real tail
@@ -113,7 +111,7 @@ Requirements:
   into stdin, compare stdout to a fixture. That is only possible once reading
   goes through `Host.host_read_line`.
 - **A useful prompt.** Show the current namespace depth so a stuck paren is
-  obvious: `vlam:1> ` becomes `vlam:2> ` while a form is open.
+  obvious: `blip:1> ` becomes `blip:2> ` while a form is open.
 
 ## 4. Real programs worth writing in blip
 
@@ -183,7 +181,7 @@ site whose examples do not run is the most common way a language project dies.
 3. REPL, with golden tests.
 4. `match`, `match*`, structs, modules - the rest of the examples.
 5. Brainfuck interpreter, then JSON - the embedding proof.
-6. Rename to Vlam, if the name is agreed, before anything public ships.
+6. (Dropped 2026-10-29: no rename to Vlam; `blip` stays.)
 7. Website: blip calls veb (option 1), generate and deploy.
 8. veb calls blip (option 2), if the continuation work is worth it.
 9. Make the repository public at step 7, not before: the site should exist

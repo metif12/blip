@@ -1,9 +1,13 @@
 # Macros at emit time — design memo
 
-Status: partially implemented (updated 2026-10-27). The pure-data half of
-Option 2 and the embedded machine of Option 1 are built and gated; neither is
-wired into the emit dispatch, so `defmacro` / `macex` / `macex1` remain
-refused by name and the `05_pipelines` example stays out of the emitted set.
+Status: wired into the emit backend (updated 2026-10-29). `defmacro` forms are
+consumed at emit time (registered in an embedded machine, nothing emitted);
+`macex`/`macex1` and registered macro calls are expanded through that machine
+and re-read, so the emitter only ever sees ordinary forms. `05_pipelines`
+now emits and runs end to end (emit-js: 6 run, 0 refused). `do` is handled
+as a `begin` alias. Struct field access (`(p.x)`, `(p.y := 99)`) and
+mutable struct mutators are emitted. `as->`, `cond->`, `loop`, `dotimes`,
+`import`, `quasiquote`/`unquote` remain refused.
 
 ## What already exists (machine side)
 
@@ -80,15 +84,11 @@ This is acceptable for a configuration language — macros are nice-to-have, not
    a fresh `machine.new_standalone` over the source, evaluates it, and
    round-trips the expanded `Value` through `value_to_datum`. Exercised
    end-to-end by `tests/macros_gate.v`.
-3. **Remaining**: the emitter (`emit/mod.v`) cannot render an expanded
-   `NodeId` back to JavaScript yet, so `defmacro` / `macex` / `macex1` stay
-   in `unsupported_forms`. Removing them today would make a `defmacro` name
-   fall through to the ordinary call path and emit `defmacro(...)` as a JS
-   call — accepted, no output, the exact silent-green failure this repo
-   refuses to ship. Wire them only once `expand_macro_at_embed` is called
-   from the statement dispatch AND the emitted result is asserted on by a
-   gate (the `tests/emit_js.v` real-programs check is the shape to extend
-   with an `05_pipelines` case).
+3. **Done (2026-10-29)**: wired into `emit/mod.v` statement dispatch AND
+   `application()` expression position, with `05_pipelines` added to the
+   `emit_js` real-programs gate (6 run, 0 refused). Complex shapes
+   (table/closure/primitive) still refuse in `value_to_datum`; `macex`
+   over them errors at compile time rather than emitting nothing.
 
 Two failure modes this gate protects against, both real: emitting a macro as
 a plain JS identifier (acceptance with no output), and `value_to_datum`

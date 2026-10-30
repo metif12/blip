@@ -87,31 +87,45 @@ fn field_bool(n json2.Any, field string) bool {
 // collect_sigs returns every fn_decl in one `v ast -p` document: name,
 // params in order, return type string. Bodies are ignored by construction --
 // only `param` children are read.
+
+fn collect_fns(n json2.Any, mut out []Sig, depth int) {
+	if depth > 50 {
+		return
+	}
+	m := node_map(n)
+	kind := (m['kind'] or { json2.Any('') }).str()
+	if kind == 'fn_decl' {
+		mut s := Sig{
+			name:   field_str(n, 'value')
+			ret:    field_str(n, 'type')
+			params: []
+		}
+		for c in child_list(n) {
+			if field_str(c, 'kind') != 'param' {
+				continue
+			}
+			s.params << Param{
+				name:   field_str(c, 'value')
+				typ:    field_str(c, 'type')
+				is_mut: field_bool(c, 'is_mut')
+			}
+		}
+		out << s
+	}
+	children := m['children'] or { json2.Any('') }
+	if children.str() == '' {
+		return
+	}
+	for c in children.as_array() {
+		collect_fns(c, mut out, depth + 1)
+	}
+}
+
 fn collect_sigs(doc json2.Any) []Sig {
 	mut out := []Sig{}
 	files := (doc.as_map()['files'] or { json2.Any('') }).as_array()
 	for f in files {
-		for node in child_list(f) {
-			if field_str(node, 'kind') != 'fn_decl' {
-				continue
-			}
-			mut s := Sig{
-				name:   field_str(node, 'value')
-				ret:    field_str(node, 'type')
-				params: []
-			}
-			for c in child_list(node) {
-				if field_str(c, 'kind') != 'param' {
-					continue
-				}
-				s.params << Param{
-					name:   field_str(c, 'value')
-					typ:    field_str(c, 'type')
-					is_mut: field_bool(c, 'is_mut')
-				}
-			}
-			out << s
-		}
+		collect_fns(f, mut out, 0)
 	}
 	return out
 }
@@ -242,10 +256,11 @@ fn param_text(s Sig) string {
 // ------------------------------------------------------------------ driver
 
 fn vlib_dir() string {
-	// `v` on PATH is often a `.bat` wrapper one level below the real tree,
-	// so walk up from every candidate until a dir holding `vlib` is found.
+	// Use @VEXE (the compiler running this script), not `v` on PATH: on this
+	// host PATH resolves to a different V build, which is exactly the kind of
+	// "works on my machine" mismatch the pin exists to prevent.
 	mut cands := []string{}
-	vexe := os.find_abs_path_of_executable('v') or { '' }
+	vexe := @VEXE
 	if vexe != '' {
 		cands << os.dir(vexe)
 	}
@@ -272,7 +287,7 @@ fn v_version() string {
 	// otherwise stamps itself with whichever V is on PATH, which is a
 	// different build from the one running the script (local release install
 	// dd6834e vs the pinned v-pin 0137eb5 was a real mismatch).
-	r := os.exec([@VEXE, 'version'])
+	r := os.execute('"${@VEXE}" version')
 	if r.exit_code != 0 {
 		return 'unknown'
 	}
@@ -350,8 +365,8 @@ fn main() {
 		mut dupes := []string{}
 		for file in target.files {
 			path := os.join_path(vlib, target.module) + os.path_separator + file
-			r := os.exec([@VEXE, 'ast', '-p', path])
-			if r.exit_code != 0 {
+			r := os.execute('"${@VEXE}" -w ast -p ${path}')
+			if r.exit_code != 0 && r.output.trim_space() == '' {
 				eprintln('genprims: v ast failed on ${target.module}/${file}:')
 				eprintln(r.output)
 				eprintln('genprims: file moved upstream? update the allowlist files')
