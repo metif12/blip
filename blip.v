@@ -677,7 +677,7 @@ fn doc_file(path string) int {
 		}
 		lines := src.split('\n')
 		mut doc_lines := []string{}
-		for i, line in lines {
+		for _, line in lines {
 			trimmed := line.trim_space()
 			if trimmed.starts_with(';;') {
 				doc_lines << trimmed[2..].trim_space()

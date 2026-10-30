@@ -3016,7 +3016,6 @@ fn (mut m Machine) enter_clause_body(frame blip.EnvId, body blip.NodeId) ! {
 // No new syntax, no new continuation tag.
 fn (mut m Machine) transform_match_star(kids []blip.NodeId) blip.NodeId {
 	subjects := m.arena.kids(kids[1])
-	mut stmts := []blip.NodeId{}
 	// Every subject is passed straight into ONE `(list ...)` call, which is what
 	// makes each exactly-once evaluation: the list is built before the match sees
 	// it, and the match only ever reads it.

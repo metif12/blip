@@ -21,7 +21,7 @@ permissions:
   contents: write
 
 env:
-  V_COMMIT: 6dd8bb85fc0f9bba05b6be5aad5df4d443c26cd5
+  V_COMMIT: 74be97a2d7bd1fce4150abc749a2e64b21d9d082
 
   # vc is the C source V bootstraps itself from, and it is a SEPARATE repository
   # from V. Pinning V without pinning vc is what broke this: the Makefile clones

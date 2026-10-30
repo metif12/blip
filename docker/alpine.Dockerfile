@@ -22,7 +22,7 @@ RUN apk add --no-cache build-base git curl gc-dev
 # The commit this project targets. Not the 0.5.2 release: vlang/v master at
 # this commit also reports itself as "V 0.5.2" and resolves modules
 # differently, which is the difference the project was bitten by.
-ARG V_COMMIT=b9ebf8baff04133e1cb131c6d77dfb28008217b6
+ARG V_COMMIT=74be97a2d7bd1fce4150abc749a2e64b21d9d082
 
 # vc is the C source V bootstraps itself from, and it lives in a SEPARATE
 # repository from V. The Makefile clones it at HEAD -- unpinned -- which is what
@@ -35,7 +35,7 @@ ARG V_COMMIT=b9ebf8baff04133e1cb131c6d77dfb28008217b6
 # This is the vc snapshot taken just after V_COMMIT and before that change. The
 # `v` target is built directly rather than through `all`, because `all` depends
 # on download_vc, which clones vc at HEAD and undoes the pin.
-ARG VC_COMMIT=8fb9f78d04e564a4e556d9a4eaea63067d341030
+ARG VC_COMMIT=0027130e9850c9946fa2c21e9004f13d8e593595
 
 WORKDIR /opt
 RUN git config --global --add safe.directory /opt/v \

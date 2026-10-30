@@ -9,8 +9,8 @@ set -euo pipefail
 # commits appear in both install scripts and CI.
 #
 # Keep these two lines in sync with ci.yml.
-V_COMMIT=b9ebf8baff04133e1cb131c6d77dfb28008217b6
-VC_COMMIT=8fb9f78d04e564a4e556d9a4eaea63067d341030
+V_COMMIT=74be97a2d7bd1fce4150abc749a2e64b21d9d082
+VC_COMMIT=0027130e9850c9946fa2c21e9004f13d8e593595
 
 BLIP_DIR="${BLIP_INSTALL_DIR:-$HOME/.blip}"
 V_DIR="${BLIP_V_DIR:-$HOME/.blip-v}"

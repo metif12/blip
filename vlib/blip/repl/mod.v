@@ -20,7 +20,6 @@ module repl
 //   * `,l` loads a file into the RUNNING machine, so a definition made in the
 //     REPL is still there afterwards and one made in the file is there before.
 
-import vlib.blip
 import vlib.blip.host
 import vlib.blip.machine
 import vlib.blip.printer

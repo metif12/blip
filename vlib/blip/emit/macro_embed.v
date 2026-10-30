@@ -16,9 +16,6 @@
 
 module emit
 
-$if !wasm32 {
-import os
-}
 import vlib.blip
 import vlib.blip.host
 import vlib.blip.machine

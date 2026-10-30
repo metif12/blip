@@ -118,11 +118,9 @@ fn compile_with_base(src string, base string) !Result {
 	for id in res.forms {
 		e.remember(id)
 	}
-	mut before := e.out.len
 	for id in res.forms {
 		e.form(id)
 	}
-	before = e.out.len
 	// The runtime comes first in the TEXT even though it is emitted last, so the
 	// generated module is self-contained: one file, runnable by node as it is.
 	mut body := e.out.clone()
@@ -2090,7 +2088,6 @@ fn (mut e Emitter) use_expr(kids []reader.NodeId) string {
 		return 'null'
 	}
 	e.gensym++
-	tag := '__blip_use${e.gensym}'
 	// The callee's name is the head symbol of the call form, or r1 when the form is
 	// not a named call -- machine/mod.v's callee_name.
 	mut callee := 'r1'
