@@ -288,7 +288,7 @@ visible in a failing one. Both have already cost CI runs here.
 
 **The compiler is not the version.** `vlang/v` main and the `0.5.2` release
 both print `V 0.5.2`. The build hash after it is what distinguishes them
-(`0137eb5` here). Pin `V_COMMIT` and read `v version` in the log.
+(`6dd8bb8` here). Pin `V_COMMIT` and read `v version` in the log.
 
 **The compiler may not be the one you think, per platform.** On macOS, Linux and
 BSD, `v` tries the experimental **V3** compiler by default and *silently falls

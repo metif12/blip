@@ -4,6 +4,34 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### Compiler sync: vlang/v master `6dd8bb8` (2026-10-28), was `0137eb5`
+
+- The pin moved 1321 commits forward (2026-10-02 → 2026-10-28), in every place
+  the pin lives: `ci.yml`, `pages.yml`, `release.yml`, both root installers,
+  both `site/` installer copies, and the three Dockerfiles. `VC_COMMIT` moved
+  with it to the newest vc snapshot within a day of the V pin (`0027130e`,
+  generated 2026-10-29) — the vc-unpinned-at-HEAD failure mode documented in
+  ci.yml — and the V-at-`6dd8bb8` + vc-at-`0027130e` bootstrap was performed
+  locally before the pair was recorded, so CI's build step is known to work,
+  not assumed.
+- What the new compiler rejected: three checker strictnesses, all in the
+  emitter (`vlib/blip/emit/mod.v`), all implicit before, all errors now.
+  (1) `Emitter.node` returned `&Datum` from a `reader.Datum`-returning fn —
+  the checker now demands the dereference spelled out, `return *e.arena.node(id)`.
+  (2)(3) `Emitter.arena` is a `&reader.Arena` but was initialized from the value
+  field `res.arena` at both construction sites ("reference field must be
+  initialized with reference") — now `&res.arena` explicitly.
+- Everything else survived the 1321-commit jump: the generated prims' body is
+  byte-identical — regeneration changed only the `gen_math.v` stamp line — so
+  the math binding's contract with the vlib it was read from did not drift,
+  and `tools/genprims.vsh --check` passes against the new pin.
+- Gate: the whole battery — `tail_calls`, `non_tail`, `loop_forms`,
+  `binding_forms`, `embedding`, `repl_golden`, `examples_run`, `programs_run`,
+  `genprims`, `unit` (its `install_pins` check fails if the pin and the
+  installers ever disagree), `api_coverage`, `emit_js`, `lsp`, `hostile`,
+  `multi_use`, `value_to_datum`, `macros_gate`, plus `reader_probe` on
+  `examples/*.lip` — with zero `FAIL` lines, and the `--check` above.
+
 ### `(defined? name)` — ask whether a var exists, as a special form
 
 - There was no way to ask "is this name bound here?" without triggering the
