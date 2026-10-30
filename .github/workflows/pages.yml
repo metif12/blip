@@ -53,7 +53,7 @@ jobs:
 
       - name: Build blip
         run: |
-          v -cc gcc -o blip blip.v
+          v -cc gcc -d use_bundled_libgc -o blip blip.v
           [ -x ./blip ] || { echo "::error::no ./blip produced"; exit 1; }
           echo "$GITHUB_WORKSPACE" >> "$GITHUB_PATH"
 
