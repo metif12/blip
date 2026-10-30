@@ -76,7 +76,7 @@ jobs:
       # translation that silently produced nothing cannot reach production.
       - name: Generate the site
         run: |
-          v -cc gcc -o sitegen tools/sitegen.v
+          v -cc gcc -d use_bundled_libgc -o sitegen tools/sitegen.v
           ./sitegen | tee sitegen.log
 
       # The generator puts English at the site root and every other language
