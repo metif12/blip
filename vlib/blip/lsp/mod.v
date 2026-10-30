@@ -299,24 +299,26 @@ mut:
 	len int
 }
 
+$if wasm32 {
 fn (mut r StdinReader) fill() bool {
-	$if wasm32 {
-		return false
-	} $else {
-		if r.buf.len == 0 {
-			r.buf = []u8{len: 65536}
-		}
-		data, n := os.fd_read(r.fd, r.buf.len)
-		if n <= 0 {
-			return false
-		}
-		r.len = n
-		r.off = 0
-		for i in 0 .. n {
-			r.buf[i] = data[i]
-		}
-		return true
+	return false
+}
+} $else {
+fn (mut r StdinReader) fill() bool {
+	if r.buf.len == 0 {
+		r.buf = []u8{len: 65536}
 	}
+	data, n := os.fd_read(r.fd, r.buf.len)
+	if n <= 0 {
+		return false
+	}
+	r.len = n
+	r.off = 0
+	for i in 0 .. n {
+		r.buf[i] = data[i]
+	}
+	return true
+}
 }
 
 fn (mut r StdinReader) read_byte() ?u8 {

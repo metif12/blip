@@ -231,37 +231,39 @@ pub fn (mut m Machine) load(path string) !blip.Value {
 // is a convenience with exactly one failure mode: two owners publishing the same
 // repo name, where the one found is whichever os.ls happens to return first.
 // That ambiguity is why the direct form is the one worth using.
+$if wasm32 {
 fn (m &Machine) resolve_module(name string) ?string {
-	$if wasm32 {
-		return none
-	} $else {
-		if name == '' {
-			return none
-		}
-		base := 'blip_modules'
-		direct := os.join_path(os.join_path(base, name), 'blip.lip')
-		if os.exists(direct) {
-			return direct
-		}
-		if name.contains('/') {
-			return none
-		}
-		entries := os.ls(base) or { return none }
-		for owner in entries {
-			if owner.starts_with('.') {
-				continue
-			}
-			candidate := os.join_path(os.join_path(base, owner), name)
-			if !os.is_dir(candidate) {
-				continue
-			}
-			entry := os.join_path(candidate, 'blip.lip')
-			if os.exists(entry) {
-				return entry
-			}
-		}
+	return none
+}
+} $else {
+fn (m &Machine) resolve_module(name string) ?string {
+	if name == '' {
 		return none
 	}
+	base := 'blip_modules'
+	direct := os.join_path(os.join_path(base, name), 'blip.lip')
+	if os.exists(direct) {
+		return direct
+	}
+	if name.contains('/') {
+		return none
+	}
+	entries := os.ls(base) or { return none }
+	for owner in entries {
+		if owner.starts_with('.') {
+			continue
+		}
+		candidate := os.join_path(os.join_path(base, owner), name)
+		if !os.is_dir(candidate) {
+			continue
+		}
+		entry := os.join_path(candidate, 'blip.lip')
+		if os.exists(entry) {
+			return entry
+		}
+	}
+	return none
+}
 }
 
 // eval_import loads an installed package into the RUNNING machine.

@@ -53,20 +53,24 @@ pub fn (c &ConsoleHost) host_write(s string) {
 	print(s)
 }
 
+$if wasm32 {
 pub fn (c &ConsoleHost) host_read_line() ?string {
-	$if wasm32 {
-		return none
-	} $else {
-		return os.get_line()
-	}
+	return none
+}
+} $else {
+pub fn (c &ConsoleHost) host_read_line() ?string {
+	return os.get_line()
+}
 }
 
+$if wasm32 {
 pub fn (c &ConsoleHost) host_load(path string) !string {
-	$if wasm32 {
-		return error('not available in wasm build')
-	} $else {
-		return os.read_file(path)
-	}
+	return error('not available in wasm build')
+}
+} $else {
+pub fn (c &ConsoleHost) host_load(path string) !string {
+	return os.read_file(path)
+}
 }
 
 // CaptureHost collects output instead of writing it, and answers reads and loads

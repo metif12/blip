@@ -13,7 +13,7 @@ modern Lisps have each solved independently and no single one language has
 combined: **atomic multi-subject pattern matching** (`match*`), **callback-based
 `use`** for keeping call chains flat, and **opaque types** as the encapsulation
 mechanism. Execution is a CEK-style machine with an explicit heap stack, which
-gives proper tail calls today and fibers later with no redesign.
+gives proper tail calls today. Fibers are designed for (the explicit heap stack makes them possible without representation change) but are not yet implemented; `yield` exists as an identity hook.
 
 There is no static type system in v1. Type information exists as optional,
 erased annotations plus runtime contracts, and both are opt-in per program.
