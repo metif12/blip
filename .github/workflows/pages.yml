@@ -23,13 +23,13 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     env:
-      V_COMMIT: 0137eb5d8ebc5d183259309ed08ea06ba9bc27d6
+      V_COMMIT: b9ebf8baff04133e1cb131c6d77dfb28008217b6
       # vc is the C source V bootstraps itself from, and it is a SEPARATE
       # repository from V. Pinning V without pinning vc is what broke this: the
       # Makefile clones vc at HEAD, so a snapshot built from a newer V was used
       # to compile the pinned V's own vlib. This is the snapshot taken just
       # after V_COMMIT.
-      VC_COMMIT: 64b1017fe300e1631d5b2ecd4d38092bba1802fd
+      VC_COMMIT: 8fb9f78d04e564a4e556d9a4eaea63067d341030
       V_MACOS_V3_NO_FALLBACK: '1'
     steps:
       - uses: actions/checkout@v4
