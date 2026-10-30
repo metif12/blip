@@ -1614,6 +1614,7 @@ fn prim_write_file(args []blip.Value) !blip.Value {
 		}
 		path := need_str('write-file', args[0])!
 		data := need_str('write-file', args[1])!
+		 os.mkdir_all(os.dir(path)) or {}
 		os.write_file(path, data) or {
 			return blip.list_from([blip.symbol('err'),
 				blip.string('write-file: cannot write ${path}: ${err.msg()}')])
