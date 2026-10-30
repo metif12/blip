@@ -1,6 +1,8 @@
 module main
 
+$if !wasm32 {
 import os
+}
 import vlib.blip
 import vlib.blip.emit
 import vlib.blip.host
@@ -157,10 +159,7 @@ Prints the version and the compiler it was built with.')
 // of it and the change is visible to a later file.
 fn std_path() string {
 	$if wasm32 {
-		if os.exists('lib/std.lip') {
-			return 'lib/std.lip'
-		}
-		return ''
+		return 'lib/std.lip'
 	} $else {
 		exe := os.executable()
 		dir := os.dir(exe)
@@ -176,11 +175,7 @@ fn std_path() string {
 
 fn programs_path(name string) string {
 	$if wasm32 {
-		p := 'programs/${name}'
-		if os.exists(p) {
-			return p
-		}
-		return ''
+		return 'programs/' + name
 	} $else {
 		exe := os.executable()
 		dir := os.dir(exe)
@@ -194,29 +189,34 @@ fn programs_path(name string) string {
 	}
 }
 fn run_files(paths []string) int {
-	h := &host.ConsoleHost{}
-	mut m := machine.new_standalone(h)
-	mut code := 0
-	std := std_path()
-	if std != '' {
-		m.load(std) or {
-			eprintln('blip: cannot load the standard library: ${err.msg()}')
-			code = 1
+	$if wasm32 {
+		println('blip: run not available in wasm build')
+		return 1
+	} $else {
+		h := &host.ConsoleHost{}
+		mut m := machine.new_standalone(h)
+		mut code := 0
+		std := std_path()
+		if std != '' {
+			m.load(std) or {
+				eprintln('blip: cannot load the standard library: ${err.msg()}')
+				code = 1
+			}
 		}
+		for path in paths {
+			src := os.read_file(path) or {
+				eprintln('blip: cannot read ${path}')
+				code = 1
+				continue
+			}
+			m.source = path
+			m.run_str(src) or {
+				eprintln(err.msg())
+				code = 1
+			}
+		}
+		return code
 	}
-	for path in paths {
-		src := os.read_file(path) or {
-			eprintln('blip: cannot read ${path}')
-			code = 1
-			continue
-		}
-		m.source = path
-		m.run_str(src) or {
-			eprintln(err.msg())
-			code = 1
-		}
-	}
-	return code
 }
 
 // ---- emit-js -------------------------------------------------------------
@@ -228,215 +228,230 @@ fn run_files(paths []string) int {
 // at the first call. The gate knows the same thing, and both go through
 // `compile_program` so the knowledge is not in two places to drift.
 fn emit_js(paths []string) int {
-	mut code := 0
-	for path in paths {
-		src := os.read_file(path) or {
-			eprintln('blip: cannot read ${path}')
-			code = 1
-			continue
+	$if wasm32 {
+		println('blip: emit-js not available in wasm build')
+		return 1
+	} $else {
+		mut code := 0
+		for path in paths {
+			src := os.read_file(path) or {
+				eprintln('blip: cannot read ${path}')
+				code = 1
+				continue
+			}
+			res := emit.compile_program(src) or {
+				eprintln('blip: ${path}: ${err.msg()}')
+				code = 1
+				continue
+			}
+			if res.blocked.len > 0 {
+				// Refusal is reported, not hidden: silently emitting `undefined`
+				// for a form the engine does not understand is how a backend ends
+				// up wrong in a way nobody can see.
+				eprintln('blip: ${path}: not emitted: ${res.blocked.join(', ')}')
+				code = 1
+			}
+			println(res.js)
 		}
-		res := emit.compile_program(src) or {
-			eprintln('blip: ${path}: ${err.msg()}')
-			code = 1
-			continue
-		}
-		if res.blocked.len > 0 {
-			// Refusal is reported, not hidden: silently emitting `undefined`
-			// for a form the engine does not understand is how a backend ends
-			// up wrong in a way nobody can see.
-			eprintln('blip: ${path}: not emitted: ${res.blocked.join(', ')}')
-			code = 1
-		}
-		println(res.js)
+		return code
 	}
-	return code
 }
 
 fn start_repl() int {
-	mut r := repl.new(&host.ConsoleHost{})
-	std := std_path()
-	if std != '' {
-		r.machine.load(std) or {
-			eprintln('blip: cannot load the standard library: ${err.msg()}')
+	$if wasm32 {
+		println('blip: wasm build')
+		return 0
+	} $else {
+		mut r := repl.new(&host.ConsoleHost{})
+		std := std_path()
+		if std != '' {
+			r.machine.load(std) or {
+				eprintln('blip: cannot load the standard library: ${err.msg()}')
+			}
 		}
+		return r.run()
 	}
-	return r.run()
 }
 
 fn main() {
-	args := os.args[1..]
-	if args.len == 0 {
-		exit_code(start_repl())
-	}
-	match args[0] {
-		'repl' {
+	$if wasm32 {
+		println('blip wasm: ready')
+		return
+	} $else {
+		args := os.args[1..]
+		if args.len == 0 {
 			exit_code(start_repl())
 		}
-		'run' {
-			if args.len < 2 {
-				eprintln('blip: run needs a file')
-				eprintln('run `blip help run` for usage')
-				exit_code(2)
+		match args[0] {
+			'repl' {
+				exit_code(start_repl())
 			}
-			exit_code(run_files(args[1..]))
-		}
-		'test' {
-			if args.len < 2 {
-				eprintln('blip: test needs a file')
-				eprintln('run `blip help test` for usage')
-				exit_code(2)
-			}
-			exit_code(run_tests(args[1..]))
-		}
-		'emit-js' {
-			if args.len < 2 {
-				eprintln('blip: emit-js needs a file')
-				eprintln('run `blip help emit-js` for usage')
-				exit_code(2)
-			}
-			exit_code(emit_js(args[1..]))
-		}
-		'lsp' {
-			lsp.serve()
-		}
-		'lint' {
-			mut file := 'COMMIT_EDITMSG'
-			if args.len >= 2 {
-				file = args[1]
-			}
-			if !os.exists(file) {
-				eprintln('blip: cannot read ${file}')
-				exit_code(2)
-				return
-			}
-			os.setenv('BLIP_LINT_FILE', file, true)
-			prog := programs_path('lint_commit.lip')
-			if prog == '' {
-				eprintln('blip: cannot find programs/lint_commit.lip')
-				exit_code(2)
-				return
-			}
-			exit_code(run_files([prog]))
-		}
-		'vet' {
-			mut file := 'COMMIT_EDITMSG'
-			if args.len >= 2 {
-				file = args[1]
-			}
-			if !os.exists(file) {
-				eprintln('blip: cannot read ${file}')
-				exit_code(2)
-				return
-			}
-			os.setenv('BLIP_LINT_FILE', file, true)
-			prog := programs_path('lint_commit.lip')
-			if prog == '' {
-				eprintln('blip: cannot find programs/lint_commit.lip')
-				exit_code(2)
-				return
-			}
-			exit_code(run_files([prog]))
-		}
-		'fmt' {
-			mut write := false
-			mut file := ''
-			for a in args[1..] {
-				if a == '-w' {
-					write = true
-				} else {
-					file = a
+			'run' {
+				if args.len < 2 {
+					eprintln('blip: run needs a file')
+					eprintln('run `blip help run` for usage')
+					exit_code(2)
 				}
+				exit_code(run_files(args[1..]))
 			}
-			if file == '' {
-				eprintln('blip: fmt needs a file')
-				eprintln('run `blip help fmt` for usage')
-				exit_code(2)
-				return
-			}
-			exit_code(fmt_file(file, write))
-		}
-		'doc' {
-			if args.len < 2 {
-				eprintln('blip: doc needs a file')
-				eprintln('run `blip help doc` for usage')
-				exit_code(2)
-				return
-			}
-			exit_code(doc_file(args[1]))
-		}
-		'build' {
-			mut target := 'js'
-			mut out := ''
-			mut file := ''
-			mut i := 1
-			for i < args.len {
-				a := args[i]
-				if a == '-o' && i + 1 < args.len {
-					out = args[i + 1]
-					i += 2
-					continue
+			'test' {
+				if args.len < 2 {
+					eprintln('blip: test needs a file')
+					eprintln('run `blip help test` for usage')
+					exit_code(2)
 				}
-				if a == '--target' && i + 1 < args.len {
-					target = args[i + 1]
-					i += 2
-					continue
+				exit_code(run_tests(args[1..]))
+			}
+			'emit-js' {
+				if args.len < 2 {
+					eprintln('blip: emit-js needs a file')
+					eprintln('run `blip help emit-js` for usage')
+					exit_code(2)
+				}
+				exit_code(emit_js(args[1..]))
+			}
+			'lsp' {
+				lsp.serve()
+			}
+			'lint' {
+				mut file := 'COMMIT_EDITMSG'
+				if args.len >= 2 {
+					file = args[1]
+				}
+				if !os.exists(file) {
+					eprintln('blip: cannot read ${file}')
+					exit_code(2)
+					return
+				}
+				os.setenv('BLIP_LINT_FILE', file, true)
+				prog := programs_path('lint_commit.lip')
+				if prog == '' {
+					eprintln('blip: cannot find programs/lint_commit.lip')
+					exit_code(2)
+					return
+				}
+				exit_code(run_files([prog]))
+			}
+			'vet' {
+				mut file := 'COMMIT_EDITMSG'
+				if args.len >= 2 {
+					file = args[1]
+				}
+				if !os.exists(file) {
+					eprintln('blip: cannot read ${file}')
+					exit_code(2)
+					return
+				}
+				os.setenv('BLIP_LINT_FILE', file, true)
+				prog := programs_path('lint_commit.lip')
+				if prog == '' {
+					eprintln('blip: cannot find programs/lint_commit.lip')
+					exit_code(2)
+					return
+				}
+				exit_code(run_files([prog]))
+			}
+			'fmt' {
+				mut write := false
+				mut file := ''
+				for a in args[1..] {
+					if a == '-w' {
+						write = true
+					} else {
+						file = a
+					}
 				}
 				if file == '' {
-					file = a
+					eprintln('blip: fmt needs a file')
+					eprintln('run `blip help fmt` for usage')
+					exit_code(2)
+					return
 				}
-				i++
+				exit_code(fmt_file(file, write))
 			}
-			if file == '' {
-				eprintln('blip: build needs a file')
-				eprintln('run blip help build for usage')
-				exit_code(2)
-				return
+			'doc' {
+				if args.len < 2 {
+					eprintln('blip: doc needs a file')
+					eprintln('run `blip help doc` for usage')
+					exit_code(2)
+					return
+				}
+				exit_code(doc_file(args[1]))
 			}
-			if target == 'wasm' {
-				eprintln('blip: WASM backend is not yet available (P8).')
-				eprintln('V WASM backend lacks os.read_file/os.exists, which blip needs.')
-				eprintln('Use blip build file for a JavaScript module instead.')
-				exit_code(2)
-				return
+			'build' {
+				mut target := 'js'
+				mut out := ''
+				mut file := ''
+				mut i := 1
+				for i < args.len {
+					a := args[i]
+					if a == '-o' && i + 1 < args.len {
+						out = args[i + 1]
+						i += 2
+						continue
+					}
+					if a == '--target' && i + 1 < args.len {
+						target = args[i + 1]
+						i += 2
+						continue
+					}
+					if file == '' {
+						file = a
+					}
+					i++
+				}
+				if file == '' {
+					eprintln('blip: build needs a file')
+					eprintln('run blip help build for usage')
+					exit_code(2)
+					return
+				}
+				if target == 'wasm' {
+					eprintln('blip: WASM backend is not yet available (P8).')
+					eprintln('V wasm32 target lacks os/strconv/recover, which blip needs.')
+					eprintln('Use blip build file for a JavaScript module instead.')
+					exit_code(2)
+					return
+				}
+				if out == '' {
+					out = file.replace('.lip', '.js')
+				}
+				exit_code(build_file(file, out))
 			}
-			if out == '' {
-				out = file.replace('.lip', '.js')
+			'new' {
+				if args.len < 2 {
+					eprintln('blip: new needs a name')
+					eprintln('run `blip help new` for usage')
+					exit_code(2)
+					return
+				}
+				exit_code(scaffold(args[1]))
 			}
-			exit_code(build_file(file, out))
-		}
-		'new' {
-			if args.len < 2 {
-				eprintln('blip: new needs a name')
-				eprintln('run `blip help new` for usage')
-				exit_code(2)
-				return
+			'pkg' {
+				exit_code(pkg_command(args[1..]))
 			}
-			exit_code(scaffold(args[1]))
-		}
-		'pkg' {
-			exit_code(pkg_command(args[1..]))
-		}
-		'version', '-V', '--version' {
-			println('blip ${version}')
-		}
-		'-h', '--help', 'help' {
-			if args.len >= 2 {
-				help_for(args[1])
-			} else {
-				usage()
+			'version', '-V', '--version' {
+				println('blip ${version}')
 			}
-		}
-		else {
-			// Allow `blip file.lip` as a shorthand for `blip run file.lip`.
-			// A word that is neither a subcommand nor a file fails both ways,
-			// and saying only "cannot read" sends someone who mistyped a
-			// subcommand hunting for a file that was never theirs.
-			if !os.exists(args[0]) && !args[0].ends_with('.lip') {
-				eprintln('blip: ${args[0]} is neither a subcommand nor a file')
-				eprintln('run `blip help` for subcommands, or `blip run <file.lip>`')
-				exit_code(2)
+			'-h', '--help', 'help' {
+				if args.len >= 2 {
+					help_for(args[1])
+				} else {
+					usage()
+				}
 			}
-			exit_code(run_files(args))
+			else {
+				// Allow `blip file.lip` as a shorthand for `blip run file.lip`.
+				// A word that is neither a subcommand nor a file fails both ways,
+				// and saying only "cannot read" sends someone who mistyped a
+				// subcommand hunting for a file that was never theirs.
+				if !os.exists(args[0]) && !args[0].ends_with('.lip') {
+					eprintln('blip: ${args[0]} is neither a subcommand nor a file')
+					eprintln('run `blip help` for subcommands, or `blip run <file.lip>`')
+					exit_code(2)
+				}
+				exit_code(run_files(args))
+			}
 		}
 	}
 }
@@ -511,80 +526,85 @@ mut:
 }
 
 fn run_tests(paths []string) int {
-	mut s := TestSuite{}
-	for path in paths {
-		src := os.read_file(path) or {
-			eprintln('blip: cannot read ${path}')
-			s.fails++
-			continue
-		}
-		// Read the diagnostics first, on a scratch arena, so a broken file is
-		// reported as a syntax error rather than half-evaluated. The forms then
-		// go into the MACHINE's arena, because a NodeId means nothing in any
-		// other: evaluating nodes from a different arena reads arbitrary memory.
-		probe := reader.read_all(src)
-		if probe.diags.len > 0 {
-			d := probe.diags[0]
-			eprintln('${path}:${d.line}:${d.col}: ${d.msg}')
-			s.fails++
-			continue
-		}
-		h := host.new_capture()
-		std := std_path()
-		if std != '' {
-			// The capture host serves NO files until it is given one, and the
-			// standard library is loaded through the host like anything else.
-			// Without this the prelude silently fails and every expectation in
-			// the file is checked against a machine with no names in it.
-			std_src := os.read_file(std) or { '' }
-			if std_src != '' {
-				h.give_file(std, std_src)
-			}
-		}
-		mut m := machine.new_standalone(h)
-		if std != '' {
-			m.load(std) or { eprintln('blip: cannot load the standard library: ${err.msg()}') }
-		}
-		m.source = path
-		forms := m.arena.read_forms(src)
-		lines := src.split('\n')
-		for id in forms.forms {
-			d := m.arena.node(id)
-			want := expectation(lines, d.line)
-			// What the form PRINTED is the answer when it printed anything.
-			// `(print (greeting "world"))` returns nil, so comparing the value
-			// against a `;=> "Hello, world."` expectation is comparing nil
-			// against a string and calling that a failure -- while the program
-			// printed exactly what it was documented to print. The machine
-			// already routes print through the host, so the output is here.
-			before := m.out.len
-			v := m.eval_one(id) or {
-				if want.len > 0 {
-					s.check(path, d.line, want, 'error: ${err.msg()}')
-				}
+	$if wasm32 {
+		println('blip: test not available in wasm build')
+		return 1
+	} $else {
+		mut s := TestSuite{}
+		for path in paths {
+			src := os.read_file(path) or {
+				eprintln('blip: cannot read ${path}')
+				s.fails++
 				continue
 			}
-			if want.len > 0 {
-				s.checks++
-				if m.out.len > before {
-					printed := m.out[before..].join('').trim_right('\n').trim_space()
-					s.check(path, d.line, want, printed)
+			// Read the diagnostics first, on a scratch arena, so a broken file is
+			// reported as a syntax error rather than half-evaluated. The forms then
+			// go into the MACHINE's arena, because a NodeId means nothing in any
+			// other: evaluating nodes from a different arena reads arbitrary memory.
+			probe := reader.read_all(src)
+			if probe.diags.len > 0 {
+				d := probe.diags[0]
+				eprintln('${path}:${d.line}:${d.col}: ${d.msg}')
+				s.fails++
+				continue
+			}
+			h := host.new_capture()
+			std := std_path()
+			if std != '' {
+				// The capture host serves NO files until it is given one, and the
+				// standard library is loaded through the host like anything else.
+				// Without this the prelude silently fails and every expectation in
+				// the file is checked against a machine with no names in it.
+				std_src := os.read_file(std) or { '' }
+				if std_src != '' {
+					h.give_file(std, std_src)
+				}
+			}
+			mut m := machine.new_standalone(h)
+			if std != '' {
+				m.load(std) or { eprintln('blip: cannot load the standard library: ${err.msg()}') }
+			}
+			m.source = path
+			forms := m.arena.read_forms(src)
+			lines := src.split('\n')
+			for id in forms.forms {
+				d := m.arena.node(id)
+				want := expectation(lines, d.line)
+				// What the form PRINTED is the answer when it printed anything.
+				// `(print (greeting "world"))` returns nil, so comparing the value
+				// against a `;=> "Hello, world."` expectation is comparing nil
+				// against a string and calling that a failure -- while the program
+				// printed exactly what it was documented to print. The machine
+				// already routes print through the host, so the output is here.
+				before := m.out.len
+				v := m.eval_one(id) or {
+					if want.len > 0 {
+						s.check(path, d.line, want, 'error: ${err.msg()}')
+					}
 					continue
 				}
-				s.check(path, d.line, want, printer.write(v))
+				if want.len > 0 {
+					s.checks++
+					if m.out.len > before {
+						printed := m.out[before..].join('').trim_right('\n').trim_space()
+						s.check(path, d.line, want, printed)
+						continue
+					}
+					s.check(path, d.line, want, printer.write(v))
+				}
 			}
 		}
+		if s.checks == 0 {
+			println('${paths.len} file(s) ran, 0 expectations')
+			return if s.fails > 0 { 1 } else { 0 }
+		}
+		if s.fails > 0 {
+			println('${s.checks} expectations, ${s.fails} FAILED')
+			return 1
+		}
+		println('${s.checks} expectations passed')
+		return 0
 	}
-	if s.checks == 0 {
-		println('${paths.len} file(s) ran, 0 expectations')
-		return if s.fails > 0 { 1 } else { 0 }
-	}
-	if s.fails > 0 {
-		println('${s.checks} expectations, ${s.fails} FAILED')
-		return 1
-	}
-	println('${s.checks} expectations passed')
-	return 0
 }
 
 // ---- new ----------------------------------------------------------------
@@ -608,32 +628,37 @@ fn main_lip(name string) string {
 }
 
 fn scaffold(name string) int {
-	if os.exists(name) {
-		eprintln('blip: ${name} already exists')
+	$if wasm32 {
+		println('blip: new not available in wasm build')
 		return 1
+	} $else {
+		if os.exists(name) {
+			eprintln('blip: ${name} already exists')
+			return 1
+		}
+		os.mkdir_all(name) or {
+			eprintln('blip: cannot create ${name}: ${err.msg()}')
+			return 1
+		}
+		os.write_file(os.join_path(name, 'main.lip'), main_lip(name)) or {
+			eprintln('blip: cannot write main.lip: ${err.msg()}')
+			return 1
+		}
+		readme := '# ${name}\n\nA blip project.\n\n    blip run main.lip\n    blip test main.lip\n'
+		os.write_file(os.join_path(name, 'README.md'), readme) or {
+			eprintln('blip: cannot write README.md: ${err.msg()}')
+			return 1
+		}
+		os.write_file(os.join_path(name, '.gitignore'), 'blip\n*.exe\nblip_modules/\n') or {
+			eprintln('blip: cannot write .gitignore: ${err.msg()}')
+			return 1
+		}
+		println('created ${name}/')
+		println('  main.lip')
+		println('  README.md')
+		println('  .gitignore')
+		return 0
 	}
-	os.mkdir_all(name) or {
-		eprintln('blip: cannot create ${name}: ${err.msg()}')
-		return 1
-	}
-	os.write_file(os.join_path(name, 'main.lip'), main_lip(name)) or {
-		eprintln('blip: cannot write main.lip: ${err.msg()}')
-		return 1
-	}
-	readme := '# ${name}\n\nA blip project.\n\n    blip run main.lip\n    blip test main.lip\n'
-	os.write_file(os.join_path(name, 'README.md'), readme) or {
-		eprintln('blip: cannot write README.md: ${err.msg()}')
-		return 1
-	}
-	os.write_file(os.join_path(name, '.gitignore'), 'blip\n*.exe\nblip_modules/\n') or {
-		eprintln('blip: cannot write .gitignore: ${err.msg()}')
-		return 1
-	}
-	println('created ${name}/')
-	println('  main.lip')
-	println('  README.md')
-	println('  .gitignore')
-	return 0
 }
 
 // ---- doc -----------------------------------------------------------------
@@ -642,75 +667,80 @@ fn scaffold(name string) int {
 // as Markdown. A `;;` block immediately above a `(define ...)`, `(def ...)`,
 // `(defmacro ...)` or `(struct ...)` form becomes that entry's documentation.
 fn doc_file(path string) int {
-	src := os.read_file(path) or {
-		eprintln('blip: cannot read ${path}: ${err.msg()}')
+	$if wasm32 {
+		println('blip: doc not available in wasm build')
 		return 1
-	}
-	lines := src.split('\n')
-	mut doc_lines := []string{}
-	for i, line in lines {
-		trimmed := line.trim_space()
-		if trimmed.starts_with(';;') {
-			doc_lines << trimmed[2..].trim_space()
-			continue
+	} $else {
+		src := os.read_file(path) or {
+			eprintln('blip: cannot read ${path}: ${err.msg()}')
+			return 1
 		}
-		// A definition line: flush the accumulated doc as an entry.
-		is_def := trimmed.starts_with('(define') || trimmed.starts_with('(def ') || trimmed.starts_with('(defmacro') || trimmed.starts_with('(struct')
-		if is_def {
-			// Extract the name: second token after the opening paren.
-			mut name := ''
-			mut rest := trimmed.trim_left('(').trim_space()
-			// skip keyword
-			space_idx := rest.index(' ') or { -1 }
-			if space_idx >= 0 {
-				rest = rest[space_idx + 1..].trim_space()
+		lines := src.split('\n')
+		mut doc_lines := []string{}
+		for i, line in lines {
+			trimmed := line.trim_space()
+			if trimmed.starts_with(';;') {
+				doc_lines << trimmed[2..].trim_space()
+				continue
 			}
-			// name is the next token, possibly parenthesized signature
-			if rest.starts_with('(') {
-				mut end := rest.index(')') or { -1 }
-				if end >= 0 {
-					sig := rest[1..end]
-					parts := sig.split(' ')
-					if parts.len > 0 {
-						name = parts[0]
+			// A definition line: flush the accumulated doc as an entry.
+			is_def := trimmed.starts_with('(define') || trimmed.starts_with('(def ') || trimmed.starts_with('(defmacro') || trimmed.starts_with('(struct')
+			if is_def {
+				// Extract the name: second token after the opening paren.
+				mut name := ''
+				mut rest := trimmed.trim_left('(').trim_space()
+				// skip keyword
+				space_idx := rest.index(' ') or { -1 }
+				if space_idx >= 0 {
+					rest = rest[space_idx + 1..].trim_space()
+				}
+				// name is the next token, possibly parenthesized signature
+				if rest.starts_with('(') {
+					mut end := rest.index(')') or { -1 }
+					if end >= 0 {
+						sig := rest[1..end]
+						parts := sig.split(' ')
+						if parts.len > 0 {
+							name = parts[0]
+						}
+						println('## ' + name)
+						println('')
+						println('```blip')
+						println('(${name} ${parts[1..].join(' ')})')
+						println('```')
+						println('')
 					}
+				} else {
+					mut end := rest.index(' ') or { rest.len }
+					if end < 0 { end = rest.len }
+					name = rest[..end]
 					println('## ' + name)
 					println('')
-					println('```blip')
-					println('(${name} ${parts[1..].join(' ')})')
-					println('```')
-					println('')
 				}
+				// Print doc text (skip empty leading lines).
+				mut started := false
+				for dl in doc_lines {
+					if dl == '' {
+						if started { println('') }
+						continue
+					}
+					started = true
+					println(dl)
+				}
+				if started { println('') }
+				doc_lines = []
+				continue
+			}
+			// Non-doc, non-def line resets the doc buffer (blank lines keep it).
+			if trimmed == '' {
+				// keep doc_lines (blank line inside doc is already stored as '')
 			} else {
-				mut end := rest.index(' ') or { rest.len }
-				if end < 0 { end = rest.len }
-				name = rest[..end]
-				println('## ' + name)
-				println('')
+				doc_lines = []
 			}
-			// Print doc text (skip empty leading lines).
-			mut started := false
-			for dl in doc_lines {
-				if dl == '' {
-					if started { println('') }
-					continue
-				}
-				started = true
-				println(dl)
-			}
-			if started { println('') }
-			doc_lines = []
-			continue
 		}
-		// Non-doc, non-def line resets the doc buffer (blank lines keep it).
-		if trimmed == '' {
-			// keep doc_lines (blank line inside doc is already stored as '')
-		} else {
-			doc_lines = []
-		}
+		// Trailing doc with no definition: ignore.
+		return 0
 	}
-	// Trailing doc with no definition: ignore.
-	return 0
 }
 
 // ---- fmt ----------------------------------------------------------------
@@ -718,33 +748,38 @@ fn doc_file(path string) int {
 // fmt_file pretty-prints a blip source file. With write=true it overwrites
 // the file; otherwise it prints to stdout.
 fn fmt_file(path string, write bool) int {
-	src := os.read_file(path) or {
-		eprintln('blip: cannot read ${path}: ${err.msg()}')
+	$if wasm32 {
+		println('blip: fmt not available in wasm build')
 		return 1
-	}
-	res := reader.read_all(src)
-	if res.diags.len > 0 {
-		d := res.diags[0]
-		eprintln('${path}:${d.line}:${d.col}: ${d.msg}')
-		return 1
-	}
-	mut out := ''
-	for i, id in res.forms {
-		if i > 0 {
-			out += '\n\n'
-		}
-		out += pp_form(res.arena, id, 0)
-	}
-	out += '\n'
-	if write {
-		os.write_file(path, out) or {
-			eprintln('blip: cannot write ${path}: ${err.msg()}')
+	} $else {
+		src := os.read_file(path) or {
+			eprintln('blip: cannot read ${path}: ${err.msg()}')
 			return 1
 		}
-	} else {
-		print(out)
+		res := reader.read_all(src)
+		if res.diags.len > 0 {
+			d := res.diags[0]
+			eprintln('${path}:${d.line}:${d.col}: ${d.msg}')
+			return 1
+		}
+		mut out := ''
+		for i, id in res.forms {
+			if i > 0 {
+				out += '\n\n'
+			}
+			out += pp_form(res.arena, id, 0)
+		}
+		out += '\n'
+		if write {
+			os.write_file(path, out) or {
+				eprintln('blip: cannot write ${path}: ${err.msg()}')
+				return 1
+			}
+		} else {
+			print(out)
+		}
+		return 0
 	}
-	return 0
 }
 
 fn pp_form(a &reader.Arena, id reader.NodeId, depth int) string {
@@ -883,24 +918,29 @@ fn quote_string(s string) string {
 // to out. This is the first half of `blip build`: a single self-contained
 // .js file that runs under node. A .wasm backend is the next step (P8).
 fn build_file(input string, out string) int {
-	src := os.read_file(input) or {
-		eprintln('blip: cannot read ${input}: ${err.msg()}')
+	$if wasm32 {
+		println('blip: build not available in wasm build')
 		return 1
+	} $else {
+		src := os.read_file(input) or {
+			eprintln('blip: cannot read ${input}: ${err.msg()}')
+			return 1
+		}
+		res := emit.compile_program(src) or {
+			eprintln('blip: ${input}: ${err.msg()}')
+			return 1
+		}
+		if res.blocked.len > 0 {
+			eprintln('blip: ${input}: not emitted: ${res.blocked.join(', ')}')
+			return 1
+		}
+		os.write_file(out, res.js) or {
+			eprintln('blip: cannot write ${out}: ${err.msg()}')
+			return 1
+		}
+		println('built ${out} (${res.js.len} bytes)')
+		return 0
 	}
-	res := emit.compile_program(src) or {
-		eprintln('blip: ${input}: ${err.msg()}')
-		return 1
-	}
-	if res.blocked.len > 0 {
-		eprintln('blip: ${input}: not emitted: ${res.blocked.join(', ')}')
-		return 1
-	}
-	os.write_file(out, res.js) or {
-		eprintln('blip: cannot write ${out}: ${err.msg()}')
-		return 1
-	}
-	println('built ${out} (${res.js.len} bytes)')
-	return 0
 }
 
 // ---- pkg ----------------------------------------------------------------
@@ -934,199 +974,231 @@ fn parse_pkg_spec(spec string) (string, string, string) {
 }
 
 fn read_lock() []LockLine {
-	src := os.read_file(lock_name) or { return []LockLine{} }
-	mut out := []LockLine{}
-	for line in src.split_into_lines() {
-		t := line.trim_space()
-		if t == '' || t.starts_with('#') {
-			continue
+	$if wasm32 {
+		return []LockLine{}
+	} $else {
+		src := os.read_file(lock_name) or { return []LockLine{} }
+		mut out := []LockLine{}
+		for line in src.split_into_lines() {
+			t := line.trim_space()
+			if t == '' || t.starts_with('#') {
+				continue
+			}
+			parts := t.split(' ')
+			if parts.len < 3 {
+				continue
+			}
+			out << LockLine{
+				name: parts[0]
+				ref:  parts[1]
+				sha:  parts[2]
+			}
 		}
-		parts := t.split(' ')
-		if parts.len < 3 {
-			continue
-		}
-		out << LockLine{
-			name: parts[0]
-			ref:  parts[1]
-			sha:  parts[2]
-		}
+		return out
 	}
-	return out
 }
 
 fn write_lock(lines []LockLine) ! {
-	mut sb := '# blip.lock -- installed packages. Regenerated by `blip pkg`.\n'
-	for l in lines {
-		sb += '${l.name} ${l.ref} ${l.sha}\n'
+	$if wasm32 {
+		return
+	} $else {
+		mut sb := '# blip.lock -- installed packages. Regenerated by `blip pkg`.\n'
+		for l in lines {
+			sb += '${l.name} ${l.ref} ${l.sha}\n'
+		}
+		os.write_file(lock_name, sb)!
 	}
-	os.write_file(lock_name, sb)!
 }
 
 fn head_sha(dir string) string {
-	r := os.exec(['git', '-C', dir, 'rev-parse', 'HEAD'])
-	if r.exit_code != 0 {
+	$if wasm32 {
 		return ''
+	} $else {
+		r := os.exec(['git', '-C', dir, 'rev-parse', 'HEAD'])
+		if r.exit_code != 0 {
+			return ''
+		}
+		return r.output.trim_space()
 	}
-	return r.output.trim_space()
 }
 
 fn pkg_command(args []string) int {
-	if args.len == 0 {
-		eprintln('blip: pkg needs a subcommand')
-		eprintln('  blip pkg install <owner/repo>   install from GitHub')
-		eprintln('  blip pkg list                   what is installed')
-		eprintln('  blip pkg remove <name>          remove a package')
-		return 2
-	}
-	// Only install and remove take an argument. Enforcing one on `list` too is
-	// how `blip pkg list` ends up reporting that it needs a subcommand.
-	sub := args[0]
-	if sub != 'list' && args.len < 2 {
-		eprintln('blip: pkg ${sub} needs an argument')
-		eprintln('run `blip help pkg` for usage')
-		return 2
-	}
-	match sub {
-		'install' {
-			if args.len < 2 {
-				eprintln('blip: pkg install needs <owner/repo>[@ref]')
-				return 2
-			}
-			return pkg_install(args[1])
+	$if wasm32 {
+		println('blip: pkg not available in wasm build')
+		return 1
+	} $else {
+		if args.len == 0 {
+			eprintln('blip: pkg needs a subcommand')
+			eprintln('  blip pkg install <owner/repo>   install from GitHub')
+			eprintln('  blip pkg list                   what is installed')
+			eprintln('  blip pkg remove <name>          remove a package')
+			return 2
 		}
-		'list' {
-			return pkg_list()
-		}
-		'remove' {
-			if args.len < 2 {
-				eprintln('blip: pkg remove needs <owner/repo>')
-				return 2
-			}
-			return pkg_remove(args[1])
-		}
-		else {
-			eprintln('blip: unknown pkg subcommand `${sub}`')
+		// Only install and remove take an argument. Enforcing one on `list` too is
+		// how `blip pkg list` ends up reporting that it needs a subcommand.
+		sub := args[0]
+		if sub != 'list' && args.len < 2 {
+			eprintln('blip: pkg ${sub} needs an argument')
 			eprintln('run `blip help pkg` for usage')
 			return 2
+		}
+		match sub {
+			'install' {
+				if args.len < 2 {
+					eprintln('blip: pkg install needs <owner/repo>[@ref]')
+					return 2
+				}
+				return pkg_install(args[1])
+			}
+			'list' {
+				return pkg_list()
+			}
+			'remove' {
+				if args.len < 2 {
+					eprintln('blip: pkg remove needs <owner/repo>')
+					return 2
+				}
+				return pkg_remove(args[1])
+			}
+			else {
+				eprintln('blip: unknown pkg subcommand `${sub}`')
+				eprintln('run `blip help pkg` for usage')
+				return 2
+			}
 		}
 	}
 }
 
 fn pkg_install(spec string) int {
-	owner, repo, ref := parse_pkg_spec(spec)
-	if owner == '' {
-		eprintln('blip: pkg install wants <owner/repo>[@ref], got `${spec}`')
-		return 2
-	}
-	name := '${owner}/${repo}'
-	dir := os.join_path(os.join_path(modules_dir, owner), repo)
-	url := 'https://github.com/${name}.git'
-	if !os.is_dir(os.join_path(dir, '.git')) {
-		os.mkdir_all(os.join_path(modules_dir, owner)) or {
-			eprintln('blip: cannot create ${modules_dir}: ${err.msg()}')
-			return 1
-		}
-		r := os.exec(['git', 'clone', '--quiet', url, dir])
-		if r.exit_code != 0 {
-			eprintln('blip: clone of ${name} failed:')
-			eprintln(r.output.trim_space())
-			return 1
-		}
-	}
-	// Check the requested ref out explicitly. A shallow clone of the default
-	// branch is not the same thing as the tag or commit that was asked for.
-	if ref != 'HEAD' {
-		r := os.exec(['git', '-C', dir, 'checkout', '--quiet', ref])
-		if r.exit_code != 0 {
-			eprintln('blip: ${name} has no ref `${ref}`:')
-			eprintln(r.output.trim_space())
-			return 1
-		}
-	}
-	sha := head_sha(dir)
-	if sha == '' {
-		eprintln('blip: installed ${name} but cannot record its commit')
+	$if wasm32 {
+		println('blip: pkg not available in wasm build')
 		return 1
-	}
-	mut installed := read_lock()
-	mut replaced := false
-	for i, l in installed {
-		if l.name == name {
-			installed[i] = LockLine{
+	} $else {
+		owner, repo, ref := parse_pkg_spec(spec)
+		if owner == '' {
+			eprintln('blip: pkg install wants <owner/repo>[@ref], got `${spec}`')
+			return 2
+		}
+		name := '${owner}/${repo}'
+		dir := os.join_path(os.join_path(modules_dir, owner), repo)
+		url := 'https://github.com/${name}.git'
+		if !os.is_dir(os.join_path(dir, '.git')) {
+			os.mkdir_all(os.join_path(modules_dir, owner)) or {
+				eprintln('blip: cannot create ${modules_dir}: ${err.msg()}')
+				return 1
+			}
+			r := os.exec(['git', 'clone', '--quiet', url, dir])
+			if r.exit_code != 0 {
+				eprintln('blip: clone of ${name} failed:')
+				eprintln(r.output.trim_space())
+				return 1
+			}
+		}
+		// Check the requested ref out explicitly. A shallow clone of the default
+		// branch is not the same thing as the tag or commit that was asked for.
+		if ref != 'HEAD' {
+			r := os.exec(['git', '-C', dir, 'checkout', '--quiet', ref])
+			if r.exit_code != 0 {
+				eprintln('blip: ${name} has no ref `${ref}`:')
+				eprintln(r.output.trim_space())
+				return 1
+			}
+		}
+		sha := head_sha(dir)
+		if sha == '' {
+			eprintln('blip: installed ${name} but cannot record its commit')
+			return 1
+		}
+		mut installed := read_lock()
+		mut replaced := false
+		for i, l in installed {
+			if l.name == name {
+				installed[i] = LockLine{
+					name: name
+					ref:  ref
+					sha:  sha
+				}
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			installed << LockLine{
 				name: name
 				ref:  ref
 				sha:  sha
 			}
-			replaced = true
-			break
 		}
-	}
-	if !replaced {
-		installed << LockLine{
-			name: name
-			ref:  ref
-			sha:  sha
+		write_lock(installed) or {
+			eprintln('blip: cannot write ${lock_name}: ${err.msg()}')
+			return 1
 		}
+		println('installed ${name} at ${sha[0..7]} (${ref})')
+		return 0
 	}
-	write_lock(installed) or {
-		eprintln('blip: cannot write ${lock_name}: ${err.msg()}')
-		return 1
-	}
-	println('installed ${name} at ${sha[0..7]} (${ref})')
-	return 0
 }
 
 fn pkg_list() int {
-	installed := read_lock()
-	if installed.len == 0 {
-		println('no packages installed')
+	$if wasm32 {
+		println('blip: pkg not available in wasm build')
+		return 1
+	} $else {
+		installed := read_lock()
+		if installed.len == 0 {
+			println('no packages installed')
+			return 0
+		}
+		for l in installed {
+			dir := os.join_path(os.join_path(modules_dir, os.dir(l.name)), os.file_name(l.name))
+			mark := if os.is_dir(dir) { '' } else { '  (missing from ${modules_dir}/)' }
+			println('${l.name}  ${l.ref}  ${l.sha[0..7]}${mark}')
+		}
 		return 0
 	}
-	for l in installed {
-		dir := os.join_path(os.join_path(modules_dir, os.dir(l.name)), os.file_name(l.name))
-		mark := if os.is_dir(dir) { '' } else { '  (missing from ${modules_dir}/)' }
-		println('${l.name}  ${l.ref}  ${l.sha[0..7]}${mark}')
-	}
-	return 0
 }
 
 fn pkg_remove(spec string) int {
-	owner, repo, _ := parse_pkg_spec(spec)
-	name := if owner != '' { '${owner}/${repo}' } else { spec }
-	mut found := false
-	for l in read_lock() {
-		if l.name == name {
-			found = true
-			break
-		}
-	}
-	if !found {
-		eprintln('blip: ${name} is not installed')
+	$if wasm32 {
+		println('blip: pkg not available in wasm build')
 		return 1
-	}
-	owner_dir := os.join_path(modules_dir, os.dir(name))
-	dir := os.join_path(owner_dir, os.file_name(name))
-	if os.is_dir(dir) {
-		os.rmdir_all(dir) or {
-			eprintln('blip: cannot remove ${dir}: ${err.msg()}')
+	} $else {
+		owner, repo, _ := parse_pkg_spec(spec)
+		name := if owner != '' { '${owner}/${repo}' } else { spec }
+		mut found := false
+		for l in read_lock() {
+			if l.name == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			eprintln('blip: ${name} is not installed')
 			return 1
 		}
-	}
-	// Leaving an empty blip_modules/<owner>/ behind is the kind of thing that
-	// makes `pkg list` report a missing package for a name nobody installed.
-	if os.is_dir(owner_dir) && os.ls(owner_dir) or { [] }.len == 0 {
-		os.rmdir_all(owner_dir) or {}
-	}
-	mut kept := []LockLine{}
-	for l in read_lock() {
-		if l.name != name {
-			kept << l
+		owner_dir := os.join_path(modules_dir, os.dir(name))
+		dir := os.join_path(owner_dir, os.file_name(name))
+		if os.is_dir(dir) {
+			os.rmdir_all(dir) or {
+				eprintln('blip: cannot remove ${dir}: ${err.msg()}')
+				return 1
+			}
 		}
+		// Leaving an empty blip_modules/<owner>/ behind is the kind of thing that
+		// makes `pkg list` report a missing package for a name nobody installed.
+		if os.is_dir(owner_dir) && os.ls(owner_dir) or { [] }.len == 0 {
+			os.rmdir_all(owner_dir) or {}
+		}
+		mut kept := []LockLine{}
+		for l in read_lock() {
+			if l.name != name {
+				kept << l
+			}
+		}
+		write_lock(kept) or {
+			eprintln('blip: cannot write ${lock_name}: ${err.msg()}')
+			return 1
+		}
+		println('removed ${name}')
+		return 0
 	}
-	write_lock(kept) or {
-		eprintln('blip: cannot write ${lock_name}: ${err.msg()}')
-		return 1
-	}
-	println('removed ${name}')
-	return 0
 }

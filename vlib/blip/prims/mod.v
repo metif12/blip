@@ -8,7 +8,9 @@ module prims
 // it. Without that separation the two would be mutually dependent.
 
 import math
+$if !wasm32 {
 import os
+}
 import strconv
 import vlib.blip
 import vlib.blip.printer
@@ -1588,28 +1590,36 @@ fn prim_dec(args []blip.Value) !blip.Value {
 // Errors are spelled as (err "message") so they compose with `use`.
 
 fn prim_read_file(args []blip.Value) !blip.Value {
-	if args.len != 1 {
-		return error('read-file expects 1 argument, got ${args.len}')
+	$if wasm32 {
+		return error('not available in wasm build')
+	} $else {
+		if args.len != 1 {
+			return error('read-file expects 1 argument, got ${args.len}')
+		}
+		path := need_str('read-file', args[0])!
+		src := os.read_file(path) or {
+			return blip.list_from([blip.symbol('err'),
+				blip.string('read-file: cannot read ${path}: ${err.msg()}')])
+		}
+		return blip.list_from([blip.symbol('ok'), blip.string(src)])
 	}
-	path := need_str('read-file', args[0])!
-	src := os.read_file(path) or {
-		return blip.list_from([blip.symbol('err'),
-			blip.string('read-file: cannot read ${path}: ${err.msg()}')])
-	}
-	return blip.list_from([blip.symbol('ok'), blip.string(src)])
 }
 
 fn prim_write_file(args []blip.Value) !blip.Value {
-	if args.len != 2 {
-		return error('write-file expects 2 arguments, got ${args.len}')
+	$if wasm32 {
+		return error('not available in wasm build')
+	} $else {
+		if args.len != 2 {
+			return error('write-file expects 2 arguments, got ${args.len}')
+		}
+		path := need_str('write-file', args[0])!
+		data := need_str('write-file', args[1])!
+		os.write_file(path, data) or {
+			return blip.list_from([blip.symbol('err'),
+				blip.string('write-file: cannot write ${path}: ${err.msg()}')])
+		}
+		return blip.list_from([blip.symbol('ok'), blip.nil_value()])
 	}
-	path := need_str('write-file', args[0])!
-	data := need_str('write-file', args[1])!
-	os.write_file(path, data) or {
-		return blip.list_from([blip.symbol('err'),
-			blip.string('write-file: cannot write ${path}: ${err.msg()}')])
-	}
-	return blip.list_from([blip.symbol('ok'), blip.nil_value()])
 }
 
 fn prim_html_escape(args []blip.Value) !blip.Value {
@@ -1627,21 +1637,29 @@ fn prim_html_escape(args []blip.Value) !blip.Value {
 }
 
 fn prim_file_exists(args []blip.Value) !blip.Value {
-	if args.len != 1 {
-		return error('file-exists? expects 1 argument, got ${args.len}')
+	$if wasm32 {
+		return blip.boolean(false)
+	} $else {
+		if args.len != 1 {
+			return error('file-exists? expects 1 argument, got ${args.len}')
+		}
+		path := need_str('file-exists?', args[0])!
+		return blip.boolean(os.exists(path))
 	}
-	path := need_str('file-exists?', args[0])!
-	return blip.boolean(os.exists(path))
 }
 
 fn prim_env(args []blip.Value) !blip.Value {
-	if args.len != 1 {
-		return error('env expects 1 argument, got ${args.len}')
+	$if wasm32 {
+		return blip.string('')
+	} $else {
+		if args.len != 1 {
+			return error('env expects 1 argument, got ${args.len}')
+		}
+		name := need_str('env', args[0])!
+		v := os.getenv(name)
+		if v == '' {
+			return blip.nil_value()
+		}
+		return blip.string(v)
 	}
-	name := need_str('env', args[0])!
-	v := os.getenv(name)
-	if v == '' {
-		return blip.nil_value()
-	}
-	return blip.string(v)
 }

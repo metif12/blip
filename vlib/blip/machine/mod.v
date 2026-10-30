@@ -25,7 +25,9 @@ module machine
 // Kont is one tagged struct rather than a sum type, because V 0.5.2 cannot
 // initialise a sum-type variant field from a local. See vlib/blip/mod.v.
 
+$if !wasm32 {
 import os
+}
 import strconv
 import vlib.blip
 import vlib.blip.host
@@ -230,32 +232,36 @@ pub fn (mut m Machine) load(path string) !blip.Value {
 // repo name, where the one found is whichever os.ls happens to return first.
 // That ambiguity is why the direct form is the one worth using.
 fn (m &Machine) resolve_module(name string) ?string {
-	if name == '' {
+	$if wasm32 {
+		return none
+	} $else {
+		if name == '' {
+			return none
+		}
+		base := 'blip_modules'
+		direct := os.join_path(os.join_path(base, name), 'blip.lip')
+		if os.exists(direct) {
+			return direct
+		}
+		if name.contains('/') {
+			return none
+		}
+		entries := os.ls(base) or { return none }
+		for owner in entries {
+			if owner.starts_with('.') {
+				continue
+			}
+			candidate := os.join_path(os.join_path(base, owner), name)
+			if !os.is_dir(candidate) {
+				continue
+			}
+			entry := os.join_path(candidate, 'blip.lip')
+			if os.exists(entry) {
+				return entry
+			}
+		}
 		return none
 	}
-	base := 'blip_modules'
-	direct := os.join_path(os.join_path(base, name), 'blip.lip')
-	if os.exists(direct) {
-		return direct
-	}
-	if name.contains('/') {
-		return none
-	}
-	entries := os.ls(base) or { return none }
-	for owner in entries {
-		if owner.starts_with('.') {
-			continue
-		}
-		candidate := os.join_path(os.join_path(base, owner), name)
-		if !os.is_dir(candidate) {
-			continue
-		}
-		entry := os.join_path(candidate, 'blip.lip')
-		if os.exists(entry) {
-			return entry
-		}
-	}
-	return none
 }
 
 // eval_import loads an installed package into the RUNNING machine.

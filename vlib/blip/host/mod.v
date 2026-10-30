@@ -23,7 +23,9 @@ module host
 // two-method toy into an interface nobody wants to satisfy.
 
 // The rules and the reason they exist are above; this file only needs os.
+$if !wasm32 {
 import os
+}
 
 pub interface Host {
 	// host_print writes one line. The newline is the host's business; the
@@ -52,11 +54,19 @@ pub fn (c &ConsoleHost) host_write(s string) {
 }
 
 pub fn (c &ConsoleHost) host_read_line() ?string {
-	return os.get_line()
+	$if wasm32 {
+		return none
+	} $else {
+		return os.get_line()
+	}
 }
 
 pub fn (c &ConsoleHost) host_load(path string) !string {
-	return os.read_file(path)
+	$if wasm32 {
+		return error('not available in wasm build')
+	} $else {
+		return os.read_file(path)
+	}
 }
 
 // CaptureHost collects output instead of writing it, and answers reads and loads

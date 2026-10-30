@@ -58,3 +58,27 @@ WASM build of blip will be a subset: no file I/O, no LSP, no subprocess.
 The REPL and `run` work on in-memory source; `emit-js` works (it's pure).
 `blip build --target wasm` is for embedding the interpreter, not for
 compiling arbitrary .lip programs to standalone .wasm.
+
+## Findings (2026-10-30)
+
+The first concrete step (guarding OS-specific code) is done: every os.* call in
+blip.v and the six vlib/blip/* modules that use os is now behind
+` $if !wasm32 ` / ` $if wasm32 ` guards, and the os import itself is
+conditional. `blip.v` no longer fails on `os.executable`/`os.read_file`.
+
+What still blocks `v -b wasm -o blip.wasm blip.v` is V's own standard
+library, not blip code:
+
+- `strconv` (`format_int`, `atof64`, `AtoF64Param`) does not compile
+  for wasm32. Used by the reader (number parsing) and printer (number
+  formatting).
+- `recover` (used in machine/mod.v for error handling) is not available
+  for wasm32.
+- `v/embed_file` uses `os.read_bytes`, which is missing for wasm32.
+
+These are V toolchain limitations. Until V's wasm32 backend provides them,
+blip cannot be compiled to wasm. The guards are in place so that once V
+catches up, `v -b wasm -o blip.wasm blip.v` will succeed without further
+blip changes.
+
+`blip build --target wasm` reports this status honestly.
