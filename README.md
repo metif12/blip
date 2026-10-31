@@ -17,22 +17,27 @@ each solved separately and no single language has combined:
   interfaces, and no multiple inheritance (from Gleam).
 
 Execution is a CEK-style machine with an explicit heap stack, which gives proper
-tail calls today and fibers later with no redesign.
+tail calls today. Fibers are designed for — the heap stack makes them possible
+without a representation change — but are not yet implemented; `yield` exists
+as an identity hook.
 
 There is no static type system in v1. Type information exists as optional, erased
 annotations plus runtime contracts, and both are opt-in per program.
 
 ## Status
 
-Milestone **M3** — the CEK machine runs real programs with real tail calls.
-The reader parses all six example programs; the machine evaluates closures,
-arithmetic, branching, `loop`, `dotimes`, `letrec`, `cond` and `case`.
+The machine runs real programs with real tail calls: the reader parses all
+six example programs, and the machine evaluates closures, arithmetic,
+branching, `loop`, `dotimes`, `letrec`, `cond`, `case`, `match`/`match*`,
+macros, structs and modules.
 
-Past M3 and working: a REPL with golden tests, errors as values with
-source-context frames, real programs in `programs/` (brainfuck, json), a
-browser playground (`site/playground.html` served by `server.v`), and
-machine-generated prims (`tools/genprims.vsh`, `math-*` pilot). Recent
-changes are recorded in `CHANGELOG.md`.
+Working on top of that: a REPL with golden tests, errors as values with
+source-context frames, real programs in `programs/` (brainfuck, json,
+config, csv, lint, markdown, pratt), a JavaScript backend (`blip build`,
+`blip emit-js`), a veb bridge that serves the website from blip handlers,
+machine-generated prims (`tools/genprims.vsh`), and editor support
+(`blip lsp` plus a VS Code grammar/client). Recent changes are recorded in
+`CHANGELOG.md`.
 
 | | |
 |---|---|
@@ -40,14 +45,20 @@ changes are recorded in `CHANGELOG.md`.
 | `docs/010-roadmap.md` | embedding, the REPL, the example programs to write, and the veb final phase |
 | `vlib/blip/` | the implementation: value representation, reader, printer, machine, primitives |
 | `examples/` | the six programs that define the syntax; all parse |
-| `tests/tail_calls.v` | tail-call and derived-form suite (21 passing) |
+| `tests/tail_calls.v` | tail calls, including mutual recursion, stay flat |
 | `tests/non_tail.v` | non-tail sibling calls, the case the environment bug hid in |
 | `tests/loop_forms.v` | `loop`, `dotimes` and `letrec` |
 | `tests/binding_forms.v` | `let`, `let*`, `letrec`, rest parameters, shadowing, no leaking |
 | `tests/embedding.v` | the machine as a value: independent machines, limits, surviving bad programs |
 | `tests/repl_golden.v` | the REPL in-process plus a stdin-to-stdout golden fixture |
 | `tests/examples_run.v` | all six examples run to their markers |
-| `tests/programs_run.v` | brainfuck and json run to their markers |
+| `tests/programs_run.v` | all seven programs run to their markers |
+| `tests/emit_js.v` | the JS backend: examples emit and run identically under node |
+| `tests/lsp.v` | diagnostics over stdio agree with `blip run` |
+| `tests/hostile.v` | hostile input becomes values, never panics |
+| `tests/api_coverage.v` | every public function is engaged by a test or program |
+| `tests/fibers.v` | `yield` round-trips a value through the machine |
+| `tests/veb_bridge.v` | a blip handler closure registers and dispatches |
 | `tests/genprims.v` | every generated prim's value, arity, and type errors |
 | `tests/multi_use.v` | `use` loads into the one running machine: definitions cross the boundary |
 | `tests/value_to_datum.v` | `value_to_datum`: values convert back to AST nodes (the macro path's inverse direction) |
@@ -78,8 +89,10 @@ frame in tail position is reused rather than pushed.
 
 ## Install
 
-Requires V 0.5.2 (the v3-line compiler). Use `-cc gcc`: the default C backend
-fails on this checkout, and CI uses the same flag.
+Requires the pinned V toolchain — vlang/v master at the commit in
+`.github/workflows/ci.yml` (the `install.sh`/`install.ps1` scripts carry the
+same pins, and `tests/unit.v` fails if they drift). Use `-cc gcc`: the
+default C backend fails on this checkout, and CI uses the same flag.
 
 ### macOS & Linux
 
@@ -114,19 +127,22 @@ it; the three are interchangeable and differ only in the C toolchain.
 ### From source
 
 ```sh
-git clone https://github.com/metif12/blip.git && cd blip && v -cc gcc -o blip.exe blip.v
+git clone https://github.com/metif12/blip.git && cd blip
+v -cc gcc -o blip blip.v
 ```
+
+The `v` there must be the pinned commit (see above) — a newer or older
+compiler is how a working checkout breaks. `install.sh` does the whole
+thing: V plus vc at their pins, then blip.
 
 ## Build and test
 
 ```sh
-.\blip.exe examples\01_basics.lip
+./blip run examples/01_basics.lip
 
-v -cc gcc -o tools\tail.exe tests\tail_calls.v     # the suite
-.\tools\tail.exe
-
-v -cc gcc -o reader_probe.exe reader_probe.v       # every example parses
-.\reader_probe.exe examples\*.lip
+v -cc gcc run tests/tail_calls.v       # a suite, direct from source
+v -cc gcc -o reader_probe reader_probe.v   # every example parses
+./reader_probe examples/*.lip
 ```
 
 ## Four findings from M0
@@ -162,13 +178,13 @@ Findings 1 and 2 are worth reporting upstream to the V project.
 | M1 | reader: lexer and S-expression parser, spans, collected diagnostics — **done** |
 | M2 | values, printer, `equal?`, `hash` — **mostly done** |
 | M3 | CEK machine — gate: 1M-call `fib`, 100k-deep `reverse`, no silent stack overflow — **tail-call gate passed** |
-| M4 | special forms, core forms, ~40 primitives — **in progress** |
-| M5 | macros: `defmacro`, `gensym`, quasiquote, `macex1`/`macex` |
-| M6 | modules: `require`/`provide`, `only-in`, `prefix-in`, `for-syntax` |
-| M7 | standard library written in blip |
-| M8 | ergonomics: `match`, `match*`, `use`, pipes, labelled args, `Result`, opaque types — gate: a real 300-line program with no macros |
-| M9 | tooling: REPL, span-carrying errors, formatter, `assert` as doc-tests |
-| M10 | contracts and optional erased annotations |
+| M4 | special forms, core forms, 100+ primitives — **done** |
+| M5 | macros: `defmacro`, `gensym`, quasiquote, `macex1`/`macex` — **done** |
+| M6 | modules: `require`/`provide`, `only-in`, `prefix-in` — **done** (`for-syntax` deferred) |
+| M7 | standard library written in blip — **done, growing** (`lib/std.lip`) |
+| M8 | ergonomics: `match`, `match*`, `use`, pipes, labelled args, `Result`, opaque types — **done** (gate program: 311-line `programs/json.lip`, macro-free) |
+| M9 | tooling: REPL, span-carrying errors, formatter, `assert` as doc-tests — **done** |
+| M10 | contracts and optional erased annotations — open |
 
 The embedding plan, the REPL design, the example programs worth writing, and the
 veb-backed final phase are in `docs/010-roadmap.md`. The ordering there differs
@@ -202,7 +218,7 @@ run cannot create a release by accident.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The short version: branch off `dev`, use
-`-cc gcc`, keep all nine suites at zero `FAIL` lines, and never hand-edit the
+`-cc gcc`, keep all seventeen suites at zero `FAIL` lines, and never hand-edit the
 website — it is generated by `site/build.lip` from `site/content/*.md`
 through `site/layout.html`.
 
