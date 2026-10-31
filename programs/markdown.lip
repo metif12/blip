@@ -129,7 +129,27 @@
     [else (string-append "<p>" (string-append (md-inline line) "</p>"))]))
 
 (define (md-render lines)
-  (string-join (map md-render-line lines) "\n"))
+  (md-render-list (as-lines lines) #f))
+
+;; Fences need state: a ``` line opens <pre><code> or closes it, and lines
+;; inside a fence render verbatim (HTML-escaped) instead of as markdown.
+;; `car`/`cdr` only take pairs, so the driver walks a list; `as-lines`
+;; normalizes vectors the same way (`apply` splices any sequence).
+(define (as-lines xs)
+  (if (vector? xs) (apply list xs) xs))
+
+(define (md-render-list lines in-fence)
+  (if (null? lines)
+    (if in-fence "</code></pre>" "")
+    (let line (car lines)
+      (let rest (md-render-list (cdr lines)
+                  (if (md-code-fence? line) (not in-fence) in-fence))
+        (if (md-code-fence? line)
+          (if in-fence
+            (string-append "</code></pre>" rest)
+            (string-append "<pre><code>" rest))
+          (string-append (if in-fence (html-escape line) (md-render-line line))
+            (string-append "\n" rest)))))))
 
 ;; ---------------------------------------------------------------- self tests
 
@@ -141,6 +161,8 @@
 (assert (= (md-render-heading "# hi") "<h1>hi</h1>") "heading render")
 (assert (= (md-is-hr "---") #t) "hr detect")
 (assert (= (md-is-ul "- item") #t) "ul detect")
+(assert (= (md-render (vector "```" "(+ 1 2)" "```")) "<pre><code>(+ 1 2)\n</code></pre>") "fence render")
+(assert (= (md-render (list "```" "a <b>" )) "<pre><code>a &lt;b&gt;\n</code></pre>") "unclosed fence escapes")
 
 (let html (md-render (vector "# Title" "" "Hello **world**." "- a" "- b"))
   (begin

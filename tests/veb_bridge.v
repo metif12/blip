@@ -48,6 +48,21 @@ fn main() {
 	} else {
 		s.fail('veb unknown path', 'expected error value, got ${resp2.tag}')
 	}
+	// Re-registering from V works too: the stored closure keeps serving.
+	if '/' !in m.veb_handlers {
+		s.fail('re-register', 'no handler stored for /')
+		println('${s.fails} FAILURE(S)')
+		exit(1)
+		return
+	}
+	m.veb_route('/echo', m.veb_handlers['/'])
+	resp3 := m.veb_dispatch('/echo', req)
+	body3 := machine.value_to_veb_body(resp3)
+	if body3 == 'got: / hello' {
+		s.ok('veb re-route', body3)
+	} else {
+		s.fail('veb re-route', 'got ${body3}')
+	}
 	if s.fails > 0 {
 		println('${s.fails} FAILURE(S)')
 		exit(1)

@@ -4,6 +4,36 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### Website v2: real pages, rendered by blip itself
+
+- `site/build.lip` now renders Markdown to HTML through
+  `programs/markdown.lip` (`require` + `md-render`), so the same renderer
+  `tests/programs_run.v` checks is the one the site ships. Pages no longer
+  show raw `#` markers.
+- `programs/markdown.lip` grew fence awareness: ``` opens `<pre><code>`
+  and closes it, fenced lines render verbatim and HTML-escaped, and an
+  unclosed fence still closes at end of input. Two new asserts pin it;
+  the old ones are untouched.
+- That exposed a real bug: `resolve_path` returned `.`-prefixed requires
+  as-is (cwd-relative), contradicting the documented file-relative
+  guarantee in `examples/06_modules.lip`. Both copies (machine and emit)
+  now join against the requiring file and lexically clean `.`/`..`
+  (`machine.clean_path`, covered by three new `tests/unit.v` cases).
+- The same fix closed a latent `tests/api_coverage.v` failure: `veb_route`
+  was never named in the corpus, which CI's `^FAIL` grep cannot see
+  (`1 FAILURE(S)` matches neither pattern). `tests/veb_bridge.v` now
+  re-registers a handler from V, engaging it for real.
+- `site/`: new layout shell + minimal light/dark stylesheet, three written
+  pages (index/about/getting-started), full titles. `programs/veb_server.v`
+  renders the same sources through the same template, with an `<h1>` check
+  so served and deployed pages cannot drift.
+- `blip help` lists every subcommand (`emit-js`, `build`, `fmt`, `doc`,
+  `lint`/`vet` were missing). Design-doc table corrected: numerics are
+  int/float only, callables are keywords (both pinned by tests).
+- Gate: the whole battery with zero `FAIL` lines, `genprims --check`
+  current, `v fmt -l` clean on every touched `.v` file, and the deployed
+  pages re-verified after the push.
+
 ### Repo audit: dead files removed, `build.lip` canonical everywhere
 
 - Deleted 11 unreferenced files: `tools/bf1–6.lip`, `tools/vw.lip`

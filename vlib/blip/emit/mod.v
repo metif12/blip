@@ -1,8 +1,9 @@
 module emit
 
 $if !wasm32 {
-import os
+	import os
 }
+
 import vlib.blip
 import vlib.blip.host
 import vlib.blip.machine
@@ -43,16 +44,16 @@ pub mut:
 // instead of being re-derived and forgotten, which is how the gate ended up
 // running examples with no `lookup-sym` and calling the silence a failure.
 $if wasm32 {
-pub fn compile_program(src string) !Result {
-	return error('not available in wasm build')
-}
-} $else {
-pub fn compile_program(src string) !Result {
-	std_src := os.read_file('lib/std.lip') or {
-		return error('cannot read lib/std.lip: ${err.msg()}')
+	pub fn compile_program(src string) !Result {
+		return error('not available in wasm build')
 	}
-	return compile(std_src + '\n' + src)
-}
+} $else {
+	pub fn compile_program(src string) !Result {
+		std_src := os.read_file('lib/std.lip') or {
+			return error('cannot read lib/std.lip: ${err.msg()}')
+		}
+		return compile(std_src + '\n' + src)
+	}
 }
 
 // compile turns blip source into a JavaScript module.
@@ -63,19 +64,19 @@ pub fn compile(src string) !Result {
 // compile_file compiles one file, resolving `require` relative to its own
 // directory, the way `blip run file` does.
 $if wasm32 {
-pub fn compile_file(path string) !Result {
-	return error('not available in wasm build')
-}
+	pub fn compile_file(path string) !Result {
+		return error('not available in wasm build')
+	}
 } $else {
-pub fn compile_file(path string) !Result {
-	src := os.read_file(path) or {
-		return error('cannot read ${path}: ${err.msg()}')
+	pub fn compile_file(path string) !Result {
+		src := os.read_file(path) or {
+			return error('cannot read ${path}: ${err.msg()}')
+		}
+		std_src := os.read_file('lib/std.lip') or {
+			return error('cannot read lib/std.lip: ${err.msg()}')
+		}
+		return compile_with_base(std_src + '\n' + src, os.dir(path))
 	}
-	std_src := os.read_file('lib/std.lip') or {
-		return error('cannot read lib/std.lip: ${err.msg()}')
-	}
-	return compile_with_base(std_src + '\n' + src, os.dir(path))
-}
 }
 
 // compile_with_base is the real implementation: `base` is the directory the
@@ -2976,37 +2977,37 @@ fn json_str(s string) string {
 // accepted and ignored, matching the machine: it loads the whole file.
 
 $if wasm32 {
-fn (mut e Emitter) require_form(kids []reader.NodeId) {
-	return
-}
-} $else {
-fn (mut e Emitter) require_form(kids []reader.NodeId) {
-	paths := e.collect_paths(kids[1..])
-	mut k := 0
-	for k < paths.len {
-		full := e.resolve_path(paths[k])
-		if full in e.loaded {
-			k++
-			continue
-		}
-		e.loaded[full] = true
-		src := os.read_file(full) or {
-			e.refuse('require')
-			k++
-			continue
-		}
-		dir := os.dir(full)
-		body := e.compile_module(src, dir) or {
-			e.refuse('require')
-			k++
-			continue
-		}
-		for line in body {
-			e.out << line
-		}
-		k++
+	fn (mut e Emitter) require_form(kids []reader.NodeId) {
+		return
 	}
-}
+} $else {
+	fn (mut e Emitter) require_form(kids []reader.NodeId) {
+		paths := e.collect_paths(kids[1..])
+		mut k := 0
+		for k < paths.len {
+			full := e.resolve_path(paths[k])
+			if full in e.loaded {
+				k++
+				continue
+			}
+			e.loaded[full] = true
+			src := os.read_file(full) or {
+				e.refuse('require')
+				k++
+				continue
+			}
+			dir := os.dir(full)
+			body := e.compile_module(src, dir) or {
+				e.refuse('require')
+				k++
+				continue
+			}
+			for line in body {
+				e.out << line
+			}
+			k++
+		}
+	}
 }
 
 fn (mut e Emitter) collect_paths(nodes []reader.NodeId) []string {
@@ -3035,9 +3036,11 @@ fn (mut e Emitter) collect_paths(nodes []reader.NodeId) []string {
 }
 
 fn (mut e Emitter) resolve_path(path string) string {
-	if path.starts_with('/') || path.starts_with('.') || e.base == '' {
+	if path.starts_with('/') || e.base == '' {
 		return path
 	}
+	// Same guarantee as the machine: relative requires resolve against the
+	// requiring file, `..` included. See machine/mod.v clean_path.
 	mut cut := -1
 	mut i := 0
 	for i < e.base.len {
@@ -3051,9 +3054,9 @@ fn (mut e Emitter) resolve_path(path string) string {
 		if e.base == '' {
 			return path
 		}
-		return e.base + '/' + path
+		return machine.clean_path(e.base + '/' + path)
 	}
-	return e.base[..cut] + '/' + path
+	return machine.clean_path(e.base[..cut] + '/' + path)
 }
 
 fn (mut e Emitter) compile_module(src string, base string) ![]string {

@@ -858,11 +858,11 @@ case fetch(key) {
 | Errors | `Result` **and** raise | `Result` + raise | `Result` only | fibers | raise + contracts | raise + ex-info | raise | `pcall` |
 | Concurrency | fibers planned | threads + async | processes | **fibers now** | threads | futures | threads | coroutines |
 | Encapsulation | **opaque types** | `impl` (unreachable) | opaque types | prototypes | modules | protocols | — | metatables |
-| Numeric tower | int/float/rational/bignum | same + complex | int/float | int/float/rational | exact | int/bigint | Python | Lua |
+| Numeric tower | int/float | same + complex | int/float | int/float/rational | exact | int/bigint | Python | Lua |
 | Mutation | `@` prefix | `mutable` structs | none | `@` prefix | boxes | atoms | Python | native |
 | Text parsing | PEGs planned | built-in | none built-in | **PEGs only** | regex + PEG | regex | Python | patterns |
 | Self-hosted | no | dormant `.rkt` | n/a | C bootstrap | **yes** | no | no | no |
-| Every value callable | planned | partial | no | **yes** | partial | partial | no | no |
+| Every value callable | partial (keywords) | partial | no | **yes** | partial | partial | no | no |
 | Numeric operators split | no | no | **`+.` vs `+`** | no | no | no | no | no |
 
 Rows marked **bold** are the ones where the language is the reference

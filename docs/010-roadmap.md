@@ -490,35 +490,28 @@ and the `read_forms` diagnostics share one source of positions.
 
 ## 9. A CLI shaped like `v`'s
 
-`blip.v` today parses "run this file" and not much else. The target is the
-`v` command surface reduced to what blip can honor: `cmd/v/v.v` holds the
-dispatch table (`run`, `build`, `test`, `fmt`, `vet`, `doc`, `new`,
-`version`, `help`), and the shape -- one binary, subcommands, `--help`
-everywhere -- transfers directly.
+`blip.v` dispatches one binary into subcommands, the way `cmd/v/v.v` does
+(`run`, `build`, `test`, `fmt`, `vet`, `doc`, `new`, `pkg`,
+`version`, `help`). What each one is, and what it waits on:
 
-Mapped onto blip, in the order each becomes honest:
-
-1. `version`, `help` -- mechanical, now.
-2. `run` -- what exists today, kept as the default when no subcommand is
-   given (bare `blip` already means the REPL).
-3. `test` -- run the `_run.v` gates over files and report markers. The two
-   suites already define the convention; the subcommand is the runner
-   around them.
-4. `lsp` -- serve the language server over stdio. This is what the
-   extension launches (section 8); it exists as soon as the server does.
-5. `fmt` -- blocked on a decision, not on code: the reader keeps no trivia
-   (comments, blank lines), so a formatter is either a pretty-printer from
-   the arena, which normalizes everything, or reader work to keep trivia
-   first. Say which before writing it.
-6. `vet` -- the linter hook. The commit-message linter (section 4) is its
-   first real client; until then it reports nothing.
-7. `doc` -- generated from doc comments the way the site will need them
-   (section 5 wants generated pages; one extractor serves both).
-8. `new` -- scaffold a `main.lip` plus a test gate. Small, and the first
-   thing a newcomer runs.
-9. `build` -- only meaningful with a backend to build to, so it waits for
-   the WASM phase: `blip build` emitting a `.wasm` module is the point
-   where the CLI stops being a runner and becomes a compiler driver.
+1. `version`, `help` -- mechanical. Done.
+2. `run` -- kept as the default when no subcommand is
+   given (bare `blip` already means the REPL). Done.
+3. `test` -- runs the gates over files and reports the `;=>` markers. Done.
+4. `lsp` -- serves the language server over stdio; the VS Code client
+   launches exactly this. Done (section 8, `tests/lsp.v`).
+5. `fmt` -- decided, not blocked: the reader keeps no trivia
+   (comments, blank lines), so the formatter is a pretty-printer that
+   normalizes everything. Done.
+6. `vet` -- the linter hook. Today `vet` and `lint` are one implementation
+   behind two names, both running `programs/lint_commit.lip` on a commit
+   message. A real vet that walks blip source is the remaining half.
+7. `doc` -- generated from `;;` doc comments. Done; the site will want the
+   same extractor when pages gain API references.
+8. `new` -- scaffolds a `main.lip` plus a test gate. Done.
+9. `build` -- the JS backend is done (`blip build` emits a self-contained
+   module, `emit-js` prints it). The `.wasm` target waits on the WASM
+   phase: V's wasm32 target lacks the stdlib pieces blip needs (§P8).
 
 What does not transfer: flags with no meaning yet. `v` has forty; blip
 gets each one when a feature needs it, not when the table looks thin.

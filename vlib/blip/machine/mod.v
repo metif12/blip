@@ -26,8 +26,9 @@ module machine
 // initialise a sum-type variant field from a local. See vlib/blip/mod.v.
 
 $if !wasm32 {
-import os
+	import os
 }
+
 import strconv
 import vlib.blip
 import vlib.blip.host
@@ -109,13 +110,13 @@ pub fn new_machine_with(a &reader.Arena, h host.Host) &Machine {
 	// an unsafe block.
 	mut m := unsafe {
 		&Machine{
-			arena:   a
-			kstack:  []blip.Kont{}
-			envs:    blip.EnvArena{}
-			globals: blip.no_env
-			env:     blip.no_env
-			prims:   prims.table()
-			host:    h
+			arena:        a
+			kstack:       []blip.Kont{}
+			envs:         blip.EnvArena{}
+			globals:      blip.no_env
+			env:          blip.no_env
+			prims:        prims.table()
+			host:         h
 			veb_handlers: map[string]blip.Value{}
 		}
 	}
@@ -232,38 +233,38 @@ pub fn (mut m Machine) load(path string) !blip.Value {
 // repo name, where the one found is whichever os.ls happens to return first.
 // That ambiguity is why the direct form is the one worth using.
 $if wasm32 {
-fn (m &Machine) resolve_module(name string) ?string {
-	return none
-}
+	fn (m &Machine) resolve_module(name string) ?string {
+		return none
+	}
 } $else {
-fn (m &Machine) resolve_module(name string) ?string {
-	if name == '' {
+	fn (m &Machine) resolve_module(name string) ?string {
+		if name == '' {
+			return none
+		}
+		base := 'blip_modules'
+		direct := os.join_path(os.join_path(base, name), 'blip.lip')
+		if os.exists(direct) {
+			return direct
+		}
+		if name.contains('/') {
+			return none
+		}
+		entries := os.ls(base) or { return none }
+		for owner in entries {
+			if owner.starts_with('.') {
+				continue
+			}
+			candidate := os.join_path(os.join_path(base, owner), name)
+			if !os.is_dir(candidate) {
+				continue
+			}
+			entry := os.join_path(candidate, 'blip.lip')
+			if os.exists(entry) {
+				return entry
+			}
+		}
 		return none
 	}
-	base := 'blip_modules'
-	direct := os.join_path(os.join_path(base, name), 'blip.lip')
-	if os.exists(direct) {
-		return direct
-	}
-	if name.contains('/') {
-		return none
-	}
-	entries := os.ls(base) or { return none }
-	for owner in entries {
-		if owner.starts_with('.') {
-			continue
-		}
-		candidate := os.join_path(os.join_path(base, owner), name)
-		if !os.is_dir(candidate) {
-			continue
-		}
-		entry := os.join_path(candidate, 'blip.lip')
-		if os.exists(entry) {
-			return entry
-		}
-	}
-	return none
-}
 }
 
 // eval_import loads an installed package into the RUNNING machine.
@@ -613,8 +614,8 @@ fn machine_builtin(name string) bool {
 		'print',
 		'display',
 		'echo',
-	'veb-route',
-	'yield',
+		'veb-route',
+		'yield',
 		'read-line',
 		'map',
 		'filter',
@@ -3362,9 +3363,13 @@ fn (mut m Machine) eval_struct(kids []blip.NodeId) ! {
 // directory the program was started from. It is also why `load` records the
 // source path it is running: this is the only consumer of it.
 pub fn (m &Machine) resolve_path(path string) string {
-	if path.starts_with('/') || path.starts_with('.') || m.source == '' {
+	if path.starts_with('/') || m.source == '' {
 		return path
 	}
+	// A `..` that climbs out of its own directory used to bypass the join
+	// below (paths starting with `.` were returned as-is, i.e. resolved
+	// against the working directory), contradicting the documented
+	// file-relative guarantee. Join first, then clean lexically.
 	base := m.source
 	mut cut := -1
 	mut i := 0
@@ -3376,9 +3381,42 @@ pub fn (m &Machine) resolve_path(path string) string {
 		i++
 	}
 	if cut < 0 {
-		return path
+		return clean_path(path)
 	}
-	return base[..cut] + '/' + path
+	return clean_path(base[..cut] + '/' + path)
+}
+
+// clean_path lexically resolves `.` and `..` segments, so a require that
+// climbs out of its own directory ("../programs/markdown.lip" from
+// "site/build.lip") lands where the author meant. Lexical on purpose: no
+// filesystem access, no symlink resolution, and `/` and `\` both work on
+// either platform.
+pub fn clean_path(path string) string {
+	is_abs := path.starts_with('/') || (path.len >= 2 && path[1] == `:`)
+	mut parts := []string{}
+	for seg in path.split('/') {
+		for sub in seg.split('\\') {
+			if sub == '' || sub == '.' {
+				continue
+			} else if sub == '..' {
+				if parts.len > 0 && parts.last() != '..' && !parts.last().ends_with(':') {
+					parts.pop()
+				} else if !is_abs {
+					parts << '..'
+				}
+			} else {
+				parts << sub
+			}
+		}
+	}
+	joined := parts.join('/')
+	if is_abs {
+		return '/' + joined
+	}
+	if joined == '' {
+		return '.'
+	}
+	return joined
 }
 
 // loaded remembers which paths have already been evaluated in this machine, so a

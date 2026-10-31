@@ -326,6 +326,9 @@ fn (mut s Suite) machine_nodes() {
 	s.record('fresh makes distinct names', fresh.starts_with('tmp'), '${fresh}')
 
 	s.eq('resolve_path of an absolute path', m.resolve_path('/x/y.lip'), '/x/y.lip')
+	s.eq('clean_path collapses dot-dot', machine.clean_path('site/../programs/markdown.lip'), 'programs/markdown.lip')
+	s.eq('clean_path drops dots', machine.clean_path('site/./x.lip'), 'site/x.lip')
+	s.eq('clean_path keeps a leading dot-dot', machine.clean_path('../x.lip'), '../x.lip')
 
 	// Every transform is exercised through the function that names it, because
 	// a transform reached only through source is covered only while some

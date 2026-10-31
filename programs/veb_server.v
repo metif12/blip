@@ -38,12 +38,13 @@ pub fn (mut app App) getting_started(mut ctx Context) veb.Result {
 fn main() {
 	mut m := machine.new_standalone(host.ConsoleHost{})
 	m.load('lib/std.lip') or { panic(err) }
-	// Register handlers. Each reads the layout template and content file,
-	// then substitutes {{title}} and {{body}}.
-	m.run_str('(define (render-page title body) (use (read-file "site/layout.html") (string-replace (string-replace read-file "{{title}}" title) "{{body}}" body)))') or { panic(err) }
-	m.run_str('(veb-route "/" (fn [req] (use (read-file "site/content/index.md") (render-page "blip" read-file))))') or { panic(err) }
-	m.run_str('(veb-route "/about" (fn [req] (use (read-file "site/content/about.md") (render-page "About" read-file))))') or { panic(err) }
-	m.run_str('(veb-route "/getting-started" (fn [req] (use (read-file "site/content/getting-started.md") (render-page "Getting started" read-file))))') or { panic(err) }
+	// Handlers render the same Markdown sources the static site uses, so
+	// served pages and deployed pages cannot drift apart.
+	m.run_str('(require "programs/markdown.lip")') or { panic(err) }
+	m.run_str('(define (render-page title md-text) (use (read-file "site/layout.html") (string-replace (string-replace read-file "{{title}}" title) "{{body}}" (md-render (string-split md-text "\n")))))') or { panic(err) }
+	m.run_str('(veb-route "/" (fn [req] (use (read-file "site/content/index.md") (render-page "blip — a Lisp dialect in V" read-file))))') or { panic(err) }
+	m.run_str('(veb-route "/about" (fn [req] (use (read-file "site/content/about.md") (render-page "About — blip" read-file))))') or { panic(err) }
+	m.run_str('(veb-route "/getting-started" (fn [req] (use (read-file "site/content/getting-started.md") (render-page "Getting started — blip" read-file))))') or { panic(err) }
 
 	mut app := &App{ machine: m }
 
@@ -57,6 +58,9 @@ fn main() {
 		}
 		if !body.contains('<link rel="stylesheet" href="/assets/style.css">') {
 			panic('missing stylesheet link for ${path}')
+		}
+		if path == '/' && !body.contains('<h1>blip</h1>') {
+			panic('markdown was not rendered for ${path}')
 		}
 		println('response for ${path}: ${body.len} bytes, ok')
 	}

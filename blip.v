@@ -1,8 +1,9 @@
 module main
 
 $if !wasm32 {
-import os
+	import os
 }
+
 import vlib.blip
 import vlib.blip.emit
 import vlib.blip.host
@@ -19,9 +20,14 @@ import vlib.blip.repl
 //   blip run <file.lip> ...   evaluate files, in order, in one machine
 //   blip <file.lip>           shorthand for `run`
 //   blip test <file.lip> ...  evaluate and check the `;=>` expectations
+//   blip emit-js <file.lip>   compile a file to a JavaScript module on stdout
+//   blip build <file> [-o out.js]  compile a file to a self-contained .js module
+//   blip fmt [-w] <file.lip>  pretty-print (normalize) a file, write back with -w
+//   blip doc <file.lip>       generate documentation from doc comments
+//   blip lint [file]          check a commit message (default COMMIT_EDITMSG)
+//   blip vet [file]           same as lint, the linter hook
 //   blip lsp                  serve the language server over stdio
 //   blip new <name>           scaffold a project
-//   blip doc <file.lip>       generate documentation from doc comments
 //   blip pkg <sub>            install, list and remove packages
 //   blip version | help       about, and about a command
 //
@@ -44,9 +50,14 @@ usage:
   blip run <file.lip> ...   evaluate files in order, in one machine
   blip <file.lip>           shorthand for `blip run`
   blip test <file.lip> ...  evaluate and check the `;=>` expectations
+  blip emit-js <file.lip>   compile a file to a JavaScript module on stdout
+  blip build <file> [-o out.js]  compile a file to a self-contained .js module
+  blip fmt [-w] <file.lip>  pretty-print (normalize) a file, write back with -w
+  blip doc <file.lip>       generate documentation from doc comments
+  blip lint [file]          check a commit message (default COMMIT_EDITMSG)
+  blip vet [file]           same as lint, the linter hook
   blip lsp                  serve the language server over stdio
   blip new <name>           scaffold a project
-  blip doc <file.lip>       generate documentation from doc comments
   blip pkg install <repo>   install a package from GitHub
   blip pkg list             list installed packages
   blip pkg remove <name>    remove an installed package
@@ -188,6 +199,7 @@ fn programs_path(name string) string {
 		return ''
 	}
 }
+
 fn run_files(paths []string) int {
 	$if wasm32 {
 		println('blip: run not available in wasm build')
