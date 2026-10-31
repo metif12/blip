@@ -133,8 +133,10 @@ jobs:
           zip -q ../blip-windows.zip blip.exe
           cd ..
           mkdir -p site_out
-          v -cc gcc -o sitegen tools/sitegen.v
-          ./sitegen
+          ./dist/blip-linux run site/build.lip
+          test -s site_out/index.html
+          test -s site_out/about.html
+          test -s site_out/getting-started.html
           tar czf ../blip-site.tar.gz site_out
           sha256sum blip-*.tar.gz blip-*.zip blip-site.tar.gz > SHA256SUMS
           cat SHA256SUMS
@@ -178,4 +180,4 @@ jobs:
             Reproduce it locally with the commands in `CONTRIBUTING.md`. The
             same nine suites run in the `verify` job before anything here was
             built, and the site in `blip-site.tar.gz` is the output of
-            `tools/sitegen.v` rather than something edited by hand.
+            `site/build.lip` rather than something edited by hand.

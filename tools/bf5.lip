@@ -1,5 +1,0 @@
-(display 65)
-(print "")
-(display #\A)
-(print "")
-(print (rune? 65))

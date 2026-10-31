@@ -19,8 +19,9 @@ in `CONTRIBUTING.md`, the plan in `docs/010-roadmap.md`, history in
 - `tools/` — `.vsh` scripts: `genprims` (prims from vlib, with `--check`),
   `check_playground` (builds, serves, and checks the playground API).
   `server.v` (playground backend) and `reader_probe.v` sit at the root.
-- `site/` — hand-written pages for now (`playground.html`); `site_out/`
-  is generated, never edit it.
+- `site/` — `build.lip` (the generator, run by pages.yml), `layout.html`,
+  `content/*.md`, `assets/`; `playground.html` is served locally by root
+  `server.v`. `site_out/` is generated, never edit it.
 
 ## Build and test
 

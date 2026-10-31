@@ -2,7 +2,6 @@ module main
 
 import veb
 import net.http
-import os
 import vlib.blip.machine
 import vlib.blip.host
 
@@ -46,7 +45,7 @@ fn main() {
 	m.run_str('(veb-route "/about" (fn [req] (use (read-file "site/content/about.md") (render-page "About" read-file))))') or { panic(err) }
 	m.run_str('(veb-route "/getting-started" (fn [req] (use (read-file "site/content/getting-started.md") (render-page "Getting started" read-file))))') or { panic(err) }
 
-	mut app := &App{machine: m}
+	mut app := &App{ machine: m }
 
 	for path in ['/', '/about', '/getting-started'] {
 		req := http.Request{ method: .get, url: path }

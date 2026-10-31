@@ -4,6 +4,24 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### Repo audit: dead files removed, `build.lip` canonical everywhere
+
+- Deleted 11 unreferenced files: `tools/bf1–6.lip`, `tools/vw.lip`
+  (ad-hoc probes), `tools/balance.v` (one-off brace counter),
+  `tools/kont_struct.v` (continuation design spike, superseded),
+  `tools/sitegen.v` (16-language V generator, superseded), and
+  `site/index.html` (hand-written page nothing deploys or reads).
+  A repo-wide grep confirms zero references to each.
+- `release.yml` no longer builds the release site tarball with `sitegen` —
+  it runs `./dist/blip-linux run site/build.lip` like `pages.yml` does, so
+  releases and the live site carry the same website. Previously the two
+  workflows generated different sites.
+- Docs updated to match: `README.md`, `CONTRIBUTING.md` (website sections),
+  `.gitignore`/`.dockerignore` comments, `AGENTS.md` repo map, roadmap
+  P5 status and housekeeping notes, `p5-veb-bridge.md` work order.
+- Gate: full battery with zero `FAIL` lines, `genprims --check` green,
+  and the removed files verified absent from `git ls-files`.
+
 ### Compiler sync: vlang/v master `6dd8bb8` (2026-10-28), was `0137eb5`
 
 - The pin moved 1321 commits forward (2026-10-02 → 2026-10-28), in every place

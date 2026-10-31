@@ -3,7 +3,7 @@
 .git
 .gitignore
 
-# Generated, and rebuilt by tools/sitegen.v. Never edited.
+# Generated, and rebuilt by `blip run site/build.lip`. Never edited.
 site_out
 
 # Installed packages: restored with `blip pkg install`, not baked in.

@@ -67,9 +67,10 @@ bridge function for that path.
    `tests/fibers.v` that proves a `yield` round-trips a value.
 2. `veb_to_value` / `value_to_veb` in host/veb_bridge.v.
 3. `veb-route` primitive + a parked machine.
-4. A tiny V server example that routes one request through blip.
-5. The site itself served by blip handlers (replaces the static sitegen for
-   dynamic content).
+4. A tiny V server example that routes one request through blip. (Done:
+   `programs/veb_server.v` routes three pages through blip handlers.)
+5. The site itself served by blip handlers (replaces the static `build.lip`
+   output for dynamic content).
 
 ## Gate
 

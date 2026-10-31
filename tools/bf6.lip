@@ -1,5 +1,0 @@
-(print (integer->rune 65))
-(print (rune->integer #\A))
-(display (integer->rune 72))
-(display (integer->rune 105))
-(print "")

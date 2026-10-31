@@ -111,36 +111,18 @@ generated `src.c` around the reported line.
 
 ## The website
 
-The site is generated. Do not edit anything in `site_out/`, and do not add
-hand-written HTML to `site/`.
+The site is generated. Do not edit anything in `site_out/` — it is rebuilt
+by `site/build.lip` on every pages deploy.
 
 ```sh
-v -cc gcc -o sitegen.exe tools\sitegen.v
-.\sitegen.exe
+v -cc gcc -o blip.exe blip.v
+.\blip.exe run site\build.lip
 ```
 
-- Page structure lives in `tools/sitegen.v`, as V data.
-- All user-visible text lives in `site/i18n/<code>.json`, as a flat
-  `{"key": "text"}` map. English is the reference; every other language falls
-  back to it.
-- A block with any untranslated key is labelled as untranslated in the output.
-  That is deliberate: a partially translated page must say so rather than quietly
-  mixing two languages.
-
-### Adding a language
-
-1. Add it to `langs()` in `tools/sitegen.v`, with `dir: 'rtl'` for a
-   right-to-left script.
-2. Copy `site/i18n/en.json` to `site/i18n/<code>.json` and translate the values.
-   Leave the keys alone — the generator uses them as identifiers.
-3. Run `sitegen` and check the summary: it prints the key count and how many
-   blocks fall back to English.
-4. Commit both files. CI fails if any expected language directory is missing or
-   empty.
-
-A partial translation is genuinely useful. The generator handles it, labels it,
-and a reader is better served by a half-Persian page that admits it than by no
-Persian page.
+- Page structure lives in `site/build.lip`, as blip code.
+- All user-visible text lives in `site/content/*.md`, one file per route.
+- The shared template is `site/layout.html` (`{{title}}`/`{{body}}`
+  placeholders, filled with `string-replace`).
 
 ## Reporting a bug
 

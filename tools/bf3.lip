@@ -1,4 +1,0 @@
-(print (string 65))
-(print (rune? #\A))
-(print (integer? #\A))
-(print (string #\A))
