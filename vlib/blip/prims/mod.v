@@ -90,6 +90,8 @@ pub fn table() map[string]blip.PrimFn {
 	p['last'] = prim_last
 	p['not='] = prim_not_eq
 	p['eq?'] = prim_eqp
+	p['equal?'] = prim_equalp
+	p['make-vector'] = prim_make_vector
 	p['in?'] = prim_in
 	p['concat'] = prim_concat
 	p['range'] = prim_range
@@ -1125,6 +1127,30 @@ fn prim_not_eq(args []blip.Value) !blip.Value {
 // same test. It exists because `=` is value equality on contents and some code
 // needs to say "the same thing" rather than "equal contents"; symbols and
 // keywords are interned, so `(eq? 'a 'a)` is true and so is `(eq? "a" "a")`.
+// equal? is R7RS structural equality: two values with the same contents are
+// equal whatever their type. It is what `=` has meant for non-numbers, under
+// the name Scheme gives it, so `=` can become numeric-only.
+fn prim_equalp(args []blip.Value) !blip.Value {
+	if args.len != 2 {
+		return error('equal? expects 2 arguments, got ${args.len}')
+	}
+	return blip.boolean(value_eq(args[0], args[1]))
+}
+
+// make-vector is R7RS (make-vector k [fill]): k slots, every one `fill`. The
+// fill defaults to 0, as in Racket; R7RS leaves it unspecified.
+fn prim_make_vector(args []blip.Value) !blip.Value {
+	if args.len < 1 || args.len > 2 {
+		return error('make-vector expects 1 or 2 arguments, got ${args.len}')
+	}
+	k := need_int('make-vector', args[0])!
+	if k < 0 {
+		return error('length must be non-negative, got ${k}')
+	}
+	fill := if args.len == 2 { args[1] } else { blip.integer(0) }
+	return blip.vector([]blip.Value{len: int(k), init: fill})
+}
+
 fn prim_eqp(args []blip.Value) !blip.Value {
 	return blip.boolean(value_eq(args[0], args[1]))
 }

@@ -46,14 +46,14 @@
 ;; lookup-sym finds a name in a small table of symbols. `nil` means absent, which
 ;; is what match* wants to tell apart from a found-and-wrong value.
 (define (lookup-sym name)
-  (cond [(= name 'alpha) (ok 'alpha)]
-        [(= name 'beta) (ok 'beta)]
+  (cond [(equal? name 'alpha) (ok 'alpha)]
+        [(equal? name 'beta) (ok 'beta)]
         [else nil]))
 
 ;; validate says whether a looked-up symbol is usable.
 (define (validate name)
-  (cond [(= name 'alpha) (ok nil)]
-        [(= name 'beta) (err 'unknown-symbol)]
+  (cond [(equal? name 'alpha) (ok nil)]
+        [(equal? name 'beta) (err 'unknown-symbol)]
         [else (err 'unknown-symbol)]))
 
 ;; ---------------------------------------------------------------- resources
@@ -66,20 +66,20 @@
         [else (err 'bad-target)]))
 
 (define (authenticate conn :user [user "anonymous"] :pass [pass ""])
-  (cond [(= user "anonymous") (err 'no-credentials)]
-        [(not= pass "s3cret") (err 'bad-password)]
+  (cond [(equal? user "anonymous") (err 'no-credentials)]
+        [(not (equal? pass "s3cret")) (err 'bad-password)]
         [else (ok conn)]))
 
 (define (open-transaction conn)
-  (cond [(= (get conn :session) nil) (err 'not-authenticated)]
+  (cond [(nil? (get conn :session)) (err 'not-authenticated)]
         [else (ok conn)]))
 
 (define (execute conn sql)
-  (cond [(= (get conn :session) nil) (err 'not-authenticated)]
+  (cond [(nil? (get conn :session)) (err 'not-authenticated)]
         [else (ok sql)]))
 
 (define (commit conn)
-  (cond [(= (get conn :session) nil) (err 'not-authenticated)]
+  (cond [(nil? (get conn :session)) (err 'not-authenticated)]
         [else (ok 'committed)]))
 
 ;; ---------------------------------------------------------------- arrays

@@ -286,6 +286,25 @@ fn (mut e Emitter) emit(line string) {
 	e.out << '${indent}${line}'
 }
 
+// is_named_let mirrors the machine's test: `(let SYMBOL (pairs...) body...)`
+// where the second form is a paren list of `(symbol expr)` pairs.
+fn (mut e Emitter) is_named_let(kids []reader.NodeId) bool {
+	if kids.len < 4 || e.node(kids[1]).tag != .sym || e.node(kids[2]).tag != .list {
+		return false
+	}
+	for pair in e.kids(kids[2]) {
+		t := e.node(pair).tag
+		if t != .list && t != .vector {
+			return false
+		}
+		k := e.kids(pair)
+		if k.len != 2 || e.node(k[0]).tag != .sym {
+			return false
+		}
+	}
+	return true
+}
+
 fn (mut e Emitter) refuse(what string) {
 	if what !in e.blocked {
 		e.blocked << what
@@ -733,6 +752,13 @@ fn (mut e Emitter) emit_let(kind string, kids []reader.NodeId) {
 		e.refuse('let')
 		return
 	}
+	// Named let would otherwise read as the `(let NAME VALUE body...)`
+	// shorthand and bind NAME to a call of its own binding list. JavaScript has
+	// no tail calls, so it is refused by name like `loop`, not mis-emitted.
+	if kind == 'let' && e.is_named_let(kids) {
+		e.refuse('named let')
+		return
+	}
 	// `(let assert PATTERN VALUE body...)` is a match with no other clause, so a
 	// mismatch is a hard error naming the pattern rather than a nil to carry. The
 	// machine spells it transform_let_assert; the emitter matches directly.
@@ -1061,6 +1087,10 @@ fn (mut e Emitter) expression_form(name string, kids []reader.NodeId) ?string {
 		return '((${ps.join(', ')}) => { return ${e.value(kids.last())}; })'
 	}
 	if (name == 'let' || name == 'let*' || name == 'letrec') && kids.len >= 3 {
+		if name == 'let' && e.is_named_let(kids) {
+			e.refuse('named let')
+			return 'null'
+		}
 		// `(let assert PATTERN VALUE body...)` is a match with no other clause: a
 		// mismatch is a hard error naming the pattern. It arrives here as `let`
 		// with `assert` in the bindings slot, so it is split off before the
