@@ -174,6 +174,17 @@ fn main() {
 (print (let ([x 9]) x))
 (print x)')
 
+	// Named let has the head shape of the `(let NAME VALUE body...)` shorthand.
+	// Without a guard the emitter bound NAME to a call of the binding list and
+	// produced JavaScript that ran and answered wrong. JS has no tail calls, so
+	// it is refused by name like `loop`; the shorthand still compiles.
+	named := emit.compile('(print (let lp ((i 0)) (if (= i 3) i (lp (+ i 1)))))') or {
+		emit.Result{}
+	}
+	s.record('named let is refused by name, not mis-emitted', 'named let' in named.blocked,
+		'blocked: ${named.blocked}')
+	s.check('the one-binding let shorthand still compiles', '(print (let x (+ 1 2) (* x 2)))')
+
 	s.check('car and cdr of a list', '(print (car (quote (10 20 30))))
 (print (cdr (quote (10 20 30))))')
 

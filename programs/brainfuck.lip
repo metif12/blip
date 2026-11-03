@@ -12,10 +12,7 @@
 
 ;; Create a zero-filled tape of `n` cells.
 (define (make-tape n)
-  (let tape (vector)
-    (dotimes i n
-      (array-push! tape 0))
-    tape))
+  (make-vector n 0))
 
 ;; Find the matching `]` for a `[` at position `start`.
 (define (bf-find-close program start)

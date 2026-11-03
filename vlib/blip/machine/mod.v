@@ -3514,6 +3514,15 @@ pub fn (mut m Machine) transform_let(kids []blip.NodeId) !blip.NodeId {
 		&& m.arena.node(kids[1]).value == 'assert' {
 		return m.transform_let_assert(kids[1..])!
 	}
+	// `(let NAME ((var init) ...) body...)` is R7RS named let. It is checked
+	// BEFORE the one-binding shorthand, which shares its head shape: both are
+	// `(let SYMBOL X body...)`. It is named let when X is a PARENTHESISED list
+	// whose every element is a `(symbol expr)` / `[symbol expr]` pair. A
+	// bracketed X stays a vector literal, so `(let m [[a 1]] ...)` still binds
+	// m to a vector.
+	if kids.len > 3 && m.arena.node(kids[1]).tag == .sym && m.is_named_let_bindings(kids[2]) {
+		return m.transform_named_let(kids)
+	}
 	// `(let NAME VALUE body...)` is the one-binding shorthand. It is unambiguous
 	// because a bracketed binding list can never be a symbol: kids[1] being a
 	// symbol means the programmer left the brackets out.
@@ -3570,6 +3579,47 @@ pub fn (mut m Machine) transform_let(kids []blip.NodeId) !blip.NodeId {
 	inner := m.nest_lets(dgroups, kids[2..])
 	lam := m.node_of('lambda', [m.list_of(params), inner])
 	return m.call_node(lam, args)
+}
+
+// is_named_let_bindings says whether `b` reads as a named-let binding list:
+// a paren list (possibly empty) of two-element forms headed by a symbol.
+fn (m &Machine) is_named_let_bindings(b blip.NodeId) bool {
+	if m.arena.node(b).tag != .list {
+		return false
+	}
+	for pair in m.arena.kids(b) {
+		if !m.is_binding_form(pair) {
+			return false
+		}
+		k := m.arena.kids(pair)
+		if k.len != 2 || m.arena.node(k[0]).tag != .sym {
+			return false
+		}
+	}
+	return true
+}
+
+// transform_named_let is the R7RS expansion:
+//
+//   (let NAME ((v init) ...) body...)
+//     =>  ((letrec ((NAME (lambda (v ...) body...))) NAME) init ...)
+//
+// The inits are arguments of the OUTER call, so they are evaluated where the
+// `let` is and cannot see NAME or each other -- the same scoping as plain
+// `let`. A call to NAME in tail position of the body is an ordinary tail call,
+// so a million iterations run in one frame.
+fn (mut m Machine) transform_named_let(kids []blip.NodeId) blip.NodeId {
+	name := kids[1]
+	mut vars := []blip.NodeId{}
+	mut inits := []blip.NodeId{}
+	for pair in m.arena.kids(kids[2]) {
+		vars << m.binding_name(pair)
+		inits << m.binding_value(pair)
+	}
+	lam := m.node_of('lambda', [m.list_of(vars), m.make_begin(kids[3..])])
+	bind := m.list_of([m.list_of([name, lam])])
+	proc := m.node_of('letrec', [bind, name])
+	return m.call_node(proc, inits)
 }
 
 // Group is one lambda's parameter list and argument list. `let` is a nest of

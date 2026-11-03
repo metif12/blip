@@ -4,6 +4,29 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### Scheme compatibility: named let, make-vector, equal?
+
+- R7RS named let: `(let NAME ((v init) ...) body...)` expands to
+  `((letrec ((NAME (lambda (v ...) body...))) NAME) init ...)`, so the
+  inits see the outer scope (not NAME, not each other) and the recursive
+  call is a real tail call. It used to read as the `(let NAME VALUE ...)`
+  shorthand and die with `unbound identifier: i`. Named let wins only when
+  the second form is a PAREN list of `(symbol expr)` pairs; `(let x (+ 1 2)
+  ...)` and `(let m [[1 2] [3 4]] ...)` keep the shorthand meaning.
+- Caveat, unchanged by this: `loop` is blip's own counting-loop special
+  form, so the R7RS idiom `(let loop (...) (loop ...))` still parses the
+  body call as that form. Use another name (`lp`, `iter`, `next`).
+- The JS emitter refuses named let by name, like `loop` and `dotimes`,
+  instead of mis-emitting it as the shorthand.
+- `(make-vector k [fill])`, fill defaulting to 0 as in Racket.
+  `programs/brainfuck.lip`'s `make-tape` is now that one call instead of
+  `(vector)` plus 30000 `array-push!`es.
+- `(equal? a b)`: structural equality under its Scheme name. `lib/std.lip`
+  no longer uses `=` on symbols and strings, and tests nil with `nil?`
+  rather than `(= x nil)` -- the first step toward a numeric-only `=`.
+- Gates: `tests/binding_forms.v` (named let scoping, tail calls, shorthand
+  kept, make-vector, equal?), `tests/emit_js.v` (named let refused by name).
+
 ### Website v2: real pages, rendered by blip itself
 
 - `site/build.lip` now renders Markdown to HTML through

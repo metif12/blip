@@ -259,6 +259,42 @@ fn main() {
 	s.check_err('apply a keyword to nothing', '(:a)', '1 argument')
 	s.check_err('look a key up in an integer', '(1 :a)', 'not a function')
 	s.check_err('set an unbound name', '(set! nope 1)', 'unbound identifier')
+	// ---- R7RS named let --------------------------------------------------
+	// `(let NAME ((v init) ...) body...)` used to read as the one-binding
+	// shorthand `(let NAME VALUE body...)`: NAME was bound to a CALL of
+	// `((i 0))`, which died with "unbound identifier: i". It is named let when
+	// the second form is a paren list of `(symbol expr)` pairs; anything else is
+	// still the shorthand. The name `loop` is NOT used here: it is blip's own
+	// counting-loop special form, so `(loop ...)` in the body means that form.
+	s.check('named let sums', '(let lp ((i 0) (acc 0)) (if (= i 5) acc (lp (+ i 1) (+ acc i))))',
+		'10')
+	s.check('named let with bracket pairs', '(let lp ([i 3]) (if (= i 0) (quote done) (lp (- i 1))))',
+		'done')
+	s.check('named let with no bindings', '(let lp () 7)', '7')
+	s.check('named let builds a list',
+		'(let iter ((xs (list 1 2 3)) (out (list))) (if (null? xs) (reverse out) (iter (cdr xs) (cons (* 2 (car xs)) out))))',
+		'(2 4 6)')
+	s.check('named let inits see the outer scope, not each other',
+		'(define i 10) (let lp ((i 0) (j i)) j)', '10')
+	s.check('named let inits do not see the loop name',
+		'(define (lp x) 99) (let lp ((n (lp 0))) n)', '99')
+	s.check('named let is a tail call', '(let lp ((i 0)) (if (= i 100000) (quote done) (lp (+ i 1))))',
+		'done')
+	s.check('shorthand let still binds one value', '(let x (+ 1 2) (* x 2))', '6')
+	s.check('shorthand let with a bracketed value is not named let',
+		'(let m [[1 2] [3 4]] m)', '[[1 2] [3 4]]')
+
+	// ---- make-vector and equal? -----------------------------------------
+	s.check('make-vector fills with 0 by default', '(make-vector 3)', '[0 0 0]')
+	s.check('make-vector takes a fill', "(make-vector 2 'x)", '[x x]')
+	s.check('make-vector of zero', '(vector-length (make-vector 0))', '0')
+	s.check('make-vector is mutable through array-set!',
+		'(let ([v (make-vector 2 0)]) (array-set! v 1 9) v)', '[0 9]')
+	s.check_err('make-vector rejects a negative length', '(make-vector -1)', 'non-negative')
+	s.check('equal? on nested lists', "(equal? '(1 (2)) '(1 (2)))", '#t')
+	s.check('equal? on symbols', "(equal? 'a 'b)", '#f')
+	s.check('equal? on strings', '(equal? "x" "x")', '#t')
+
 	s.check_err('dotimes without a symbol', '(dotimes 3 (print 1))', 'symbol as its loop variable')
 	s.check_err('unbound identifier', '(nope 1)', 'unbound identifier')
 	s.check_err('a binding value sees the enclosing scope, not the new one',
