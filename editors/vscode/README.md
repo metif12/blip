@@ -46,10 +46,11 @@ are no other settings, because the server reads no others: it answers
 ## What the server does today
 
 The server in `vlib/blip/lsp/mod.v` publishes reader diagnostics for files it
-has seen. That means unbalanced brackets, unterminated strings and bar symbols,
-bad hex characters, and rationals with a zero denominator. Everything else a
-language server could offer -- completion, hover, definitions, formatting -- is
-not in the server yet, so this extension does not pretend to have it either.
+has seen, and answers hover, completion, go-to-definition, references,
+document symbols, signature help, document highlight, folding ranges and
+formatting requests. Diagnostics cover unbalanced brackets, unterminated
+strings and bar symbols, bad hex characters, and rationals with a zero
+denominator.
 
 Run `blip: Restart blip Language Server` from the command palette to restart it
 after changing `blip.server.command` or rebuilding blip. The

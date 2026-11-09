@@ -22,10 +22,12 @@ function serverOptions(): ServerOptions {
 }
 
 function clientOptions(): LanguageClientOptions {
+	const config = vscode.workspace.getConfiguration(configSection)
+	const trace = config.get<string>("trace", "off")
 	return {
 		documentSelector: [{ scheme: "file", language: "blip" }],
-		outputChannel: vscode.window.createOutputChannel(serverName),
-		revealOutputChannelOn: vscode.RevealOutputChannelOn.Error,
+		outputChannel: vscode.window.createOutputChannel(serverName, { log: true }),
+		traceOutputChannel: vscode.window.createOutputChannel(`${serverName} (trace)`, { log: true }),
 	}
 }
 

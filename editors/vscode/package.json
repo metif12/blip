@@ -1,20 +1,34 @@
 {
 	"name": "vscode-blip",
 	"displayName": "blip",
-	"description": "blip language support for Visual Studio Code: syntax highlighting, snippets, and reader diagnostics from the blip language server.",
+	"description": "blip language support for Visual Studio Code: syntax highlighting, snippets, formatting, and a full language server (diagnostics, hover, completion, go-to-definition, references, rename, semantic tokens).",
 	"version": "0.1.0",
 	"license": "MIT",
+	"publisher": "blip-lang",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/metif12/blip.git",
+		"directory": "editors/vscode"
+	},
+	"homepage": "https://github.com/metif12/blip",
+	"bugs": {
+		"url": "https://github.com/metif12/blip/issues"
+	},
+
 	"engines": {
-		"vscode": "^1.105.0"
+		"vscode": "^1.90.0"
 	},
 	"categories": [
-		"Programming Languages"
+		"Programming Languages",
+		"Linters",
+		"Formatters"
 	],
 	"keywords": [
 		"blip",
 		"lisp",
 		"scheme",
-		"s-expressions"
+		"s-expressions",
+		"language-server"
 	],
 	"activationEvents": [
 		"onLanguage:blip"
@@ -53,7 +67,7 @@
 				"blip.server.command": {
 					"type": "string",
 					"default": "blip",
-					"description": "Path or command name of the blip executable. The language server is its `lsp` subcommand, so the executable must be on PATH or given as an absolute path."
+					"description": "Path or command name of the blip executable. The language server is its `lsp` subcommand."
 				},
 				"blip.server.args": {
 					"type": "array",
@@ -64,6 +78,16 @@
 						"type": "string"
 					},
 					"description": "Arguments passed to the blip executable."
+				},
+				"blip.server.trace": {
+					"type": "string",
+					"enum": [
+						"off",
+						"messages",
+						"verbose"
+					],
+					"default": "off",
+					"description": "Traces the communication between VS Code and the blip language server."
 				}
 			}
 		},
@@ -76,15 +100,21 @@
 		]
 	},
 	"scripts": {
-		"compile": "tsc -p .",
-		"watch": "tsc -p . --watch"
+		"build": "esbuild src/extension.ts --bundle --external:vscode --outdir=out --platform=node --target=node20 --format=cjs --sourcemap",
+		"build:prod": "esbuild src/extension.ts --bundle --external:vscode --outdir=out --platform=node --target=node20 --format=cjs --minify",
+		"watch": "esbuild src/extension.ts --bundle --external:vscode --outdir=out --platform=node --target=node20 --format=cjs --sourcemap --watch",
+		"typecheck": "tsc --noEmit",
+		"package": "npm run build:prod && vsce package",
+		"vscode:prepublish": "npm run build:prod"
 	},
 	"dependencies": {
 		"vscode-languageclient": "10.1.0"
 	},
 	"devDependencies": {
-		"@types/node": "24",
-		"@types/vscode": "1.105.0",
-		"typescript": "^5.9.3"
+		"@types/node": "20",
+		"@types/vscode": "1.90.0",
+		"@vscode/vsce": "^3.2.1",
+		"esbuild": "^0.24.0",
+		"typescript": "^5.6.0"
 	}
 }

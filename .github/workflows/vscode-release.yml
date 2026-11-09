@@ -1,0 +1,44 @@
+name: VS Code extension release
+
+on:
+  push:
+    tags:
+      - 'vscode-*'
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/vscode
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build
+        run: npm run build:prod
+      - name: Package
+        run: npx vsce package --no-dependencies
+      - name: Attach VSIX to release
+        run: |
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --generate-notes
+          fi
+          gh release upload "${GITHUB_REF_NAME}" ./*.vsix --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Publish to Visual Studio Marketplace
+        if: startsWith(github.ref, 'refs/tags/')
+        run: npx vsce publish --packagePath ./*.vsix --skip-duplicate
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
