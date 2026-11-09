@@ -38,7 +38,8 @@ config, csv, lint, markdown, pratt), a JavaScript backend (`blip build`,
 machine-generated prims (`tools/genprims.vsh`), and editor support
 (`blip lsp` plus a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=blip-lang.vscode-blip&ssr=false#review-details)
 and setup guides for [Kate](editors/kate/README.md), [Vim/Neovim](editors/vim/README.md),
-[Helix](editors/helix/README.md), [Zed](editors/zed/README.md), and [Emacs](editors/emacs/README.md)).
+[Helix](editors/helix/README.md), [Zed](editors/zed/README.md) (plus a [Zed extension](editors/zed-ext)),
+and [Emacs](editors/emacs/README.md)).
 Recent changes are recorded in
 `CHANGELOG.md`.
 
