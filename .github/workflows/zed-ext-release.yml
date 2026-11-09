@@ -1,0 +1,38 @@
+name: Zed extension release
+
+on:
+  push:
+    tags:
+      - 'zed-ext-*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: editors/zed-ext
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+      - name: Build
+        run: cargo build --target wasm32-wasip2 --release
+      - name: Copy artifact
+        run: cp target/wasm32-wasip2/release/blip_zed.wasm extension.wasm
+      - name: Package
+        run: |
+          mkdir -p dist/zed-ext
+          cp extension.toml extension.wasm dist/zed-ext/
+          mkdir -p dist/zed-ext/languages/blip
+          cp languages/blip/config.toml dist/zed-ext/languages/blip/
+          cd dist && zip -r ../zed-ext.zip zed-ext
+      - name: Attach to release
+        run: |
+          if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --generate-notes
+          fi
+          gh release upload "${GITHUB_REF_NAME}" editors/zed-ext/zed-ext.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
