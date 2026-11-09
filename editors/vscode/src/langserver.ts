@@ -13,7 +13,7 @@ const defaultArgs = ["lsp"]
 
 function serverOptions(): ServerOptions {
 	const config = vscode.workspace.getConfiguration(configSection)
-	const command = config.get<string>("command", defaultCommand).trim()
+	const command = (config.get<string>("command", defaultCommand) || defaultCommand).trim()
 	const args = config.get<string[]>("args", defaultArgs)
 	return {
 		command: command === "" ? defaultCommand : command,
