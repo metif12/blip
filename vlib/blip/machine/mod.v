@@ -605,43 +605,21 @@ fn (mut m Machine) eval_symbol(name string) ! {
 // ever reached the application: the name did not resolve, so the abort path was
 // dead code for exactly the input it exists to handle.
 fn machine_builtin(name string) bool {
-	return name in [
-		'apply',
-		'error',
-		'raise',
-		'format',
-		'gensym',
-		'print',
-		'display',
-		'echo',
-		'veb-route',
-		'yield',
-		'read-line',
-		'map',
-		'filter',
-		'reject',
-		'keep',
-		'fold',
-		'reduce',
-		'for-each',
-		'vector-map',
-		'any?',
-		'every?',
-		'sort-by',
-		'ok',
-		'err',
-		'ok?',
-		'err?',
-		'ok-value',
-		'err-value',
-		'map-result',
-		'unwrap-or',
-		'try-result',
-		'lazy-unwrap',
-		'lazy-map-result',
-		'flatten-result',
-		'all-results',
-	]
+	// Match is O(1) dispatch and allocates nothing, unlike `name in [...]`,
+	// which built a fresh array on every call. This runs on every symbol lookup.
+	match name {
+		'apply', 'error', 'raise', 'format', 'gensym', 'print', 'display', 'echo',
+		'veb-route', 'yield', 'read-line', 'map', 'filter', 'reject', 'keep',
+		'fold', 'reduce', 'for-each', 'vector-map', 'any?', 'every?', 'sort-by',
+		'ok', 'err', 'ok?', 'err?', 'ok-value', 'err-value', 'map-result',
+		'unwrap-or', 'try-result', 'lazy-unwrap', 'lazy-map-result',
+		'flatten-result', 'all-results' {
+			return true
+		}
+		else {
+			return false
+		}
+	}
 }
 
 // show_value renders one argument. `quoted` distinguishes `print` from `display`:
@@ -683,9 +661,10 @@ fn (mut m Machine) hof(name string, args []blip.Value) ! {
 	keep := name in ['filter', 'keep']
 	drop := name == 'reject'
 	mut out := []blip.Value{}
+	mut one := []blip.Value{cap: 1}
 	mut i := 0
 	for i < items.len {
-		mut one := []blip.Value{}
+		one = one[..0]
 		one << items[i]
 		v := m.call_value(f, one)!
 		if drop {
@@ -744,9 +723,10 @@ fn (mut m Machine) fold(name string, args []blip.Value) ! {
 	items := prims.seq(args[2]) or {
 		return error('${name}: ${err.msg()}')
 	}
+	mut call := []blip.Value{cap: 2}
 	mut i := 0
 	for i < items.len {
-		mut call := []blip.Value{}
+		call = call[..0]
 		call << acc
 		call << items[i]
 		acc = m.call_value(args[0], call)!
@@ -763,9 +743,10 @@ fn (mut m Machine) any_every(name string, args []blip.Value) ! {
 	items := prims.seq(args[1]) or {
 		return error('${name}: ${err.msg()}')
 	}
+	mut one := []blip.Value{cap: 1}
 	mut i := 0
 	for i < items.len {
-		mut one := []blip.Value{}
+		one = one[..0]
 		one << items[i]
 		v := m.call_value(args[0], one)!
 		if name == 'any?' && v.truthy() {
@@ -795,9 +776,10 @@ fn (mut m Machine) sort_by(args []blip.Value) ! {
 		return error('sort-by: ${err.msg()}')
 	}
 	mut keys := []blip.Value{}
+	mut one := []blip.Value{cap: 1}
 	mut i := 0
 	for i < items.len {
-		mut one := []blip.Value{}
+		one = one[..0]
 		one << items[i]
 		keys << m.call_value(args[0], one)!
 		i++
@@ -822,12 +804,7 @@ fn (mut m Machine) call_value(f blip.Value, args []blip.Value) !blip.Value {
 	m.kstack = []blip.Kont{}
 	m.ctl = .eval_form
 	m.env = m.globals
-	mut all := []blip.Value{}
-	all << f
-	for a in args {
-		all << a
-	}
-	m.apply_all(all)!
+	m.apply_values(f, args)!
 	out := m.drive() or { blip.nil_value() }
 	m.kstack = saved_k
 	m.ctl = saved_ctl
@@ -1041,12 +1018,10 @@ fn (mut m Machine) step_return() !bool {
 	mut k := m.pop()
 	match k.tag {
 		.app_fn {
-			kids := m.arena.kids(k.rest)
+			kids := m.arena.kids_view(k.rest)
 			if kids.len == 1 {
 				// zero arguments
-				mut all := []blip.Value{}
-				all << m.val
-				m.apply_all(all)!
+				m.apply_values(m.val, []blip.Value{})!
 			} else {
 				mut k2 := m.kont(.app_arg)
 				k2.rest = k.rest
@@ -1061,7 +1036,7 @@ fn (mut m Machine) step_return() !bool {
 		}
 		.app_arg {
 			k.acc << m.val
-			kids := m.arena.kids(k.rest)
+			kids := m.arena.kids_view(k.rest)
 			// acc holds [callee, arg1, ...]. Every argument is in place once
 			// acc.len == kids.len, because kids[0] is the operator itself.
 			// Testing k.slot instead double-counted and read past the end.
@@ -1074,7 +1049,7 @@ fn (mut m Machine) step_return() !bool {
 				m.env = k.env
 				m.goto(kids[k.acc.len])
 			} else {
-				m.apply_all(k.acc)!
+				m.apply_values(k.acc[0], unsafe { k.acc[1..] })!
 			}
 		}
 		.if_k {
@@ -1082,7 +1057,7 @@ fn (mut m Machine) step_return() !bool {
 			// is kids[2], and the optional alternative is kids[3]. Using kids[1]
 			// as the consequent re-evaluated the test as the answer, which made
 			// `(if (= n 0) acc 1)` return the test's own value.
-			kids := m.arena.kids(k.rest)
+			kids := m.arena.kids_view(k.rest)
 			// Restore the environment the branches were written in. Without this,
 			// a branch evaluated after a function call sees that call's frame:
 			// `(+ (f a) (g b))` would resolve `b` in f's scope.
@@ -1097,7 +1072,7 @@ fn (mut m Machine) step_return() !bool {
 			}
 		}
 		.seq {
-			kids := m.arena.kids(k.rest)
+			kids := m.arena.kids_view(k.rest)
 			// next is the statement after the one that just finished. It has to be
 			// bounds-checked against kids.len, not against the popped slot:
 			// slot+1 == kids.len means the sequence is finished.
@@ -1146,7 +1121,7 @@ fn (mut m Machine) step_return() !bool {
 			if !m.val.truthy() {
 				m.ret() // short-circuits, and the falsy value is the result
 			} else {
-				kids := m.arena.kids(k.rest)
+				kids := m.arena.kids_view(k.rest)
 				if k.slot < kids.len {
 					mut k2 := k
 					k2.slot = k.slot + 1
@@ -1161,7 +1136,7 @@ fn (mut m Machine) step_return() !bool {
 			if m.val.truthy() {
 				m.ret()
 			} else {
-				kids := m.arena.kids(k.rest)
+				kids := m.arena.kids_view(k.rest)
 				if k.slot < kids.len {
 					mut k2 := k
 					k2.slot = k.slot + 1
@@ -1279,7 +1254,7 @@ fn (mut m Machine) step_return() !bool {
 			// next, and build the collection when the last one is in.
 			mut k2 := k
 			k2.acc << m.val
-			kids := m.arena.kids(k.rest)
+			kids := m.arena.kids_view(k.rest)
 			next := k.slot + 1
 			if next < kids.len {
 				k2.slot = next
@@ -1320,13 +1295,11 @@ fn (mut m Machine) step_return() !bool {
 // the single argument is the collection. The alternative -- treating an
 // unapplied keyword as nil, which is what the first version did -- turns the
 // single most common Lisp idiom into a nil call.
-fn (mut m Machine) apply_all(all_in []blip.Value) ! {
-	mut all := all_in.clone()
-	callee := all[0]
-	mut args := []blip.Value{}
-	for i in 1 .. all.len {
-		args << all[i]
-	}
+// apply_values applies `callee` to `args`. Splitting the callee from the
+// arguments at the signature (rather than packing them into one slice) avoids
+// the per-call allocation that the old apply_all paid to rebuild an `all` slice
+// on every application, including the empty-argument case.
+fn (mut m Machine) apply_values(callee blip.Value, args []blip.Value) ! {
 	match callee.tag {
 		.closure {
 			m.call_closure(callee.as_closure(), args)!
@@ -1544,7 +1517,7 @@ fn (mut m Machine) fill_labels(c &blip.Closure, args []blip.Value, caller blip.E
 				m.env = saved_env
 				return error('${c.name}: ${c.opt_names[j - c.opt_from]} is required')
 			}
-			one := []blip.Value{}
+			one := []blip.Value{cap: 0}
 			slots[j] = m.eval_default(d, one)!
 		}
 		j++
@@ -1615,8 +1588,8 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 				return error('apply expects at least 2 arguments, got ${args.len}')
 			}
 			// (apply f a b) => (f a b); a trailing list argument is spliced.
-			mut all := []blip.Value{}
-			all << args[0]
+			callee := args[0]
+			mut call_args := []blip.Value{}
 			mut i := 1
 			for i < args.len {
 				// Any sequence is spliced, not just a pair. `(apply + [1 2 3])`
@@ -1624,16 +1597,16 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 				// below matched only .pair -- so apply_all was handed `(+)` and
 				// returned 0. A sequence is a sequence whichever tag it wears.
 				elems := prims.seq(args[i]) or {
-					all << args[i]
+					call_args << args[i]
 					i++
 					continue
 				}
 				for e in elems {
-					all << e
+					call_args << e
 				}
 				i++
 			}
-			m.apply_all(all)!
+			m.apply_values(callee, call_args)!
 			return
 		}
 		'error' {
@@ -1922,10 +1895,18 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 // ------------------------------------------------------------ special forms
 
 pub fn special_form(name string) bool {
-	return name in ['quote', 'if', 'define', 'set!', 'lambda', 'fn', 'begin', 'let', 'let*', 'letrec',
-		'and', 'or', 'when', 'unless', 'cond', 'case', 'loop', 'dotimes', 'use', 'match', 'match*',
-		'import', 'struct', 'struct-out', 'provide', 'require', 'let-assert', 'do', 'time', 'assert',
-		'->', '->>', '|>', 'as->', 'cond->', 'def', 'defmacro', 'try', 'macex', 'macex1', 'defined?']
+	match name {
+		'quote', 'if', 'define', 'set!', 'lambda', 'fn', 'begin', 'let', 'let*',
+		'letrec', 'and', 'or', 'when', 'unless', 'cond', 'case', 'loop', 'dotimes',
+		'use', 'match', 'match*', 'import', 'struct', 'struct-out', 'provide',
+		'require', 'let-assert', 'do', 'time', 'assert', '->', '->>', '|>', 'as->',
+		'cond->', 'def', 'defmacro', 'try', 'macex', 'macex1', 'defined?' {
+			return true
+		}
+		else {
+			return false
+		}
+	}
 }
 
 fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId) ! {

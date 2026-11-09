@@ -26,39 +26,37 @@ pub type NodeId = i32
 // Delimiters as named constants. Writing them as `)` and `}` char literals
 // inside match arms makes the brace structure of this file genuinely ambiguous
 // to read -- and to parse.
-pub const (
-	lparen = u8(40)
-	rparen = u8(41)
-	lbrack = u8(91)
-	rbrack = u8(93)
-	lbrace = u8(123)
-	rbrace = u8(125)
-	quote_c   = u8(39)
-	semi      = u8(59)
-	quasi_c   = u8(96)
-	unquote_c = u8(44)
-	bar       = u8(124)
-	hash_c    = u8(35)
-	backslash = u8(92)
-	underscore = u8(95)
-	at_c      = u8(64)
-	colon     = u8(58)
-	dot       = u8(46)
-	dot_c     = u8(46)
-	minus_c   = u8(45)
-	plus_c    = u8(43)
-	zero_c    = u8(48)
-	nine_c    = u8(57)
-	x_c       = u8(120)
-	b_c       = u8(98)
-	o_c       = u8(111)
-	dquote    = u8(34)
-	backslash_bs = u8(92)
-	nl        = u8(10)
-	tab_c     = u8(9)
-	cr        = u8(13)
-	sp        = u8(32)
-)
+pub const lparen = u8(40)
+pub const rparen = u8(41)
+pub const lbrack = u8(91)
+pub const rbrack = u8(93)
+pub const lbrace = u8(123)
+pub const rbrace = u8(125)
+pub const quote_c = u8(39)
+pub const semi = u8(59)
+pub const quasi_c = u8(96)
+pub const unquote_c = u8(44)
+pub const bar = u8(124)
+pub const hash_c = u8(35)
+pub const backslash = u8(92)
+pub const underscore = u8(95)
+pub const at_c = u8(64)
+pub const colon = u8(58)
+pub const dot = u8(46)
+pub const dot_c = u8(46)
+pub const minus_c = u8(45)
+pub const plus_c = u8(43)
+pub const zero_c = u8(48)
+pub const nine_c = u8(57)
+pub const x_c = u8(120)
+pub const b_c = u8(98)
+pub const o_c = u8(111)
+pub const dquote = u8(34)
+pub const backslash_bs = u8(92)
+pub const nl = u8(10)
+pub const tab_c = u8(9)
+pub const cr = u8(13)
+pub const sp = u8(32)
 
 pub enum DatumTag as u8 {
 	nil
@@ -218,6 +216,21 @@ pub fn (a &Arena) kids(id NodeId) []NodeId {
 	return out
 }
 
+// kids_view returns a zero-copy view into the arena's children slice for `id`.
+//
+// It allocates nothing, but the view is invalidated if anything appends to the
+// arena's children slice afterwards (which reallocates the backing store). It is
+// therefore only safe where every read of a child NodeId happens before any
+// transform that could append -- i.e. extract the scalar NodeId values first and
+// never hold the slice across a goto/transform. `kids` (the copying version)
+// remains the default; this is an opt-in fast path.
+pub fn (a &Arena) kids_view(id NodeId) []NodeId {
+	d := a.nodes[int(id)]
+	start := int(d.start)
+	count := int(d.count)
+	return unsafe { a.children[start..start + count] }
+}
+
 pub fn (a &Arena) count() int {
 	return a.nodes.len
 }
@@ -242,9 +255,9 @@ pub fn (d &Diagnostic) render(path string) string {
 
 pub struct Reader {
 pub:
-	src    string
+	src string
 mut:
-	arena  &Arena
+	arena   &Arena
 	off     int
 	line    int = 1
 	line_at int
@@ -311,7 +324,7 @@ fn (mut r Reader) skip_ws() {
 			r.next()
 			continue
 		}
-if c == semi {
+		if c == semi {
 			for !r.eof() && r.peek() != nl {
 				r.next()
 			}
@@ -335,7 +348,7 @@ if c == semi {
 fn (mut r Reader) skip_block_comment() {
 	r.next() // #
 	r.next() // |
-mut depth := 1
+	mut depth := 1
 	for !r.eof() && depth > 0 {
 		c := r.next()
 		if c == hash_c && r.peek() == bar {
@@ -415,7 +428,7 @@ fn (mut r Reader) read_inner() ?NodeId {
 		}
 		quote_c, quasi_c, unquote_c {
 			r.next()
-tag := match c {
+			tag := match c {
 				quote_c { DatumTag.quoted }
 				quasi_c { DatumTag.quasi }
 				else { DatumTag.unquote }
@@ -494,7 +507,7 @@ fn (mut r Reader) read_collection(tag DatumTag, close u8) ?NodeId {
 		child := r.read() or {
 			break
 		}
-if r.off == before {
+		if r.off == before {
 			break
 		}
 		items << child
@@ -607,7 +620,7 @@ fn (mut r Reader) read_character() ?NodeId {
 		name << r.next()
 	}
 	s := name.bytestr()
-cp := match s {
+	cp := match s {
 		'newline', 'linefeed' { u8(10) }
 		'space' { u8(32) }
 		'tab' { u8(9) }
@@ -652,7 +665,7 @@ fn (mut r Reader) read_atom() ?NodeId {
 		// "abc#def" is one symbol rather than two forms.
 		buf << r.next()
 	}
-if buf.len == 0 {
+	if buf.len == 0 {
 		r.fail('unexpected byte 0x' + r.peek().hex())
 		r.next()
 		return r.read()
@@ -715,7 +728,7 @@ fn (mut r Reader) try_number(s string) ?NodeId {
 		return id
 	}
 
-// Radix prefixes: 0xff, 0b1010, 0o17
+	// Radix prefixes: 0xff, 0b1010, 0o17
 	if s.len > 2 && s[0] == zero_c {
 		base := match s[1] {
 			`x`, `X` { 16 }
@@ -760,8 +773,8 @@ fn (mut r Reader) try_number(s string) ?NodeId {
 // backwards makes the prompt lie about the one case a prompt exists for.
 pub struct Depth {
 pub mut:
-	n        int
-	in_string bool
+	n          int
+	in_string  bool
 	in_comment bool
 }
 

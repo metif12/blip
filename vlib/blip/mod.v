@@ -536,6 +536,10 @@ pub mut:
 	parent EnvId
 	names  []string
 	vals   []Value
+	// index maps a binding name to its position in names/vals, so lookup and
+	// set are O(1) in the frame size instead of a linear scan. Kept in sync
+	// with names/vals by define and set; never mutated by readers.
+	index map[string]int
 }
 
 pub struct EnvArena {
@@ -548,6 +552,7 @@ pub fn (mut ea EnvArena) new_env(parent EnvId) EnvId {
 		parent: parent
 		names:  []string{}
 		vals:   []Value{}
+		index:  map[string]int{}
 	}
 	return EnvId(ea.frames.len - 1)
 }
@@ -561,24 +566,23 @@ pub fn (ea &EnvArena) get(id EnvId) &Env {
 
 pub fn (mut ea EnvArena) define(id EnvId, name string, val Value) {
 	mut frame := ea.get(id)
-	for i, n in frame.names {
-		if n == name {
-			frame.vals[i] = val
-			return
-		}
+	if name in frame.index {
+		idx := frame.index[name]
+		frame.vals[idx] = val
+		return
 	}
 	frame.names << name
 	frame.vals << val
+	frame.index[name] = frame.names.len - 1
 }
 
 pub fn (mut ea EnvArena) lookup(id EnvId, name string) ?Value {
 	mut cur := id
 	for cur != no_env {
 		frame := ea.get(cur)
-		for i, n in frame.names {
-			if n == name {
-				return frame.vals[i]
-			}
+		if name in frame.index {
+			idx := frame.index[name]
+			return frame.vals[idx]
 		}
 		cur = frame.parent
 	}
@@ -591,11 +595,10 @@ pub fn (mut ea EnvArena) set(id EnvId, name string, val Value) bool {
 	mut cur := id
 	for cur != no_env {
 		mut frame := ea.get(cur)
-		for i, n in frame.names {
-			if n == name {
-				frame.vals[i] = val
-				return true
-			}
+		if name in frame.index {
+			idx := frame.index[name]
+			frame.vals[idx] = val
+			return true
 		}
 		cur = frame.parent
 	}
