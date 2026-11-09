@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: editors/zed-ext
@@ -33,6 +35,6 @@ jobs:
           if ! gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
             gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --generate-notes
           fi
-          gh release upload "${GITHUB_REF_NAME}" editors/zed-ext/zed-ext.zip --clobber
+          gh release upload "${GITHUB_REF_NAME}" zed-ext.zip --clobber
         env:
           GH_TOKEN: ${{ github.token }}
