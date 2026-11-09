@@ -36,7 +36,8 @@ source-context frames, real programs in `programs/` (brainfuck, json,
 config, csv, lint, markdown, pratt), a JavaScript backend (`blip build`,
 `blip emit-js`), a veb bridge that serves the website from blip handlers,
 machine-generated prims (`tools/genprims.vsh`), and editor support
-(`blip lsp` plus a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=blip-lang.vscode-blip&ssr=false#review-details)). Recent changes are recorded in
+(`blip lsp` plus a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=blip-lang.vscode-blip&ssr=false#review-details)
+and a [Kate setup guide](editors/kate/README.md)). Recent changes are recorded in
 `CHANGELOG.md`.
 
 | | |
