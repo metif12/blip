@@ -68,7 +68,7 @@ fn main() {
 			d := res.arena.node(frame.id)
 			ind := indent(frame.depth)
 			if d.tag.is_collection() {
-				kids := res.arena.kids(frame.id)
+				kids := res.arena.kids_view(frame.id)
 				lines << '${ind}${d.tag} ${kids.len} items'
 				mut k := kids.len - 1
 				for k >= 0 {
