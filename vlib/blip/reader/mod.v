@@ -1,6 +1,7 @@
 module reader
 
 import strconv
+import vlib.blip
 
 // strict_float rejects trailing junk. AtoF64Param is not exported by name in
 // this V version, so the struct is built by its only public field.
@@ -90,15 +91,16 @@ pub fn (t DatumTag) is_stringy() bool {
 
 pub struct Datum {
 pub mut:
-	tag   DatumTag
-	value string // str / sym / kw payload
-	i     i64    // int, char code point, bool
-	f     f64    // float
-	den   i64    // rational denominator
-	start i32    // children range into Arena.children
-	count i32
-	line  int
-	col   int
+	tag    DatumTag
+	value  string // str / sym / kw payload
+	i      i64    // int, char code point, bool
+	f      f64    // float
+	den    i64    // rational denominator
+	start  i32    // children range into Arena.children
+	count  i32
+	line   int
+	col    int
+	origin blip.SourceLocation
 }
 
 pub struct Arena {
@@ -255,7 +257,8 @@ pub fn (d &Diagnostic) render(path string) string {
 
 pub struct Reader {
 pub:
-	src string
+	src    string
+	source string
 mut:
 	arena   &Arena
 	off     int
@@ -373,8 +376,10 @@ pub fn (mut r Reader) read() ?NodeId {
 	}
 	line := r.line
 	col := r.off - r.line_at + 1
+	start := r.off
 	id := r.read_inner() or { return none }
 	r.arena.set_pos(id, line, col)
+	r.arena.nodes[int(id)].origin = blip.SourceLocation{ file: r.source, line: line, col: col, start: start, end: r.off }
 	return id
 }
 
@@ -884,9 +889,15 @@ pub mut:
 // aliasing depend on a language rule, which is exactly the sort of thing this
 // project has been bitten by before.
 pub fn (mut a Arena) read_forms(src string) Forms {
+	return a.read_source(src, 'blip')
+}
+
+// read_source retains a stable filename on every node, including nested forms.
+pub fn (mut a Arena) read_source(src string, source string) Forms {
 	mut r := Reader{
-		src:   src
-		arena: &a
+		src:    src
+		source: source
+		arena:  &a
 	}
 	mut forms := []NodeId{}
 	for {

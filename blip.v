@@ -577,7 +577,7 @@ fn run_tests(paths []string) int {
 				m.load(std) or { eprintln('blip: cannot load the standard library: ${err.msg()}') }
 			}
 			m.source = path
-			forms := m.arena.read_forms(src)
+			forms := m.arena.read_source(src, path)
 			lines := src.split('\n')
 			for id in forms.forms {
 				d := m.arena.node(id)

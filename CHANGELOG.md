@@ -4,6 +4,16 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### Runtime value provenance
+
+- Values retain source filenames, line/column positions and byte spans through
+  bindings, calls, collection access and loads. Computed values identify the
+  expression that produced them; quoted children retain their own spans.
+- `(source-location value)` exposes locations as data, with an optional
+  `Value.source_location()` API for V hosts. Named reader input and generated
+  syntax keep filenames stable across later evaluations.
+- Gate: `tests/provenance.v`, now included in CI.
+
 ### Scheme compatibility: named let, make-vector, equal?
 
 - R7RS named let: `(let NAME ((v init) ...) body...)` expands to

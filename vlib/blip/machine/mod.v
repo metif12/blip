@@ -186,7 +186,7 @@ pub fn (mut m Machine) run(forms []blip.NodeId) !blip.Value {
 // renumber it.
 pub fn (mut m Machine) run_str(src string) !blip.Value {
 	m.src_text = src
-	res := m.arena.read_forms(src)
+	res := m.arena.read_source(src, m.where())
 	return m.run_checked(res)
 }
 
@@ -217,12 +217,15 @@ pub fn (mut m Machine) run_checked(res reader.Forms) !blip.Value {
 pub fn (mut m Machine) load(path string) !blip.Value {
 	src := m.host.host_load(path)!
 	prev := m.source
+	prev_text := m.src_text
+	defer {
+		m.source = prev
+		m.src_text = prev_text
+	}
 	m.source = path
 	m.src_text = src
-	res := m.arena.read_forms(src)
-	out := m.run_checked(res)!
-	m.source = prev
-	return out
+	res := m.arena.read_source(src, m.where())
+	return m.run_checked(res)
 }
 
 // resolve_module maps a package name to the file that implements it.
@@ -350,7 +353,7 @@ pub fn (mut m Machine) eval_one(f blip.NodeId) !blip.Value {
 // not stop at the first failure: the REPL needs to keep going, and so does a
 // file that prints a warning and carries on.
 pub fn (mut m Machine) eval_string_lenient(src string) !blip.Value {
-	res := m.arena.read_forms(src)
+	res := m.arena.read_source(src, m.where())
 	mut last := blip.nil_value()
 	mut i := 0
 	for i < res.forms.len {
@@ -358,6 +361,22 @@ pub fn (mut m Machine) eval_string_lenient(src string) !blip.Value {
 		i++
 	}
 	return last
+}
+
+// Generated definitions refer to the user's struct declaration, never byte
+// offsets in the temporary source string used to implement that declaration.
+fn (mut m Machine) eval_generated(src string) !blip.Value {
+	origin := m.form_origin()
+	form := m.form
+	start := m.arena.nodes.len
+	res := m.arena.read_source(src, origin.file)
+	for i in start .. m.arena.nodes.len {
+		m.arena.nodes[i].origin = origin
+		m.arena.nodes[i].line = origin.line
+		m.arena.nodes[i].col = origin.col
+	}
+	defer { m.form = form }
+	return m.run_checked(res)
 }
 
 fn (mut m Machine) drive() !blip.Value {
@@ -455,7 +474,20 @@ fn (mut m Machine) pop() blip.Kont {
 	return last
 }
 
+fn (m &Machine) form_origin() blip.SourceLocation {
+	if m.form < 0 || int(m.form) >= m.arena.nodes.len {
+		return blip.SourceLocation{}
+	}
+	return m.arena.node(m.form).origin
+}
+
+fn (mut m Machine) locate_node(id blip.NodeId) blip.NodeId {
+	m.arena.nodes[int(id)].origin = m.form_origin()
+	return id
+}
+
 fn (mut m Machine) ret() {
+	m.val = m.val.with_tree_origin(m.form_origin())
 	m.ctl = .return_value
 }
 
@@ -968,6 +1000,7 @@ fn (mut m Machine) eval_field_update(what string, value_node blip.NodeId) ! {
 	}
 	mut nf := m.kont(.field_k)
 	nf.name = field
+	nf.expr = m.form
 	nf.acc = []blip.Value{}
 	nf.acc << base
 	m.push(nf)
@@ -1021,6 +1054,7 @@ fn (mut m Machine) step_return() !bool {
 			kids := m.arena.kids_view(k.rest)
 			if kids.len == 1 {
 				// zero arguments
+				m.form = k.rest
 				m.apply_values(m.val, []blip.Value{})!
 			} else {
 				mut k2 := m.kont(.app_arg)
@@ -1049,6 +1083,7 @@ fn (mut m Machine) step_return() !bool {
 				m.env = k.env
 				m.goto(kids[k.acc.len])
 			} else {
+				m.form = k.rest
 				m.apply_values(k.acc[0], unsafe { k.acc[1..] })!
 			}
 		}
@@ -1067,6 +1102,7 @@ fn (mut m Machine) step_return() !bool {
 			} else if kids.len > 3 {
 				m.goto(kids[3])
 			} else {
+				m.form = k.rest
 				m.val = blip.nil_value()
 				m.ret()
 			}
@@ -1090,6 +1126,7 @@ fn (mut m Machine) step_return() !bool {
 			}
 		}
 		.define_k {
+			m.form = k.expr
 			// Restore the scope the `define` was WRITTEN in. Without this,
 			// `(define g (make-thunk))` binds `g` inside the thunk's frame --
 			// which is gone by the time anyone looks for it. It reported as
@@ -1103,6 +1140,7 @@ fn (mut m Machine) step_return() !bool {
 			m.ret()
 		}
 		.set_k {
+			m.form = k.expr
 			// Same restoration as .define_k, and for the same reason:
 			// `(set! x (f y))` must assign x in the scope it was written in, not
 			// in f's frame.
@@ -1148,6 +1186,7 @@ fn (mut m Machine) step_return() !bool {
 			}
 		}
 		.field_k {
+			m.form = k.expr
 			base := k.acc[0]
 			if base.tag != .struct_ {
 				return error('${k.name} := : ${printer.write(base)} is not a struct')
@@ -1263,6 +1302,7 @@ fn (mut m Machine) step_return() !bool {
 				m.goto(kids[next])
 				return true
 			}
+			m.form = k.rest
 			m.val = m.build_collection(k.rest, k2.acc)!
 			m.ret()
 			return true
@@ -1389,7 +1429,7 @@ fn (mut m Machine) call_closure(c &blip.Closure, args []blip.Value) ! {
 			m.envs.define(frame, c.params[i], use_args[i])
 			i++
 		}
-		m.envs.define(frame, c.rest_name, blip.list_from(use_args[c.arity..]))
+		m.envs.define(frame, c.rest_name, blip.list_from(use_args[c.arity..]).with_tree_origin(m.form_origin()))
 		m.env = frame
 		m.goto(c.body)
 		return
@@ -1967,6 +2007,7 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 			}
 			mut nf := m.kont(.set_k)
 			nf.name = target.value
+			nf.expr = m.form
 			nf.env = m.env
 			m.push(nf)
 			m.goto(kids[2])
@@ -2261,6 +2302,7 @@ fn (mut m Machine) eval_define(kids []blip.NodeId) ! {
 		}
 		mut nf := m.kont(.define_k)
 		nf.name = target.value
+		nf.expr = m.form
 		nf.env = m.env
 		m.push(nf)
 		m.goto(kids[2])
@@ -2560,12 +2602,12 @@ fn (mut m Machine) eval_lambda(kids []blip.NodeId) ! {
 pub fn (mut m Machine) make_closure(spec ParamSpec, body blip.NodeId, env blip.EnvId, name string) blip.Value {
 	if spec.opt_from >= 0 {
 		return blip.labelled(spec.names, body, env, name, spec.opt_from, spec.opt_names,
-			spec.opt_defaults)
+			spec.opt_defaults).with_origin(m.form_origin())
 	}
 	if spec.is_rest {
-		return blip.new_rest_closure(spec.names, spec.rest, body, env, name)
+		return blip.new_rest_closure(spec.names, spec.rest, body, env, name).with_origin(m.form_origin())
 	}
-	return blip.new_closure(spec.names, body, env, name)
+	return blip.new_closure(spec.names, body, env, name).with_origin(m.form_origin())
 }
 
 // ------------------------------------------------------------- arena helpers
@@ -2586,19 +2628,19 @@ pub fn (mut m Machine) fresh(base string) string {
 }
 
 pub fn (mut m Machine) sym_node(name string) blip.NodeId {
-	return m.arena.str_leaf(.sym, name)
+	return m.locate_node(m.arena.str_leaf(.sym, name))
 }
 
 pub fn (mut m Machine) nil_node() blip.NodeId {
-	return m.arena.leaf(.nil)
+	return m.locate_node(m.arena.leaf(.nil))
 }
 
 pub fn (mut m Machine) int_node(n i64) blip.NodeId {
-	return m.arena.int_leaf(.int, n)
+	return m.locate_node(m.arena.int_leaf(.int, n))
 }
 
 pub fn (mut m Machine) string_node(s string) blip.NodeId {
-	return m.arena.str_leaf(.str, s)
+	return m.locate_node(m.arena.str_leaf(.str, s))
 }
 
 // list_of2 is list_of with the two lists zipped. Binding forms and argument lists
@@ -2631,7 +2673,7 @@ pub fn (mut m Machine) list_of(items []blip.NodeId) blip.NodeId {
 	id := m.arena.open(.list)
 	m.arena.finish(id, items)
 
-	return id
+	return m.locate_node(id)
 }
 
 pub fn (mut m Machine) call_node(callee blip.NodeId, args []blip.NodeId) blip.NodeId {
@@ -2692,7 +2734,7 @@ pub fn (mut m Machine) datum_to_value(id blip.NodeId) blip.Value {
 			}
 			continue
 		}
-		built[f.id] = m.assemble(f.id, f.kids, built)
+		built[f.id] = m.assemble(f.id, f.kids, built).with_tree_origin(m.arena.node(f.id).origin)
 	}
 	return built[id]
 }
@@ -3318,7 +3360,7 @@ fn (mut m Machine) eval_struct(kids []blip.NodeId) ! {
 		// public: they cannot make a value that does not exist.
 		src = '(define ${name}__ctor (fn [${params.join(' ')}] (__make-struct (quote ${name}) (quote [${quoted_fields.join(' ')}]) ${params.join(' ')})))\n' + src
 	}
-	m.eval_string_lenient(src) or {
+	m.eval_generated(src) or {
 		return error('struct ${name}: the generated definitions failed: ${err.msg()}')
 	}
 	m.val = blip.symbol(name)

@@ -179,6 +179,7 @@ jobs:
           v -cc gcc -o multi_use tests/multi_use.v
           v -cc gcc -o value_to_datum tests/value_to_datum.v
           v -cc gcc -o macros_gate tests/macros_gate.v
+          v -cc gcc -o provenance tests/provenance.v
 
       # These runners print results and do not set an exit code yet, so the
       # output is checked rather than the status. That is listed as a known gap
@@ -203,6 +204,7 @@ jobs:
           ./multi_use      | tee -a out.txt
           ./value_to_datum | tee -a out.txt
           ./macros_gate    | tee -a out.txt
+          ./provenance     | tee -a out.txt
           if grep -qE '^FAIL|panic' out.txt; then
             echo "::error::a check failed or the machine panicked"
             exit 1

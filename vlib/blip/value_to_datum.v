@@ -8,6 +8,14 @@ import vlib.blip.machine
 import vlib.blip.reader
 
 pub fn value_to_datum(mut m machine.Machine, v Value) !NodeId {
+	id := value_to_datum_inner(mut m, v)!
+	m.arena.nodes[int(id)].origin = v.origin
+	m.arena.nodes[int(id)].line = v.origin.line
+	m.arena.nodes[int(id)].col = v.origin.col
+	return id
+}
+
+fn value_to_datum_inner(mut m machine.Machine, v Value) !NodeId {
 	match v.tag {
 		.nil {
 			return m.arena.leaf(.nil)

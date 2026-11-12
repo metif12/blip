@@ -266,6 +266,36 @@ pub mut:
 	i       i64
 	f       f64
 	payload Payload
+	// Origin travels with the value, independently of its payload and equality.
+	origin SourceLocation
+}
+
+// SourceLocation identifies the expression that produced a value. Lines and
+// columns are 1-based; offsets are a half-open range of UTF-8 bytes. A zero
+// line means unknown (for example a value supplied by a host).
+pub struct SourceLocation {
+pub:
+	file  string
+	line  int
+	col   int
+	start int
+	end   int
+}
+
+pub fn (v Value) source_location() ?SourceLocation {
+	if v.origin.line == 0 {
+		return none
+	}
+	return v.origin
+}
+
+// with_origin preserves an existing origin: looking up a setting keeps its
+// defining expression rather than replacing it with the lookup location.
+pub fn (v Value) with_origin(origin SourceLocation) Value {
+	if v.origin.line > 0 || origin.line == 0 {
+		return v
+	}
+	return Value{ ...v, origin: origin }
 }
 
 // ---- constructors ----------------------------------------------------------

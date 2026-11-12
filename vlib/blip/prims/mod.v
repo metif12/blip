@@ -25,6 +25,7 @@ const strict_float = strconv.AtoF64Param{}
 // table returns every primitive, keyed by name.
 pub fn table() map[string]blip.PrimFn {
 	mut p := map[string]blip.PrimFn{}
+	p['source-location'] = prim_source_location
 	p['+'] = prim_add
 	p['-'] = prim_sub
 	p['*'] = prim_mul
@@ -1708,4 +1709,19 @@ $if wasm32 {
 		}
 		return blip.string(v)
 	}
+}
+
+// source-location is data so editors can inspect it without parsing messages.
+fn prim_source_location(args []blip.Value) !blip.Value {
+	if args.len != 1 {
+		return error('source-location expects 1 argument, got ${args.len}')
+	}
+	loc := args[0].source_location() or { return blip.nil_value() }
+	return blip.table({
+		'file':   blip.string(loc.file)
+		'line':   blip.integer(loc.line)
+		'column': blip.integer(loc.col)
+		'start':  blip.integer(loc.start)
+		'end':    blip.integer(loc.end)
+	})
 }

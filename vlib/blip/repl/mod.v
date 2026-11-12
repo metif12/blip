@@ -127,7 +127,7 @@ fn (mut r Repl) evaluate(src string) !int {
 		return 0
 	}
 	r.machine.src_text = src
-	res := r.machine.arena.read_forms(src)
+	res := r.machine.arena.read_source(src, r.machine.where())
 	mut n := 0
 	mut i := 0
 	for i < res.forms.len {

@@ -243,3 +243,34 @@ Generated, English-only for now, at **https://metif12.github.io/blip/**.
 - **The benchmark harness is not yet trustworthy.** It produced three wrong
   numbers before being fixed, including a 1000x unit error from coercing a
   `time.Duration` into nanoseconds. Treat its output as provisional.
+### Value source locations
+
+The interpreter carries source provenance on runtime values, including individual
+collection elements. Use `(source-location value)` to get a table with `:file`,
+`:line`, `:column`, `:start`, and `:end`, or `nil` if the origin is unknown.
+Lines and columns are 1-based; columns and the half-open `[start, end)` range
+count UTF-8 bytes. Offsets refer to the source text at evaluation time.
+
+```lisp
+(define port 8080)
+(source-location port)
+; => {:column 14 :end 17 :file "config.lip" :line 1 :start 13}
+```
+
+Loading `config.lip` records its filename. V embedders can set `m.source` before
+`m.run_str(src)`, call `m.load(path)`, or parse with
+`m.arena.read_source(src, filename)`. Query `value.source_location()` in V;
+it returns `?blip.SourceLocation` (`col` is the V field for column).
+
+Literal values point to their literal text. Bindings, function arguments,
+returns, and collection lookups preserve that origin, even after another file
+is loaded. A newly computed value such as `(+ port 1)` points to that whole
+expression; it has no single literal to replace. Generated syntax inherits its
+producing expression's location, and value-to-datum conversion preserves origins.
+Host-created values have no location until explicitly annotated or returned by
+an evaluated expression. Provenance does not affect Lisp equality or printing.
+The JavaScript emitter does not provide runtime provenance.
+
+A config editor can use the filename and byte span to navigate to the source.
+Re-evaluate after edits to refresh spans; this API records origins, not a history
+of dependencies or a rule for rewriting computed expressions.
