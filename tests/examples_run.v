@@ -4,9 +4,9 @@ module main
 //
 // The examples are the specification. Each one ends with a marker line --
 // "basics ok", "data ok", "match ok", "errors ok", "pipelines ok",
-// "modules ok" -- and the `;=>` comments along the way record what each form
+// "modules ok", "config ok" -- and the `;=>` comments along the way record what each form
 // is supposed to produce. This file runs them and asserts the markers, which
-// is the cheapest gate that catches a regression in any of the six.
+// is the cheapest gate that catches a regression in any of the seven.
 //
 // The output is captured through the machine's own `out` slice rather than
 // through the host, so the test does not depend on stdout being line-buffered
@@ -83,9 +83,9 @@ fn (mut s Suite) check_example(label string, path string, want string) {
 fn main() {
 	mut s := Suite{}
 
-	// The six examples, in the order they are meant to be read. Each one builds
+	// The seven examples, in the order they are meant to be read. Each one builds
 	// on the previous: 01 is the language, 02 is data, 03 is match, 04 is
-	// errors, 05 is macros and pipes, 06 is modules.
+	// errors, 05 is macros and pipes, 06 is modules, 07 is config.
 	s.check_example('01_basics', 'examples/01_basics.lip', 'basics ok')
 	s.check_example('02_data', 'examples/02_data.lip', 'data ok')
 	s.check_example('03_match', 'examples/03_match.lip', 'match ok')

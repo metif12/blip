@@ -4,8 +4,8 @@ Thanks for looking. This file is short on ceremony and specific about the things
 that will otherwise waste your afternoon.
 
 blip is early. The reader and the machine run real programs, tail calls are
-real, and the six programs in `examples/` are the specification the interpreter
-is written against. Three documented things do not work yet, and they are named
+real, and the seven programs in `examples/` are the specification the
+interpreter is written against. Three documented things do not work yet, and they are named
 in the README, in `tests/tail_calls.v`, and in `docs/010-roadmap.md` rather than
 quietly missing.
 
@@ -60,15 +60,16 @@ v -cc gcc -o reader_probe.exe reader_probe.v
 .\reader_probe.exe examples\*.lip
 ```
 
-All eighteen suites must print no `FAIL` line and the reader probe must report zero
+All twenty-one suites must print no `FAIL` line and the reader probe must report zero
 diagnostics. The runners do not set a non-zero exit code yet, which is why CI
 greps for `FAIL`.
 
-The eighteen are: `tail_calls`, `non_tail`, `loop_forms`, `binding_forms`,
+The twenty-one are: `tail_calls`, `non_tail`, `loop_forms`, `binding_forms`,
 `embedding`, `repl_golden`, `examples_run`, `programs_run`, `genprims`,
 `unit`, `api_coverage`, `emit_js`, `lsp`, `hostile`, `multi_use`,
-`value_to_datum`, `macros_gate`, `provenance`. (`CONTRIBUTING.md` said nine,
-then eleven, then twelve for a while after the rest were already in CI, which is the kind of drift this
+`value_to_datum`, `macros_gate`, `fibers`, `veb_bridge`, `embed_api`,
+`provenance`. (`CONTRIBUTING.md` said nine, then eleven, then twelve for
+a while after the rest were already in CI, which is the kind of drift this
 line exists to stop. The live list is the one in `.github/workflows/ci.yml`
 — if the two disagree, `ci.yml` wins.)
 

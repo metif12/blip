@@ -1,0 +1,4 @@
+; smoke_prog.lip -- loaded by the C smoke test (clib/example_eval.c) via
+; blip_load. Ends with the same "<name> ok" marker the examples use.
+(define (smoke-add a b) (+ a b))
+(print "smoke-prog ok")

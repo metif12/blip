@@ -4,6 +4,34 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### C embedding library: `clib/` ships a stable C ABI
+
+- `clib/blip.h` is the whole surface: opaque `BlipInterp*`, string in,
+  string out (`blip_new/free/eval/load/call/set_limits/output/restrict/
+  version/free_str`). Strings out are `malloc` copies the caller frees with
+  `blip_free_str`; nothing else may be freed. V strings never cross: the
+  wrapper borrows with `cstring_to_vstring` and copies out with `memcpy`.
+- `clib/blip.v` implements it over `vlib/blip/embed` with a capture host
+  (prints buffered, real-FS loads, no stdin), so C hosts get per-interp
+  output and no stdout pollution. Prelude is `$embed_file`'d: no data file
+  to ship.
+- `clib/example_eval.c` is the worked example and the gate: eval, call,
+  print capture + drain, file load, error text, sandbox (`restrict_to`
+  drops 130 prims incl. `read-file`), limits. Exits non-zero on any wrong
+  answer; CI greps `clib smoke: all checks passed`.
+- `.github/workflows/clib.yml` builds `libblip.so` / `blip.dll` (+ import
+  lib from `clib/blip.def`) and runs the smoke on ubuntu + windows on every
+  push/PR. `release.yml` gains a `clib` job packaging
+  `blip-clib-linux.tar.gz` / `blip-clib-windows.zip` (header, library,
+  example, fixture, `docs/c-lib.md`) into the tag release.
+- Quirks found by measurement: `v -shared -cc gcc` writes the PE image name
+  as `out.exe`, so Windows always links through an import library built
+  from `clib/blip.def` (`dlltool` for MinGW, `lib /def` for MSVC); MSVC
+  output has no such quirk. Returning V string memory to `free` corrupts
+  the heap at exit -- hence the `malloc`+`memcpy` out-copy.
+- Gates: the C smoke on both OSes in `clib.yml`; guide in `docs/c-lib.md`,
+  V-side in `docs/embedding.md`.
+
 ### Runtime value provenance
 
 - Values retain source filenames, line/column positions and byte spans through
@@ -13,6 +41,7 @@ lives in `docs/010-roadmap.md`; this file is the record.
   `Value.source_location()` API for V hosts. Named reader input and generated
   syntax keep filenames stable across later evaluations.
 - Gate: `tests/provenance.v`, now included in CI.
+
 
 ### Scheme compatibility: named let, make-vector, equal?
 

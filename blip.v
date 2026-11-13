@@ -12,6 +12,7 @@ import vlib.blip.machine
 import vlib.blip.printer
 import vlib.blip.reader
 import vlib.blip.repl
+import strings
 
 // blip: a Lisp dialect implemented in V.
 //
@@ -168,14 +169,17 @@ Prints the version and the compiler it was built with.')
 //
 // It is loaded into the same machine as the program, so a program can rebind any
 // of it and the change is visible to a later file.
-fn std_path() string {
+// resource_path finds a file shipped beside the binary: the standard library
+// or a program. Both live next to the executable (`lib/std.lip`,
+// `programs/<name>`), with one directory up as the fallback for running from
+// source layouts. One helper, not two copies of the same probe.
+fn resource_path(rel string) string {
 	$if wasm32 {
-		return 'lib/std.lip'
+		return rel
 	} $else {
 		exe := os.executable()
 		dir := os.dir(exe)
-		for candidate in [os.join_path(dir, 'lib${os.path_separator}std.lip'),
-			os.join_path(os.dir(dir), 'lib${os.path_separator}std.lip')] {
+		for candidate in [os.join_path(dir, rel), os.join_path(os.dir(dir), rel)] {
 			if os.exists(candidate) {
 				return candidate
 			}
@@ -184,20 +188,21 @@ fn std_path() string {
 	}
 }
 
+// std_path is the standard library, loaded before every program.
+//
+// A language with a prelude is a language where print and string-upcase are names
+// rather than something every file has to require first. The examples assume it:
+// a call to parse-in is a call, and making every reader scroll past a require for
+// it would be the wrong default.
+//
+// It is loaded into the same machine as the program, so a program can rebind any
+// of it and the change is visible to a later file.
+fn std_path() string {
+	return resource_path('lib${os.path_separator}std.lip')
+}
+
 fn programs_path(name string) string {
-	$if wasm32 {
-		return 'programs/' + name
-	} $else {
-		exe := os.executable()
-		dir := os.dir(exe)
-		for candidate in [os.join_path(dir, 'programs${os.path_separator}${name}'),
-			os.join_path(os.dir(dir), 'programs${os.path_separator}${name}')] {
-			if os.exists(candidate) {
-				return candidate
-			}
-		}
-		return ''
-	}
+	return resource_path('programs${os.path_separator}${name}')
 }
 
 fn run_files(paths []string) int {
@@ -246,13 +251,8 @@ fn emit_js(paths []string) int {
 	} $else {
 		mut code := 0
 		for path in paths {
-			src := os.read_file(path) or {
-				eprintln('blip: cannot read ${path}')
-				code = 1
-				continue
-			}
-			res := emit.compile_program(src) or {
-				eprintln('blip: ${path}: ${err.msg()}')
+			res := compile_one(path) or {
+				eprintln(err.msg())
 				code = 1
 				continue
 			}
@@ -325,26 +325,7 @@ fn main() {
 			'lsp' {
 				lsp.serve()
 			}
-			'lint' {
-				mut file := 'COMMIT_EDITMSG'
-				if args.len >= 2 {
-					file = args[1]
-				}
-				if !os.exists(file) {
-					eprintln('blip: cannot read ${file}')
-					exit_code(2)
-					return
-				}
-				os.setenv('BLIP_LINT_FILE', file, true)
-				prog := programs_path('lint_commit.lip')
-				if prog == '' {
-					eprintln('blip: cannot find programs/lint_commit.lip')
-					exit_code(2)
-					return
-				}
-				exit_code(run_files([prog]))
-			}
-			'vet' {
+			'lint', 'vet' {
 				mut file := 'COMMIT_EDITMSG'
 				if args.len >= 2 {
 					file = args[1]
@@ -774,14 +755,15 @@ fn fmt_file(path string, write bool) int {
 			eprintln('${path}:${d.line}:${d.col}: ${d.msg}')
 			return 1
 		}
-		mut out := ''
+		mut sb := strings.new_builder(res.forms.len * 64)
 		for i, id in res.forms {
 			if i > 0 {
-				out += '\n\n'
+				sb.write_string('\n\n')
 			}
-			out += pp_form(res.arena, id, 0)
+			sb.write_string(printer.pp_form(res.arena, id, 0))
 		}
-		out += '\n'
+		sb.write_string('\n')
+		out := sb.str()
 		if write {
 			os.write_file(path, out) or {
 				eprintln('blip: cannot write ${path}: ${err.msg()}')
@@ -794,137 +776,20 @@ fn fmt_file(path string, write bool) int {
 	}
 }
 
-fn pp_form(a &reader.Arena, id reader.NodeId, depth int) string {
-	d := a.node(id)
-	match d.tag {
-		.nil { return 'nil' }
-		.bool { return if d.i == 1 { '#t' } else { '#f' } }
-		.int { return d.i.str() }
-		.float { return d.f.str() }
-		.str { return quote_string(d.value) }
-		.sym { return d.value }
-		.kw { return ':' + d.value }
-		.list {
-			kids := a.kids(id)
-			if kids.len == 0 {
-				return '()'
-			}
-			mut parts := []string{}
-			mut ki := 0
-			for ki < kids.len {
-				parts << pp_form(a, kids[ki], depth + 1)
-				ki++
-			}
-			line := '(' + parts.join(' ') + ')'
-			if line.len <= 80 {
-				return line
-			}
-			mut s := '('
-			for i, p in parts {
-				if i == 0 {
-					s += p
-				} else {
-					s += '\n' + '  '.repeat(depth + 1) + p
-				}
-			}
-			s += ')'
-			return s
-		}
-		.vector {
-			kids := a.kids(id)
-			mut parts := []string{}
-			mut ki := 0
-			for ki < kids.len {
-				parts << pp_form(a, kids[ki], depth + 1)
-				ki++
-			}
-			return '[' + parts.join(' ') + ']'
-		}
-		.table {
-			kids := a.kids(id)
-			mut parts := []string{}
-			mut ki := 0
-			for ki < kids.len {
-				parts << pp_form(a, kids[ki], depth + 1) + ' ' + pp_form(a, kids[ki + 1], depth + 1)
-				ki += 2
-			}
-			return '{' + parts.join(' ') + '}'
-		}
-		.array {
-			kids := a.kids(id)
-			mut parts := []string{}
-			mut ki := 0
-			for ki < kids.len {
-				parts << pp_form(a, kids[ki], depth + 1)
-				ki++
-			}
-			return '@[' + parts.join(' ') + ']'
-		}
-		.bytes {
-			kids := a.kids(id)
-			mut parts := []string{}
-			mut ki := 0
-			for ki < kids.len {
-				parts << pp_form(a, kids[ki], depth + 1)
-				ki++
-			}
-			return '#(' + parts.join(' ') + ')'
-		}
-		.quoted {
-			kids := a.kids(id)
-			if kids.len == 0 {
-				return "'()"
-			}
-			return "'" + pp_form(a, kids[0], depth)
-		}
-		.quasi {
-			kids := a.kids(id)
-			if kids.len == 0 {
-				return '`()'
-			}
-			return '`' + pp_form(a, kids[0], depth)
-		}
-		.unquote {
-			kids := a.kids(id)
-			if kids.len == 0 {
-				return ',()'
-			}
-			return ',' + pp_form(a, kids[0], depth)
-		}
-		.unquote_splice {
-			kids := a.kids(id)
-			if kids.len == 0 {
-				return ',@()'
-			}
-			return ',@' + pp_form(a, kids[0], depth)
-		}
-		else {
-			return '#<datum>'
-		}
-	}
-}
-
-fn quote_string(s string) string {
-	mut sb := '"'
-	for ch in s.runes() {
-		match ch {
-			`"` { sb += '\\"' }
-			`\\` { sb += '\\\\' }
-			`\n` { sb += '\\n' }
-			`\r` { sb += '\\r' }
-			`\t` { sb += '\\t' }
-			else { sb += ch.str() }
-		}
-	}
-	sb += '"'
-	return sb
-}
-
 // ---- doc -----------------------------------------------------------------
 
 // doc_file extracts `;;` doc comments preceding definitions and prints them
 // as Markdown.
 // ---- build ---------------------------------------------------------------
+
+// compile_one reads one file and returns its compilation result. The refusal
+// rule lives with the caller: `build` treats a blocked form as a hard error,
+// while `emit-js` prints the partial module and reports the refusal alongside
+// it, so a refusal is visible rather than a silent `undefined`.
+fn compile_one(path string) !emit.Result {
+	src := os.read_file(path) or { return error('blip: cannot read ${path}') }
+	return emit.compile_program(src) or { return error('blip: ${path}: ${err.msg()}') }
+}
 
 // build_file compiles a blip program to a JavaScript module and writes it
 // to out. This is the first half of `blip build`: a single self-contained
@@ -934,12 +799,8 @@ fn build_file(input string, out string) int {
 		println('blip: build not available in wasm build')
 		return 1
 	} $else {
-		src := os.read_file(input) or {
-			eprintln('blip: cannot read ${input}: ${err.msg()}')
-			return 1
-		}
-		res := emit.compile_program(src) or {
-			eprintln('blip: ${input}: ${err.msg()}')
+		res := compile_one(input) or {
+			eprintln(err.msg())
 			return 1
 		}
 		if res.blocked.len > 0 {

@@ -575,6 +575,11 @@ pub mut:
 pub struct EnvArena {
 pub mut:
 	frames []Env
+	// version bumps on every define/set, so a single-entry lookup cache can
+	// validate with one integer compare instead of re-walking the chain.
+	// It wraps on overflow; a wrap only causes a spurious miss, never a
+	// wrong hit, because the cached generation must match exactly.
+	version u64
 }
 
 pub fn (mut ea EnvArena) new_env(parent EnvId) EnvId {
@@ -596,6 +601,7 @@ pub fn (ea &EnvArena) get(id EnvId) &Env {
 
 pub fn (mut ea EnvArena) define(id EnvId, name string, val Value) {
 	mut frame := ea.get(id)
+	ea.version++
 	if name in frame.index {
 		idx := frame.index[name]
 		frame.vals[idx] = val
@@ -628,6 +634,7 @@ pub fn (mut ea EnvArena) set(id EnvId, name string, val Value) bool {
 		if name in frame.index {
 			idx := frame.index[name]
 			frame.vals[idx] = val
+			ea.version++
 			return true
 		}
 		cur = frame.parent
