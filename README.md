@@ -192,7 +192,7 @@ Findings 1 and 2 are worth reporting upstream to the V project.
 | M7 | standard library written in blip — **done, growing** (`lib/std.lip`) |
 | M8 | ergonomics: `match`, `match*`, `use`, pipes, labelled args, `Result`, opaque types — **done** (gate program: `programs/json.lip`, macro-free) |
 | M9 | tooling: REPL, span-carrying errors, formatter — **done** (`assert` as doc-tests is not implemented) |
-| M10 | contracts and optional erased annotations — open |
+| M10 | contracts and optional erased annotations — **done** (`define/contract` + `->/c` checked at call time, `(x Type)` annotations erased, `blip check` reports mismatches; gate: `tests/contracts.v`) |
 
 The embedding plan, the REPL design, the example programs worth writing, and the
 veb-backed final phase are in `docs/010-roadmap.md`. The ordering there differs

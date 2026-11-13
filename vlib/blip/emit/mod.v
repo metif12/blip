@@ -3,7 +3,6 @@ module emit
 $if !wasm32 {
 	import os
 }
-
 import blip
 import blip.host
 import blip.machine
@@ -133,9 +132,7 @@ $if wasm32 {
 	}
 } $else {
 	pub fn compile_file(path string) !Result {
-		src := os.read_file(path) or {
-			return error('cannot read ${path}: ${err.msg()}')
-		}
+		src := os.read_file(path) or { return error('cannot read ${path}: ${err.msg()}') }
 		std_src := os.read_file('lib/std.lip') or {
 			return error('cannot read lib/std.lip: ${err.msg()}')
 		}
@@ -263,7 +260,7 @@ fn (mut e Emitter) remember(id reader.NodeId) {
 	if head.tag != .sym {
 		return
 	}
-	if head.value != 'define' && head.value != 'def' {
+	if head.value != 'define' && head.value != 'def' && head.value != 'define/contract' {
 		return
 	}
 	sig := e.node(kids[1])
@@ -293,7 +290,8 @@ fn (mut e Emitter) form(id reader.NodeId) {
 			field := e.mangle_name(head.value[dot + 1..])
 			if kids.len == 3 {
 				marker := e.node(kids[1])
-				if (marker.tag == .kw && marker.value == '=') || (marker.tag == .sym && marker.value == ':=') {
+				if (marker.tag == .kw && marker.value == '=')
+					|| (marker.tag == .sym && marker.value == ':=') {
 					val := e.value(kids[2])
 					e.emit('${base} = Object.assign({}, ${base}, { ${field}: ${val} });')
 					return
@@ -343,6 +341,14 @@ fn (mut e Emitter) special(name string, id reader.NodeId, kids []reader.NodeId) 
 	}
 	if name == 'define' || name == 'def' {
 		e.emit_define(kids)
+		return true
+	}
+	if name == 'define/contract' {
+		// Contracts are a machine-evaluated desugar, not emittable JS: the
+		// checks run through `assert`, whose failure is a machine error, and
+		// silently dropping them would ship an unchecked program. Refuse
+		// loudly instead of emitting something weaker than the source.
+		e.refuse('define/contract')
 		return true
 	}
 	if name == 'lambda' || name == 'fn' {
@@ -525,8 +531,14 @@ fn (mut e Emitter) emit_define(kids []reader.NodeId) {
 			return
 		}
 		// (define (name p1 p2 ...) body...). The signature's head is the name;
-		// everything after it is parameters.
-		e.named_function(e.node(inner[0]).value, inner[1..], kids[2..])
+		// everything after it is parameters. A known type name in first body
+		// position with more forms after it is the erased return annotation
+		// (same rule as the machine); it is skipped, not emitted.
+		mut body_at := 2
+		if kids.len > 3 && e.node(kids[2]).tag == .sym && blip.is_type_name(e.node(kids[2]).value) {
+			body_at = 3
+		}
+		e.named_function(e.node(inner[0]).value, inner[1..], kids[body_at..])
 		return
 	}
 	if sig.tag == .sym {
@@ -561,6 +573,19 @@ fn (mut e Emitter) named_function(name string, params []reader.NodeId, body []re
 	for pi := 0; pi < params.len; pi++ {
 		p := params[pi]
 		d := e.node(p)
+		if d.tag == .list {
+			// An erased annotation, `(name Type)`, emits as the bare name:
+			// the type is for `blip check`, and running the program --
+			// here or in the machine -- never sees it.
+			akids := e.kids(p)
+			if akids.len == 2 && e.node(akids[0]).tag == .sym && e.node(akids[1]).tag == .sym
+				&& blip.is_type_name(e.node(akids[1]).value) {
+				ps << e.mangle_name(e.node(akids[0]).value)
+				param_names << e.node(akids[0]).value
+				arg++
+				continue
+			}
+		}
 		if d.tag == .kw {
 			// The default lives in the NEXT form, `[binding default]`, and that form
 			// is part of this parameter -- not another one. Iterating with an index is
@@ -885,7 +910,8 @@ fn (mut e Emitter) emit_struct(kids []reader.NodeId) {
 	e.emit('return { blip_struct: "${name}", ${mangled_list} };')
 	e.depth--
 	e.emit('}')
-	e.emit('function ' + e.mangle_name(low + '?') + '(v) { return !!v && v.blip_struct === "' + name + '"; }')
+	e.emit('function ' + e.mangle_name(low + '?') + '(v) { return !!v && v.blip_struct === "' +
+		name + '"; }')
 	for f in field_names {
 		e.emit('function ${e.mangle_name('${low}-${f}')}(v) { return v.${e.mangle_name(f)}; }')
 	}
@@ -908,10 +934,18 @@ fn (mut e Emitter) value(id reader.NodeId) string {
 	}
 	d := e.node(id)
 	match d.tag {
-		.nil { return 'null' }
-		.bool { return if d.i == 1 { 'true' } else { 'false' } }
-		.int { return d.i.str() }
-		.float { return d.f.str() }
+		.nil {
+			return 'null'
+		}
+		.bool {
+			return if d.i == 1 { 'true' } else { 'false' }
+		}
+		.int {
+			return d.i.str()
+		}
+		.float {
+			return d.f.str()
+		}
 		.rat {
 			// A rational is not a JavaScript number. It is built as a tagged pair
 			// the runtime knows how to print, because `1/3` must print as `1/3`
@@ -920,8 +954,12 @@ fn (mut e Emitter) value(id reader.NodeId) string {
 			// on the very value the numeric tower exists for.
 			return 'blip.rat(${d.i}, ${d.den})'
 		}
-		.char { return '"${escape(rune(d.i))}"' }
-		.str { return '"${escape_all(d.value)}"' }
+		.char {
+			return '"${escape(rune(d.i))}"'
+		}
+		.str {
+			return '"${escape_all(d.value)}"'
+		}
 		.sym {
 			if d.value.contains('.') {
 				dot := d.value.last_index('.') or { return 'null' }
@@ -937,7 +975,9 @@ fn (mut e Emitter) value(id reader.NodeId) string {
 		// until a keyword appeared in a table VALUE and printed as `"dog"` where
 		// blip prints `:dog`. Lookups normalise the key, so `blip.get(t, :a)` and
 		// `blip.get(t, "a")` reach the same entry.
-		.kw { return 'blip.kw("${escape_all(d.value)}")' }
+		.kw {
+			return 'blip.kw("${escape_all(d.value)}")'
+		}
 		.list {
 			return e.application(id, kids_of(e, id))
 		}
@@ -1433,7 +1473,8 @@ fn (mut e Emitter) use_expr(kids []reader.NodeId) string {
 	decls << 'const __blip_use${e.gensym}i = unvec(__blip_use${e.gensym});'
 	decls << 'let ${slot} = __blip_use${e.gensym}i.length > 1 ? __blip_use${e.gensym}i[1] : null;'
 	for i in 0 .. use_arity_max {
-		decls << 'let r${i + 1} = __blip_use${e.gensym}i.length > ${i + 1} ? __blip_use${e.gensym}i[${i + 1}] : null;'
+		decls << 'let r${i + 1} = __blip_use${e.gensym}i.length > ${i + 1} ? __blip_use${e.gensym}i[${
+			i + 1}] : null;'
 	}
 	decls << 'return ${body};'
 	return '(() => {\n${decls.join('\n')}\n})()'
@@ -1691,7 +1732,8 @@ fn (mut e Emitter) application(id reader.NodeId, kids []reader.NodeId) string {
 			field := e.mangle_name(head.value[dot + 1..])
 			if kids.len == 3 {
 				marker := e.node(kids[1])
-				if (marker.tag == .kw && marker.value == '=') || (marker.tag == .sym && marker.value == ':=') {
+				if (marker.tag == .kw && marker.value == '=')
+					|| (marker.tag == .sym && marker.value == ':=') {
 					val := e.value(kids[2])
 					return 'Object.assign({}, ${base}, { ${field}: ${val} })'
 				}
@@ -1891,8 +1933,8 @@ fn (mut e Emitter) defined_identifier_arg(id reader.NodeId) ?string {
 	}
 	if d.tag == .list {
 		kids := e.kids(id)
-		if kids.len == 2 && e.node(kids[0]).tag == .sym
-			&& e.node(kids[0]).value == 'quote' && e.node(kids[1]).tag == .sym {
+		if kids.len == 2 && e.node(kids[0]).tag == .sym && e.node(kids[0]).value == 'quote'
+			&& e.node(kids[1]).tag == .sym {
 			return e.symbol(e.node(kids[1]).value)
 		}
 	}

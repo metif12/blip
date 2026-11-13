@@ -4,6 +4,21 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### M10: contracts, erased annotations, `blip check`
+
+- `(define/contract (halve x) (->/c even?) (/ x 2))` checks its arguments
+  on every call (and its result when a trailing contract is given), desugared
+  to `assert`, so a violation is an ordinary machine error. Gate:
+  `tests/contracts.v` (28 checks: domain/range violations, define-time
+  shape errors, tail-call preservation, erasure).
+- `(define (add (x int) (y int)) int ...)` annotates without checking at run
+  time: the machine erases every annotation, and `blip check` reports the
+  mismatches (arity, literal argument types, declared return) without
+  evaluating anything. Unknown names are never errors. Zero false
+  positives across all examples, the prelude, and both proof programs.
+- The emitter erases annotations and refuses `define/contract` loudly
+  rather than emitting an unchecked program.
+
 ### Unpinned: blip builds on stock V 0.5.2
 
 - No `V_COMMIT`/`VC_COMMIT` anywhere. The toolchain is the official 0.5.2

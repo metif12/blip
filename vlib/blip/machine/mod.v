@@ -28,7 +28,6 @@ module machine
 $if !wasm32 {
 	import os
 }
-
 import strconv
 import blip
 import blip.host
@@ -535,8 +534,8 @@ fn (mut m Machine) eval_symbol(name string) ! {
 		}
 		else {}
 	}
-	if m.cache_ok && m.env == m.cache_env && name == m.cache_name
-		&& m.cache_gen == m.envs.version {
+
+	if m.cache_ok && m.env == m.cache_env && name == m.cache_name && m.cache_gen == m.envs.version {
 		m.val = m.cache_val
 		m.ret()
 		return
@@ -580,11 +579,10 @@ fn machine_builtin(name string) bool {
 	// Match is O(1) dispatch and allocates nothing, unlike `name in [...]`,
 	// which built a fresh array on every call. This runs on every symbol lookup.
 	match name {
-		'apply', 'error', 'raise', 'format', 'gensym', 'print', 'display', 'echo',
-		'veb-route', 'yield', 'read-line', 'map', 'filter', 'reject', 'keep',
-		'fold', 'reduce', 'for-each', 'vector-map', 'any?', 'every?', 'sort-by',
-		'ok', 'err', 'ok?', 'err?', 'ok-value', 'err-value', 'map-result',
-		'unwrap-or', 'try-result', 'lazy-unwrap', 'lazy-map-result',
+		'apply', 'error', 'raise', 'format', 'gensym', 'print', 'display', 'echo', 'veb-route',
+		'yield', 'read-line', 'map', 'filter', 'reject', 'keep', 'fold', 'reduce', 'for-each',
+		'vector-map', 'any?', 'every?', 'sort-by', 'ok', 'err', 'ok?', 'err?', 'ok-value',
+		'err-value', 'map-result', 'unwrap-or', 'try-result', 'lazy-unwrap', 'lazy-map-result',
 		'flatten-result', 'all-results' {
 			return true
 		}
@@ -620,16 +618,13 @@ fn (mut m Machine) hof(name string, args []blip.Value) ! {
 	}
 	f := args[0]
 	src := args[1]
-	items := prims.seq(src) or {
-		return error('${name}: ${err.msg()}')
-	}
+	items := prims.seq(src) or { return error('${name}: ${err.msg()}') }
 	// The container comes from the INPUT, not the name. `vector-map` is a name
 	// that says "map, and give me a vector", and it used to be the only way to
 	// get one: `(map f [1 2 3])` answered `(1 4 9)`, a list, so the caller had
 	// to know to spell the function differently to keep the type they passed in.
 	// Reading `src.tag` costs nothing and makes map over a vector give a vector.
-	want_vector := src.tag == .vector || src.tag == .array
-		|| name == 'vector-map'
+	want_vector := src.tag == .vector || src.tag == .array || name == 'vector-map'
 	keep := name in ['filter', 'keep']
 	drop := name == 'reject'
 	mut out := []blip.Value{}
@@ -671,9 +666,7 @@ fn (mut m Machine) hof(name string, args []blip.Value) ! {
 // matters and is a whole extra function in every Lisp that has both.
 fn (mut m Machine) fold(name string, args []blip.Value) ! {
 	if name == 'reduce' && args.len == 2 {
-		items := prims.seq(args[1]) or {
-			return error('reduce: ${err.msg()}')
-		}
+		items := prims.seq(args[1]) or { return error('reduce: ${err.msg()}') }
 		if items.len == 0 {
 			return error('reduce: the sequence is empty, so there is nothing to start from')
 		}
@@ -692,9 +685,7 @@ fn (mut m Machine) fold(name string, args []blip.Value) ! {
 		return error('${name} expects at least 3 arguments, got ${args.len}')
 	}
 	mut acc := args[1]
-	items := prims.seq(args[2]) or {
-		return error('${name}: ${err.msg()}')
-	}
+	items := prims.seq(args[2]) or { return error('${name}: ${err.msg()}') }
 	mut call := []blip.Value{cap: 2}
 	mut i := 0
 	for i < items.len {
@@ -712,9 +703,7 @@ fn (mut m Machine) any_every(name string, args []blip.Value) ! {
 	if args.len < 2 {
 		return error('${name} expects 2 arguments, got ${args.len}')
 	}
-	items := prims.seq(args[1]) or {
-		return error('${name}: ${err.msg()}')
-	}
+	items := prims.seq(args[1]) or { return error('${name}: ${err.msg()}') }
 	mut one := []blip.Value{cap: 1}
 	mut i := 0
 	for i < items.len {
@@ -744,9 +733,7 @@ fn (mut m Machine) sort_by(args []blip.Value) ! {
 	if args.len != 2 {
 		return error('sort-by expects 2 arguments, got ${args.len}')
 	}
-	items := prims.seq(args[1]) or {
-		return error('sort-by: ${err.msg()}')
-	}
+	items := prims.seq(args[1]) or { return error('sort-by: ${err.msg()}') }
 	mut keys := []blip.Value{}
 	mut one := []blip.Value{cap: 1}
 	mut i := 0
@@ -930,9 +917,7 @@ fn (m &Machine) is_update_marker(n blip.NodeId) bool {
 // and the reader produces that shape for it; `(mk).y := 1` is a different shape,
 // and is not supported. Saying so here beats accepting half of it.
 fn (mut m Machine) eval_field_update(what string, value_node blip.NodeId) ! {
-	dot := what.last_index('.') or {
-		return error('${what} is not a field update')
-	}
+	dot := what.last_index('.') or { return error('${what} is not a field update') }
 	base_name := what[..dot]
 	field := what[dot + 1..]
 	base := m.envs.lookup(m.env, base_name) or {
@@ -948,9 +933,7 @@ fn (mut m Machine) eval_field_update(what string, value_node blip.NodeId) ! {
 }
 
 fn (mut m Machine) eval_field_access(what string) ! {
-	dot := what.last_index('.') or {
-		return error('${what} is not a field access')
-	}
+	dot := what.last_index('.') or { return error('${what} is not a field access') }
 	base_name := what[..dot]
 	field := what[dot + 1..]
 	if v := m.envs.lookup(m.env, base_name) {
@@ -1214,7 +1197,9 @@ fn (mut m Machine) step_return() !bool {
 			if k.slot == -4 {
 				// `#:finally` on the way out of a raise with no catch clause. The
 				// message rode through val2 as a plain string.
-				val2s := m.val2.as_string() or { panic('unreachable: val2 carries the raise message as a string') }
+				val2s := m.val2.as_string() or {
+					panic('unreachable: val2 carries the raise message as a string')
+				}
 				return error('raised: ${val2s}')
 			}
 			next := k.slot + 1
@@ -1266,6 +1251,7 @@ fn (mut m Machine) step_return() !bool {
 			return error('machine: unexpected continuation ${k.tag}')
 		}
 	}
+
 	return true
 }
 
@@ -1373,7 +1359,8 @@ fn (mut m Machine) call_closure(c &blip.Closure, args []blip.Value) ! {
 			m.envs.define(frame, c.params[i], use_args[i])
 			i++
 		}
-		m.envs.define(frame, c.rest_name, blip.list_from(use_args[c.arity..]).with_tree_origin(m.form_origin()))
+		m.envs.define(frame, c.rest_name,
+			blip.list_from(use_args[c.arity..]).with_tree_origin(m.form_origin()))
 		m.env = frame
 		m.goto(c.body)
 		return
@@ -1785,9 +1772,7 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 			if !is_result_of(args[0], kind) {
 				return error('${name}: ${printer.write(args[0])} is not a (${kind} ...), it is a ${kind_of(args[0])}')
 			}
-			rest := prims.seq(args[0]) or {
-				return error('${name}: ${err.msg()}')
-			}
+			rest := prims.seq(args[0]) or { return error('${name}: ${err.msg()}') }
 			mut i := 1
 			if i < rest.len {
 				m.val = rest[i]
@@ -1821,9 +1806,7 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 			// itself: the code kept the outer `ok` and handed the inner value
 			// straight through, so one level was peeled and then put back.
 			if is_result_of(args[0], 'ok') {
-				rest := prims.seq(args[0]) or {
-					return error('flatten-result: ${err.msg()}')
-				}
+				rest := prims.seq(args[0]) or { return error('flatten-result: ${err.msg()}') }
 				if rest.len > 1 {
 					inner := rest[1]
 					if is_result_of(inner, 'ok') || is_result_of(inner, 'err') {
@@ -1863,24 +1846,19 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 		}
 		else {}
 	}
+
 	if g := m.ctx_prims[name] {
-		res := g(mut m, args) or {
-			return error('${name}: ${err.msg()}')
-		}
+		res := g(mut m, args) or { return error('${name}: ${err.msg()}') }
 		m.val = res
 		m.ret()
 		return
 	}
-	f := m.prims[name] or {
-		return error('unknown primitive: ${name}')
-	}
+	f := m.prims[name] or { return error('unknown primitive: ${name}') }
 	mut call_args := []blip.Value{}
 	for a in args {
 		call_args << a
 	}
-	res := f(call_args) or {
-		return error('${name}: ${err.msg()}')
-	}
+	res := f(call_args) or { return error('${name}: ${err.msg()}') }
 	m.val = res
 	m.ret()
 }
@@ -1889,11 +1867,11 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 
 pub fn special_form(name string) bool {
 	match name {
-		'quote', 'if', 'define', 'set!', 'lambda', 'fn', 'begin', 'let', 'let*',
-		'letrec', 'and', 'or', 'when', 'unless', 'cond', 'case', 'loop', 'dotimes',
-		'use', 'match', 'match*', 'import', 'struct', 'struct-out', 'provide',
-		'require', 'let-assert', 'do', 'time', 'assert', '->', '->>', '|>', 'as->',
-		'cond->', 'def', 'defmacro', 'try', 'macex', 'macex1', 'defined?' {
+		'quote', 'if', 'define', 'set!', 'lambda', 'fn', 'begin', 'let', 'let*', 'letrec', 'and',
+		'or', 'when', 'unless', 'cond', 'case', 'loop', 'dotimes', 'use', 'match', 'match*',
+		'import', 'struct', 'struct-out', 'provide', 'require', 'let-assert', 'do', 'time',
+		'assert', '->', '->>', '|>', 'as->', 'cond->', 'def', 'defmacro', 'define/contract', 'try',
+		'macex', 'macex1', 'defined?' {
 			return true
 		}
 		else {
@@ -1928,6 +1906,9 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 		}
 		'define' {
 			return m.eval_define(kids)
+		}
+		'define/contract' {
+			return m.eval_define_contract(kids)
 		}
 		'def' {
 			// `def` is `define`. The examples use it to mean "introduce a name",
@@ -1983,7 +1964,8 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 			if kids.len < 2 {
 				return error('fn needs a parameter list: (fn [x] body)')
 			}
-			return m.eval_lambda([kids[0], m.make_begin(kids[1..2]), m.make_begin(kids[2..])])
+			return m.eval_lambda([kids[0], m.make_begin(kids[1..2]),
+				m.make_begin(kids[2..])])
 		}
 		'begin' {
 			if kids.len == 1 {
@@ -2300,13 +2282,108 @@ fn (mut m Machine) eval_define(kids []blip.NodeId) ! {
 		spec := m.parse_params(sig[1..], fname)!
 		// The body is the forms AFTER the (name . params) signature, so it is
 		// kids[2..] -- not sig[1..], which is the parameter list.
-		body := m.apply_destructures(spec, m.make_begin(kids[2..]))
+		//
+		// A known type name in first body position with more forms after it
+		// is the erased return annotation: `(define (add (x int)) int ...)`.
+		// A bare symbol there with nothing after it is still the body --
+		// `(define (id x) x)` -- and an unknown name is still a body form,
+		// so an ordinary first form is never misread as a type.
+		mut body_at := 2
+		if kids.len > 3 && m.arena.node(kids[2]).tag == .sym
+			&& blip.is_type_name(m.arena.node(kids[2]).value) {
+			body_at = 3
+		}
+		body := m.apply_destructures(spec, m.make_begin(kids[body_at..]))
 		m.envs.define(m.env, fname, m.make_closure(spec, body, m.env, fname))
 		m.val = blip.symbol(fname)
 		m.ret()
 		return
 	}
 	return error('define needs a name or a (name . params) list')
+}
+
+// eval_define_contract evaluates `(define/contract (name args...) (->/c cs...)
+// body...)`: a define whose arguments (and optionally result) are checked on
+// every call. Racket-style, desugared rather than interpreted: the contract
+// clause becomes `assert` forms at the top of the body (and, for a result
+// contract, a `let` that binds the body's value, checks it, and returns it),
+// and the rewritten form goes through the ordinary define path. Checking is
+// therefore call-time evaluation like everything else -- a violation is an
+// ordinary machine error naming the contract, never a dead process -- and
+// tail calls survive exactly when no result contract wraps the body: leading
+// asserts are non-tail prefix forms, while the result `let` is not.
+//
+// `(->/c c1 ... cn)` with n contracts over m parameters reads: n == m is
+// domain-only, n == m+1 adds the last as the range. Anything else is a
+// define-time error rather than a guessing game. Only simple parameter
+// names contract: a destructured, rest, or labelled parameter has no single
+// name to check, so those are refused up front with their reason attached.
+fn (mut m Machine) eval_define_contract(kids []blip.NodeId) ! {
+	if kids.len < 4 {
+		return error('define/contract needs a signature, a (->/c ...) clause and a body: (define/contract (f x) (->/c even?) ...)')
+	}
+	sig_node := m.arena.node(kids[1])
+	if sig_node.tag != .list {
+		return error('define/contract needs a (name params) list to contract')
+	}
+	sig := m.arena.kids(kids[1])
+	if sig.len == 0 || m.arena.node(sig[0]).tag != .sym {
+		return error('define/contract needs a name')
+	}
+	fname := m.arena.node(sig[0]).value
+	spec := m.parse_params(sig[1..], fname)!
+	if spec.is_rest || spec.opt_from >= 0 || spec.destructures.len > 0 {
+		return error('${fname}: contracts need simple parameter names (no rest, labelled, or destructured parameters)')
+	}
+	clause := m.arena.node(kids[2])
+	if clause.tag != .list {
+		return error('${fname}: define/contract needs a (->/c ...) contract clause')
+	}
+	ckids := m.arena.kids(kids[2])
+	if ckids.len == 0 || m.arena.node(ckids[0]).tag != .sym
+		|| m.arena.node(ckids[0]).value != '->/c' {
+		return error('${fname}: define/contract needs a (->/c ...) contract clause')
+	}
+	contracts := ckids[1..]
+	mut domain := contracts.clone()
+	mut has_range := false
+	if contracts.len == spec.names.len + 1 {
+		has_range = true
+		domain = contracts[..contracts.len - 1]
+	} else if contracts.len != spec.names.len {
+		return error('${fname}: ->/c has ${contracts.len} contracts for ${spec.names.len} parameters (one per argument, plus one for the result)')
+	}
+	mut newbody := []blip.NodeId{}
+	mut ci := 0
+	for ci < domain.len {
+		arg := m.sym_node(spec.names[ci])
+		test := m.call_node(contracts[ci], [arg])
+		msg :=
+			m.string_node('${fname}: contract violated: expected (${m.render_node(contracts[ci])} ${spec.names[ci]})')
+		newbody << m.call_node(m.sym_node('assert'), [test, msg])
+		ci++
+	}
+	origbody := kids[3..]
+	if has_range {
+		tmp := m.sym_node(m.fresh('contract'))
+		test := m.call_node(contracts[contracts.len - 1], [tmp])
+		msg :=
+			m.string_node('${fname}: contract violated: result failed ${m.render_node(contracts[contracts.len - 1])}')
+		chk := m.call_node(m.sym_node('assert'), [test, msg])
+		bind := m.list_of([tmp, m.make_begin(origbody)])
+		newbody << m.node_of('let', [m.list_of([bind]), chk, tmp])
+	} else {
+		for b in origbody {
+			newbody << b
+		}
+	}
+	mut rewritten := []blip.NodeId{}
+	rewritten << kids[0]
+	rewritten << kids[1]
+	for b in newbody {
+		rewritten << b
+	}
+	return m.eval_define(rewritten)
 }
 
 // eval_defined answers `(defined? name)`: whether the machine would resolve
@@ -2440,6 +2517,24 @@ pub const no_default = blip.NodeId(-2)
 // ordinary parameters, so `(define (f a . r) r)` had arity 3 and `(f 1 2 3)`
 // bound `r` to `3`. That is the "rest parameters return 3" bug, and it was a
 // parsing failure rather than a binding failure.
+// is_erased_annotation reports whether `id` reads as an erased parameter
+// annotation: a two-element list of symbols whose second names a type.
+// `(x int)` binds `x`; `({:kind k} who)` and `(struct P ...)` do not read
+// this way no matter what their second element happens to spell.
+fn (m &Machine) is_erased_annotation(id blip.NodeId) bool {
+	if m.arena.node(id).tag != .list {
+		return false
+	}
+	kids := m.arena.kids(id)
+	if kids.len != 2 {
+		return false
+	}
+	if m.arena.node(kids[0]).tag != .sym || m.arena.node(kids[1]).tag != .sym {
+		return false
+	}
+	return blip.is_type_name(m.arena.node(kids[1]).value)
+}
+
 pub fn (mut m Machine) parse_params(plist []blip.NodeId, who string) !ParamSpec {
 	mut spec := ParamSpec{
 		names:        []string{}
@@ -2449,6 +2544,27 @@ pub fn (mut m Machine) parse_params(plist []blip.NodeId, who string) !ParamSpec 
 	mut i := 0
 	for i < plist.len {
 		part := m.arena.node(plist[i])
+		if part.tag == .list && m.is_erased_annotation(plist[i]) {
+			// An erased annotation, `(name Type)`. It binds `name` exactly
+			// as a bare symbol would; the type is for `blip check`, and
+			// running the program never sees it.
+			//
+			// Only a two-symbol list whose second name is a known type
+			// reads this way. Anything else parenthesised is still a
+			// destructuring pattern, which is why this arm comes first:
+			// a pattern that binds a variable called `int` would be
+			// absurd, and an annotation that misspells its type falls
+			// through to the pattern error below rather than silently
+			// binding under a wrong understanding.
+			an := m.arena.kids(plist[i])
+			nm := m.arena.node(an[0]).value
+			if nm in spec.names {
+				return error('${who}: parameter ${nm} is named twice')
+			}
+			spec.names << nm
+			i++
+			continue
+		}
 		if part.tag == .list || part.tag == .table {
 			// A destructuring parameter, `(struct Point x: px y: py)` or
 			// `({:kind k} who)`. It binds one temporary, and the names come out of
@@ -2968,7 +3084,9 @@ fn (mut m Machine) eval_struct(kids []blip.NodeId) ! {
 		// An opaque struct's constructor exists but is not bound, so the smart
 		// constructor is the only way in. The predicate and the accessors stay
 		// public: they cannot make a value that does not exist.
-		src = '(define ${name}__ctor (fn [${params.join(' ')}] (__make-struct (quote ${name}) (quote [${quoted_fields.join(' ')}]) ${params.join(' ')})))\n' + src
+		src =
+			'(define ${name}__ctor (fn [${params.join(' ')}] (__make-struct (quote ${name}) (quote [${quoted_fields.join(' ')}]) ${params.join(' ')})))\n' +
+			src
 	}
 	m.eval_generated(src) or {
 		return error('struct ${name}: the generated definitions failed: ${err.msg()}')
@@ -3123,12 +3241,17 @@ fn (mut m Machine) build_collection(id blip.NodeId, items []blip.Value) !blip.Va
 	for i + 1 < items.len {
 		key := items[i]
 		ks := match key.tag {
-			.keyword { key.as_string() or { return error(err.msg()) } }
-			.string { key.as_string() or { return error(err.msg()) } }
+			.keyword {
+				key.as_string() or { return error(err.msg()) }
+			}
+			.string {
+				key.as_string() or { return error(err.msg()) }
+			}
 			else {
 				return error('a table literal needs keyword or string keys, got ${printer.write(key)}')
 			}
 		}
+
 		pairs[ks] = items[i + 1]
 		i += 2
 	}

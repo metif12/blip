@@ -20,7 +20,6 @@ module blip
 //     rejected as "cannot be assigned outside unsafe". So environments are
 //     referenced by i32 index into an arena, which sidesteps the question and
 //     matches how the datum arena already works.
-
 import strconv
 
 @[flag]
@@ -305,7 +304,10 @@ pub fn (v Value) with_origin(origin SourceLocation) Value {
 	if v.origin.line > 0 || origin.line == 0 {
 		return v
 	}
-	return Value{ ...v, origin: origin }
+	return Value{
+		...v
+		origin: origin
+	}
 }
 
 // ---- constructors ----------------------------------------------------------
@@ -453,6 +455,33 @@ pub fn buffer(m map[string]Value) Value {
 	}
 }
 
+// ---- erased annotations (M10) ------------------------------------------------
+//
+// `(define (add (x int) (y int)) int ...)` annotates without checking at run
+// time: the machine erases every annotation, and `blip check` is the
+// separate command that reports mismatches. The vocabulary lives here so the
+// machine (which erases), the emitter (which erases), and the checker (which
+// verifies) cannot disagree on what names a type.
+//
+// `any` is the top type: an unannotated parameter, an unknown literal, or a
+// call the checker has no signature for. It unifies with everything, which is
+// what keeps the checker quiet rather than wrong.
+pub const type_names = ['int', 'float', 'string', 'bool', 'any']
+
+pub fn is_type_name(s string) bool {
+	return s in type_names
+}
+
+// type_compatible reports whether a value known to have type `have` may flow
+// into a position declared `want`. Unknown on either side is agreement, not
+// conflict: the checker only speaks when both sides are known and differ.
+pub fn type_compatible(have string, want string) bool {
+	if have == 'any' || want == 'any' {
+		return true
+	}
+	return have == want
+}
+
 // ---- accessors -------------------------------------------------------------
 //
 // Every accessor type-checks, and reports the mismatch as a returned error
@@ -521,9 +550,7 @@ pub fn (v Value) as_string() !string {
 	if v.tag !in [.string, .symbol, .keyword, .primitive] {
 		return error('as_string: called on a ${tag_name(v.tag)}, not a string')
 	}
-	sp := string_payload(v.payload) or {
-		return error('as_string: payload is not a string')
-	}
+	sp := string_payload(v.payload) or { return error('as_string: payload is not a string') }
 	return sp.s
 }
 

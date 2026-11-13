@@ -36,7 +36,7 @@ in `CONTRIBUTING.md`, the plan in `docs/010-roadmap.md`, history in
   Suites (the set CI builds and runs): tail_calls, non_tail, loop_forms,
   binding_forms, embedding, repl_golden, examples_run, programs_run,
   genprims, unit, api_coverage, emit_js, lsp, hostile, multi_use,
-  value_to_datum, macros_gate. Zero `FAIL` lines.
+  value_to_datum, macros_gate, contracts. Zero `FAIL` lines.
 - `v -cc gcc -path 'vlib|@vlib' run tools/genprims.vsh --check` must pass
   (generated prims match the release compiler); without `--check` it
   regenerates. DATED 2026-10-27: the tool once shelled out to bare `v` —

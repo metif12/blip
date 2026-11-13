@@ -129,6 +129,7 @@ jobs:
           v -cc gcc -path 'vlib|@vlib' -o veb_bridge tests/veb_bridge.v
           v -cc gcc -path 'vlib|@vlib' -o embed_api tests/embed_api.v
           v -cc gcc -path 'vlib|@vlib' -o provenance tests/provenance.v
+          v -cc gcc -path 'vlib|@vlib' -o contracts tests/contracts.v
 
       # These runners print results and do not set an exit code yet, so the
       # output is checked rather than the status. That is listed as a known gap
@@ -157,6 +158,7 @@ jobs:
           ./veb_bridge     | tee -a out.txt
           ./embed_api      | tee -a out.txt
           ./provenance     | tee -a out.txt
+          ./contracts      | tee -a out.txt
           if grep -qE '^FAIL|panic' out.txt; then
             echo "::error::a check failed or the machine panicked"
             exit 1

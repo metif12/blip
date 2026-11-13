@@ -20,6 +20,7 @@ import strings
 //   blip run <file.lip> ...   evaluate files, in order, in one machine
 //   blip <file.lip>           shorthand for `run`
 //   blip test <file.lip> ...  evaluate and check the `;=>` expectations
+//   blip check <file.lip> ... report contract/type mismatches without running
 //   blip emit-js <file.lip>   compile a file to a JavaScript module on stdout
 //   blip build <file> [-o out.js]  compile a file to a self-contained .js module
 //   blip fmt [-w] <file.lip>  pretty-print (normalize) a file, write back with -w
@@ -50,6 +51,7 @@ usage:
   blip run <file.lip> ...   evaluate files in order, in one machine
   blip <file.lip>           shorthand for `blip run`
   blip test <file.lip> ...  evaluate and check the `;=>` expectations
+  blip check <file.lip> ... report contract/type mismatches without running
   blip emit-js <file.lip>   compile a file to a JavaScript module on stdout
   blip build <file> [-o out.js]  compile a file to a self-contained .js module
   blip fmt [-w] <file.lip>  pretty-print (normalize) a file, write back with -w
@@ -107,6 +109,24 @@ mismatch is reported with the line, the value and the expectation.
 
 Exit status is 0 when every expectation held and 1 when any did not, so this
 works as a test gate from CI. Files without expectations are merely run.')
+		}
+		'check' {
+			println('blip check <file.lip> ... -- report mismatches without running
+
+The static checker for erased annotations (M10). Functions defined with
+annotated `define` -- (define (add (x int) (y int)) int ...) -- have their
+call sites judged: wrong arity and literal arguments of the wrong type are
+reported as file:line:col: message, one per mismatch. So is a body whose
+known type contradicts a declared return, and a ->/c outside
+define/contract.
+
+Anything the checker has no signature for -- unannotated functions, the
+prelude, macros -- is unknown, and unknown unifies with everything. A file
+that passes is not proven correct; a file that fails names a real
+mismatch. Nothing is evaluated, so checking a hostile file is safe.
+
+Exit status is 0 when nothing was found and 1 when any diagnostic was
+reported.')
 		}
 		'lsp' {
 			println('blip lsp -- serve the language server
@@ -312,6 +332,14 @@ fn main() {
 					exit_code(2)
 				}
 				exit_code(run_tests(args[1..]))
+			}
+			'check' {
+				if args.len < 2 {
+					eprintln('blip: check needs a file')
+					eprintln('run `blip help check` for usage')
+					exit_code(2)
+				}
+				exit_code(check_files(args[1..]))
 			}
 			'emit-js' {
 				if args.len < 2 {
@@ -595,6 +623,49 @@ fn run_tests(paths []string) int {
 			return 1
 		}
 		println('${s.checks} expectations passed')
+		return 0
+	}
+}
+
+// ---- check ---------------------------------------------------------------
+
+// check_files runs `blip check` over files: parse each one, run the static
+// checker for erased annotations, and report every mismatch as
+// `path:line:col: message`. Nothing is evaluated, so checking is safe on
+// files that would misbehave at run time. Unknown names are not errors --
+// the checker judges only what it has signatures for -- so a reader
+// diagnostic is the one hard failure: without a parse there is nothing to
+// check against.
+fn check_files(paths []string) int {
+	$if wasm32 {
+		println('blip: check not available in wasm build')
+		return 1
+	} $else {
+		mut fails := 0
+		for path in paths {
+			src := os.read_file(path) or {
+				eprintln('blip: cannot read ${path}')
+				fails++
+				continue
+			}
+			h := host.new_capture()
+			mut m := machine.new_standalone(h)
+			forms := m.arena.read_source(src, path)
+			if forms.diags.len > 0 {
+				d := forms.diags[0]
+				println('${path}:${d.line}:${d.col}: syntax: ${d.msg}')
+				fails++
+				continue
+			}
+			for dg in m.check_source(forms.forms) {
+				println('${path}:${dg.line}:${dg.col}: ${dg.msg}')
+				fails++
+			}
+		}
+		if fails > 0 {
+			eprintln('blip check: ${fails} problem(s)')
+			return 1
+		}
 		return 0
 	}
 }
