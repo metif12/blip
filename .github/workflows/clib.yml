@@ -1,0 +1,174 @@
+name: clib
+
+# Builds the C library (clib/blip.h + shared object) and runs the C smoke
+# test against it, on Linux and Windows. The smoke test IS the gate: it
+# evals, calls, captures prints, loads a file, provokes an error, sandboxes
+# and limits -- and asserts every answer. A green run that printed nothing
+# would mean nothing, so the job greps the final marker line too.
+#
+# Toolchain pins (V_COMMIT / VC_COMMIT) are identical to ci.yml and
+# release.yml. See ci.yml for why both are pinned and why VFLAGS is quoted.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  V_COMMIT: 74be97a2d7bd1fce4150abc749a2e64b21d9d082
+  VC_COMMIT: 0027130e9850c9946fa2c21e9004f13d8e593595
+  V_MACOS_V3_NO_FALLBACK: '1'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache the V compiler
+        id: vcache
+        uses: actions/cache@v4
+        with:
+          path: v
+          key: v-${{ env.V_COMMIT }}-${{ runner.os }}-v2
+
+      # Same recipe as ci.yml: fetch the pinned V, pin vc beside it (the
+      # Makefile clones vc at HEAD, whose parser rejects the pinned vlib),
+      # and build with the bundled GC. Windows uses make.bat; the vc guard
+      # (`if not exist`) keeps our pinned checkout instead of re-cloning.
+      - name: Build V (linux)
+        if: runner.os == 'Linux' && steps.vcache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          set -o pipefail
+          if ! command -v cc >/dev/null 2>&1 && ! command -v gcc >/dev/null 2>&1; then
+            echo "::error::no C compiler"
+            exit 1
+          fi
+          if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists bdw-gc 2>/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y libgc-dev
+          fi
+          git init -q v
+          cd v
+          git remote add origin https://github.com/vlang/v.git
+          git fetch -q --depth 1 origin "$V_COMMIT"
+          git checkout -q FETCH_HEAD
+          git clone -q https://github.com/vlang/vc vc
+          git -C vc fetch -q --depth 1 origin "$VC_COMMIT"
+          git -C vc checkout -q FETCH_HEAD
+          mkdir -p thirdparty/tcc/lib
+          cp /usr/lib/x86_64-linux-gnu/libgc.a thirdparty/tcc/lib/libgc.a 2>/dev/null || cp /usr/lib/libgc.a thirdparty/tcc/lib/libgc.a 2>/dev/null || true
+          make -f Makefile v VFLAGS="-d use_bundled_libgc" 2>&1 | tee build.log
+          if [ ! -x ./v ]; then
+            echo "::error::Build V failed -- see build.log"
+            cat build.log || true
+            exit 1
+          fi
+          ./v version
+
+      - name: Build V (windows)
+        if: runner.os == 'Windows' && steps.vcache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          git init -q v
+          cd v
+          git remote add origin https://github.com/vlang/v.git
+          git fetch -q --depth 1 origin "$env:V_COMMIT"
+          git checkout -q FETCH_HEAD
+          git clone -q https://github.com/vlang/vc vc
+          git -C vc fetch -q --depth 1 origin "$env:VC_COMMIT"
+          git -C vc checkout -q FETCH_HEAD
+          cd ..
+          cmd.exe /c "cd v && make.bat"
+          if (!(Test-Path v/v.exe)) { Write-Error "Build V failed: no v/v.exe produced"; exit 1 }
+          ./v/v.exe version
+
+      - name: Put V on PATH (linux)
+        if: runner.os == 'Linux'
+        run: echo "$GITHUB_WORKSPACE/v" >> "$GITHUB_PATH"
+
+      - name: Put V on PATH (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE/v"
+
+      - name: MSVC environment (windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Confirm the toolchain (linux)
+        if: runner.os == 'Linux'
+        run: |
+          v version
+          gcc --version | head -n 1
+
+      - name: Confirm the toolchain (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          v version
+          cl 2>&1 | Select-Object -First 1
+
+      # The library itself. -shared gives libblip.so / blip.dll; the prelude
+      # is $embed_file'd, so the binary has no data files to find.
+      - name: Build the shared library (linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          mkdir -p dist
+          v -shared -cc gcc -o dist/libblip.so clib/blip.v
+          ls -la dist
+
+      - name: Build the shared library (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          v -shared -cc msvc -o dist/blip.dll clib/blip.v
+          # MSVC link.exe cannot consume a DLL directly: mint an import
+          # library from clib/blip.def (the same file gcc/dlltool uses).
+          lib /def:clib/blip.def /out:dist/blip.lib /machine:x64
+          Get-ChildItem dist
+
+      # Smoke test: compile example_eval.c against the library and run it
+      # from the repo root (blip_load reads clib/smoke_prog.lip relatively).
+      - name: Build and run the smoke test (linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          set -o pipefail
+          gcc clib/example_eval.c -o dist/clib_smoke -Ldist -lblip -Wl,-rpath,'$ORIGIN' -Iclib
+          ./dist/clib_smoke | tee clib_smoke.txt
+          grep -q 'clib smoke: all checks passed' clib_smoke.txt
+
+      - name: Build and run the smoke test (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cl /nologo clib/example_eval.c dist/blip.lib /Iclib /Fedist/clib_smoke.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          ./dist/clib_smoke.exe | Tee-Object clib_smoke.txt
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Select-String -Path clib_smoke.txt -Pattern 'clib smoke: all checks passed' | Out-Null
+          if ($LASTEXITCODE -ne 0) { Write-Error 'smoke marker missing'; exit 1 }
+
+      - name: Upload the C library
+        uses: actions/upload-artifact@v4
+        with:
+          name: blip-clib-${{ runner.os }}
+          path: |
+            dist/libblip.so
+            dist/blip.dll
+            dist/blip.lib
+            dist/clib_smoke*
+            clib/blip.h
+            clib/blip.def
+            clib/example_eval.c
+            clib/smoke_prog.lip
+            docs/c-lib.md

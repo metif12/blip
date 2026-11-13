@@ -35,7 +35,8 @@ Working on top of that: a REPL with golden tests, errors as values with
 source-context frames, real programs in `programs/` (brainfuck, json,
 config, csv, lint, markdown, pratt), a JavaScript backend (`blip build`,
 `blip emit-js`), a veb bridge that serves the website from blip handlers,
-machine-generated prims (`tools/genprims.vsh`), and editor support
+machine-generated prims (`tools/genprims.vsh`), a C embedding library
+(`clib/blip.h`, guide in `docs/c-lib.md`), and editor support
 (`blip lsp` plus a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=blip-lang.vscode-blip&ssr=false#review-details)
 and setup guides for [Kate](editors/kate/README.md), [Vim/Neovim](editors/vim/README.md),
 [Helix](editors/helix/README.md), [Zed](editors/zed/README.md) (plus a [Zed extension](editors/zed-ext)),

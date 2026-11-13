@@ -70,3 +70,11 @@ with `embed.to_bool/to_int/to_float/to_str/to_strs`, build with
 Errors are strings. Classify with `embed.is_unbound_error/is_limit_error/
 is_parse_error`. Parse errors carry `line:col` from `blip.format_error`;
 limits are `step limit exceeded` / `continuation too deep`.
+
+## From C instead of V
+
+`clib/blip.h` exposes the same surface through a stable C ABI (opaque
+handle, string in, string out): `blip_new/blip_eval/blip_call/blip_load`,
+print capture, `blip_restrict` sandboxing, limits, version. Full guide,
+build/link commands for Linux/Windows/macOS, and troubleshooting:
+`docs/c-lib.md`. The worked example is `clib/example_eval.c`.

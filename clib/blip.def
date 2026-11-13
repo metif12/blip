@@ -1,0 +1,12 @@
+LIBRARY blip
+EXPORTS
+	blip_new
+	blip_free_interp
+	blip_eval
+	blip_load
+	blip_call
+	blip_set_limits
+	blip_output
+	blip_restrict
+	blip_version
+	blip_free_str

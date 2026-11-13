@@ -154,7 +154,7 @@ jobs:
             SHA256SUMS
 
   publish:
-    needs: build
+    needs: [build, clib]
     # Only tags publish. A manual dispatch builds and verifies, then stops, so a
     # dry run can never create a release by accident.
     if: startsWith(github.ref, 'refs/tags/v')
@@ -165,6 +165,12 @@ jobs:
           name: blip-dist
           path: dist
 
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: blip-clib-dist-*
+          merge-multiple: true
+          path: dist/clib
+
       - name: Create the GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -173,6 +179,10 @@ jobs:
             dist/blip-windows.zip
             dist/blip-site.tar.gz
             dist/SHA256SUMS
+            dist/clib/blip-clib-linux.tar.gz
+            dist/clib/blip-clib-windows.zip
+            dist/clib/SHA256SUMS.clib-linux
+            dist/clib/SHA256SUMS.clib-windows
           generate_release_notes: true
           body: |
             Built from `${{ github.ref }}` by `.github/workflows/release.yml`.
@@ -181,3 +191,124 @@ jobs:
             same nine suites run in the `verify` job before anything here was
             built, and the site in `blip-site.tar.gz` is the output of
             `site/build.lip` rather than something edited by hand.
+
+            `blip-clib-*.tar.gz/.zip` is the C embedding library: `blip.h`,
+            the shared object, a worked example and `docs/c-lib.md`.
+            Build and usage commands are in `docs/c-lib.md`; the smoke test
+            in `.github/workflows/clib.yml` runs the example against the
+            packaged library on Linux and Windows.
+
+  # The C library release. Same compiler pins as `verify` above and the same
+  # build-and-smoke recipe as `.github/workflows/clib.yml` (that file is the
+  # canonical copy -- keep the two in sync). The smoke test runs BEFORE
+  # packaging, so a published tarball always contains a library that already
+  # proved it can eval, call, sandbox and limit.
+  clib:
+    needs: verify
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: v
+          key: v-${{ env.V_COMMIT }}-${{ runner.os }}-v2
+
+      - name: Build V if needed (linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          if [ ! -x v/v ]; then
+            git init -q v
+            cd v
+            git remote add origin https://github.com/vlang/v.git
+            git fetch -q --depth 1 origin "$V_COMMIT"
+            git checkout -q FETCH_HEAD
+            git clone -q https://github.com/vlang/vc vc
+            git -C vc fetch -q --depth 1 origin "$VC_COMMIT"
+            git -C vc checkout -q FETCH_HEAD
+            make -f Makefile v
+            [ -x ./v ] || { echo "::error::no ./v produced"; exit 1; }
+          fi
+
+      - name: Build V if needed (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (!(Test-Path v/v.exe)) {
+            git init -q v
+            cd v
+            git remote add origin https://github.com/vlang/v.git
+            git fetch -q --depth 1 origin "$env:V_COMMIT"
+            git checkout -q FETCH_HEAD
+            git clone -q https://github.com/vlang/vc vc
+            git -C vc fetch -q --depth 1 origin "$env:VC_COMMIT"
+            git -C vc checkout -q FETCH_HEAD
+            cd ..
+            cmd.exe /c "cd v && make.bat"
+            if (!(Test-Path v/v.exe)) { Write-Error "no v/v.exe produced"; exit 1 }
+          }
+
+      - name: Put V on PATH (linux)
+        if: runner.os == 'Linux'
+        run: echo "$GITHUB_WORKSPACE/v" >> "$GITHUB_PATH"
+
+      - name: Put V on PATH (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Add-Content $env:GITHUB_PATH "$env:GITHUB_WORKSPACE/v"
+
+      - name: MSVC environment (windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build, smoke, package (linux)
+        if: runner.os == 'Linux'
+        run: |
+          set -e
+          set -o pipefail
+          mkdir -p dist pkg/blip-clib
+          v -shared -cc gcc -o dist/libblip.so clib/blip.v
+          gcc clib/example_eval.c -o dist/clib_smoke -Ldist -lblip -Wl,-rpath,'$ORIGIN' -Iclib
+          ./dist/clib_smoke | tee clib_smoke.txt
+          grep -q 'clib smoke: all checks passed' clib_smoke.txt
+          cp clib/blip.h clib/blip.def clib/example_eval.c clib/smoke_prog.lip docs/c-lib.md pkg/blip-clib/
+          cp dist/libblip.so pkg/blip-clib/
+          tar czf blip-clib-linux.tar.gz -C pkg blip-clib
+          (cd dist && sha256sum libblip.so) > SHA256SUMS.clib-linux
+          sha256sum blip-clib-linux.tar.gz >> SHA256SUMS.clib-linux
+          cat SHA256SUMS.clib-linux
+
+      - name: Build, smoke, package (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist, pkg/blip-clib | Out-Null
+          v -shared -cc msvc -o dist/blip.dll clib/blip.v
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          lib /def:clib/blip.def /out:dist/blip.lib /machine:x64
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          cl /nologo clib/example_eval.c dist/blip.lib /Iclib /Fedist/clib_smoke.exe
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          ./dist/clib_smoke.exe | Tee-Object clib_smoke.txt
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Select-String -Path clib_smoke.txt -Pattern 'clib smoke: all checks passed' | Out-Null
+          if ($LASTEXITCODE -ne 0) { Write-Error 'smoke marker missing'; exit 1 }
+          Copy-Item clib/blip.h, clib/blip.def, clib/example_eval.c, clib/smoke_prog.lip, docs/c-lib.md pkg/blip-clib/
+          Copy-Item dist/blip.dll, dist/blip.lib pkg/blip-clib/
+          Compress-Archive -Path pkg/blip-clib -DestinationPath blip-clib-windows.zip
+          Get-FileHash blip-clib-windows.zip -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  blip-clib-windows.zip" } | Out-File SHA256SUMS.clib-windows -Encoding ascii
+          Get-Content SHA256SUMS.clib-windows
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blip-clib-dist-${{ runner.os }}
+          path: |
+            blip-clib-linux.tar.gz
+            blip-clib-windows.zip
+            SHA256SUMS.clib-linux
+            SHA256SUMS.clib-windows
