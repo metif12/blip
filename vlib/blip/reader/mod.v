@@ -109,6 +109,7 @@ pub mut:
 	children []NodeId
 }
 
+@[inline]
 pub fn (mut a Arena) leaf(tag DatumTag) NodeId {
 	a.nodes << Datum{
 		tag: tag
@@ -116,6 +117,7 @@ pub fn (mut a Arena) leaf(tag DatumTag) NodeId {
 	return NodeId(a.nodes.len - 1)
 }
 
+@[inline]
 pub fn (mut a Arena) str_leaf(tag DatumTag, s string) NodeId {
 	a.nodes << Datum{
 		tag:   tag
@@ -124,6 +126,7 @@ pub fn (mut a Arena) str_leaf(tag DatumTag, s string) NodeId {
 	return NodeId(a.nodes.len - 1)
 }
 
+@[inline]
 pub fn (mut a Arena) int_leaf(tag DatumTag, n i64) NodeId {
 	a.nodes << Datum{
 		tag: tag
@@ -132,6 +135,7 @@ pub fn (mut a Arena) int_leaf(tag DatumTag, n i64) NodeId {
 	return NodeId(a.nodes.len - 1)
 }
 
+@[inline]
 pub fn (mut a Arena) float_leaf(f f64) NodeId {
 	a.nodes << Datum{
 		tag: .float
@@ -147,6 +151,7 @@ pub fn (mut a Arena) float_leaf(f f64) NodeId {
 // before the enclosing list appends its next child, so an offset captured at open
 // time points into the middle of the inner list's children. That bug made
 // `(+ (+ 1 2) (+ 3 4))` read as a flat `(+ + 1)`.
+@[inline]
 pub fn (mut a Arena) open(tag DatumTag) NodeId {
 	a.nodes << Datum{
 		tag: tag
@@ -181,6 +186,7 @@ pub fn (mut a Arena) finish(id NodeId, items []NodeId) {
 // form. `'after` after a `define` therefore evaluated the symbol `define` and
 // printed it -- silently, because the value it produced was a perfectly valid
 // symbol. `finish` has no such precondition; use it.
+@[inline]
 pub fn (mut a Arena) add_child(parent NodeId, child NodeId) {
 	start := i32(a.children.len)
 	a.children << child
@@ -189,14 +195,28 @@ pub fn (mut a Arena) add_child(parent NodeId, child NodeId) {
 	node.start = start
 }
 
+@[inline]
 pub fn (a &Arena) node(id NodeId) &Datum {
 	return &a.nodes[int(id)]
 }
 
+@[inline]
 pub fn (mut a Arena) set_pos(id NodeId, line int, col int) {
 	mut node := &a.nodes[int(id)]
 	node.line = line
 	node.col = col
+}
+
+// set_pos_origin records both the line/col and the full origin in one arena
+// access. read() stamped them separately -- two bounds-checked indexings
+// per form -- which is pure overhead on small dense forms, where the stamp
+// is a large share of the per-form cost.
+@[inline]
+pub fn (mut a Arena) set_pos_origin(id NodeId, line int, col int, origin blip.SourceLocation) {
+	mut node := &a.nodes[int(id)]
+	node.line = line
+	node.col = col
+	node.origin = origin
 }
 
 // kids returns a COPY of a node's children.
@@ -314,32 +334,51 @@ fn (mut r Reader) next() u8 {
 	return c
 }
 
-fn (mut r Reader) is_delimiter(c u8) bool {
-	return c == ` ` || c == tab_c || c == cr || c == nl || c == lparen
-		|| c == rparen || c == lbrack || c == rbrack || c == lbrace || c == rbrace
-		|| c == dquote || c == semi || c == 0
+@[inline]
+fn is_delim_byte(c u8) bool {
+	// A match on a byte compiles to a jump table, where the fourteen-way
+	// OR chain it replaces is fourteen branches per byte. The set is
+	// exactly is_delimiter's -- control bytes other than \t\n\r are symbol
+	// characters, and changing that would change what reads.
+	match c {
+		0, 9, 10, 13, 32, 34, 40, 41, 59, 91, 93, 123, 125 { return true }
+		else { return false }
+	}
 }
 
+fn (mut r Reader) is_delimiter(c u8) bool {
+	return is_delim_byte(c)
+}
+
+@[direct_array_access; inline]
 fn (mut r Reader) skip_ws() {
-	for !r.eof() {
-		c := r.peek()
-		if c == ` ` || c == tab_c || c == cr || c == nl {
-			r.next()
+	// Raw index loop, not peek()/next() per byte: each of those is a call
+	// plus bounds checks, and whitespace is the most common byte. Newlines
+	// still count -- positions below depend on it.
+	for r.off < r.src.len {
+		c := r.src[r.off]
+		if c == sp || c == tab_c || c == cr {
+			r.off++
+			continue
+		}
+		if c == nl {
+			r.off++
+			r.line++
+			r.line_at = r.off
 			continue
 		}
 		if c == semi {
-			for !r.eof() && r.peek() != nl {
-				r.next()
+			for r.off < r.src.len && r.src[r.off] != nl {
+				r.off++
 			}
 			continue
 		}
-		if c == hash_c && r.at(r.off + 1) == bar {
+		if c == hash_c && r.off + 1 < r.src.len && r.src[r.off + 1] == bar {
 			r.skip_block_comment()
 			continue
 		}
-		if c == hash_c && r.at(r.off + 1) == semi {
-			r.next()
-			r.next()
+		if c == hash_c && r.off + 1 < r.src.len && r.src[r.off + 1] == semi {
+			r.off += 2
 			r.skip_ws()
 			r.read() // datum comment: consume exactly one form
 			continue
@@ -349,18 +388,32 @@ fn (mut r Reader) skip_ws() {
 }
 
 fn (mut r Reader) skip_block_comment() {
-	r.next() // #
-	r.next() // |
+	r.off += 2 // #|
 	mut depth := 1
-	for !r.eof() && depth > 0 {
-		c := r.next()
-		if c == hash_c && r.peek() == bar {
-			r.next()
-			depth++
-		} else if c == bar && r.peek() == hash_c {
-			r.next()
-			depth--
+	for r.off + 1 < r.src.len && depth > 0 {
+		c := r.src[r.off]
+		if c == nl {
+			r.line++
+			r.line_at = r.off + 1
 		}
+		if c == hash_c && r.src[r.off + 1] == bar {
+			r.off += 2
+			depth++
+		} else if c == bar && r.src[r.off + 1] == hash_c {
+			r.off += 2
+			depth--
+		} else {
+			r.off++
+		}
+	}
+	// A truncated tail ("#| abc") leaves off at the end, exactly where the
+	// next()-driven version stopped: past every byte it looked at.
+	for r.off < r.src.len && depth > 0 {
+		if r.src[r.off] == nl {
+			r.line++
+			r.line_at = r.off + 1
+		}
+		r.off++
 	}
 }
 
@@ -369,6 +422,7 @@ fn (mut r Reader) skip_block_comment() {
 // It wraps read_inner with position tracking: the line and column of the first
 // byte of the form are recorded on the node, so an error message can later show
 // where in the source the form was written.
+@[direct_array_access; inline]
 pub fn (mut r Reader) read() ?NodeId {
 	r.skip_ws()
 	if r.eof() {
@@ -378,11 +432,17 @@ pub fn (mut r Reader) read() ?NodeId {
 	col := r.off - r.line_at + 1
 	start := r.off
 	id := r.read_inner() or { return none }
-	r.arena.set_pos(id, line, col)
-	r.arena.nodes[int(id)].origin = blip.SourceLocation{ file: r.source, line: line, col: col, start: start, end: r.off }
+	r.arena.set_pos_origin(id, line, col, blip.SourceLocation{
+		file:  r.source
+		line:  line
+		col:   col
+		start: start
+		end:   r.off
+	})
 	return id
 }
 
+@[direct_array_access; inline]
 fn (mut r Reader) read_inner() ?NodeId {
 	c := r.peek()
 	match c {
@@ -438,21 +498,18 @@ fn (mut r Reader) read_inner() ?NodeId {
 				quasi_c { DatumTag.quasi }
 				else { DatumTag.unquote }
 			}
+
 			// `,@x` is one form, so the splice marker is consumed before the
 			// operand is read. Otherwise the operand reader would see `@x` and
 			// treat the `@` as the head of a character literal.
 			if tag == .unquote && r.peek() == at_c {
 				r.next()
-				inner := r.read() or {
-					return none
-				}
+				inner := r.read() or { return none }
 				id := r.arena.leaf(.unquote_splice)
 				r.arena.add_child(id, inner)
 				return id
 			}
-			inner := r.read() or {
-				return none
-			}
+			inner := r.read() or { return none }
 			id := r.arena.leaf(tag)
 			r.arena.add_child(id, inner)
 			return id
@@ -471,15 +528,15 @@ fn (mut r Reader) read_inner() ?NodeId {
 			// The reader's own diagnostic count was zero, which is the useful part:
 			// `|>` is a perfectly valid token, just the wrong one.
 			nxt := r.at(r.off + 1)
-			if nxt == u8(0) || nxt == sp || nxt == tab_c || nxt == nl || nxt == cr
-				|| nxt == rparen || nxt == rbrack || nxt == rbrace {
+			if nxt == u8(0) || nxt == sp || nxt == tab_c || nxt == nl || nxt == cr || nxt == rparen
+				|| nxt == rbrack || nxt == rbrace {
 				return r.read_bar_symbol()
 			}
 			mut op := []u8{}
 			for !r.eof() {
 				ch := r.peek()
-				if ch == sp || ch == tab_c || ch == nl || ch == cr || ch == rparen
-					|| ch == rbrack || ch == rbrace {
+				if ch == sp || ch == tab_c || ch == nl || ch == cr || ch == rparen || ch == rbrack
+					|| ch == rbrace {
 					break
 				}
 				op << r.next()
@@ -495,9 +552,12 @@ fn (mut r Reader) read_inner() ?NodeId {
 	}
 }
 
+@[direct_array_access; inline]
 fn (mut r Reader) read_collection(tag DatumTag, close u8) ?NodeId {
 	id := r.arena.open(tag)
-	mut items := []NodeId{}
+	// Most collections are small: a capacity of 8 means one allocation
+	// and no growth for the common case, instead of 0->1->2->4->8.
+	mut items := []NodeId{cap: 8}
 	for {
 		r.skip_ws()
 		if r.eof() {
@@ -509,9 +569,7 @@ fn (mut r Reader) read_collection(tag DatumTag, close u8) ?NodeId {
 			break
 		}
 		before := r.off
-		child := r.read() or {
-			break
-		}
+		child := r.read() or { break }
 		if r.off == before {
 			break
 		}
@@ -523,8 +581,41 @@ fn (mut r Reader) read_collection(tag DatumTag, close u8) ?NodeId {
 	return id
 }
 
+@[direct_array_access; inline]
 fn (mut r Reader) read_string() ?NodeId {
-	r.next() // opening quote
+	start := r.off + 1 // past the opening quote
+	// Fast scan for the closing quote: most strings have no escapes, and
+	// for those the interior is used verbatim -- no buffer, no copy. The
+	// slow path below only runs when a backslash actually appears.
+	//
+	// Line counting stays with whoever walks: the fast scan counts (its
+	// count stands on success), and on the escape fallback the saved
+	// position is restored so the slow walk counts the same lines once.
+	sline := r.line
+	sline_at := r.line_at
+	mut i := start
+	for i < r.src.len {
+		c := r.src[i]
+		if c == dquote {
+			r.off = i + 1
+			return r.arena.str_leaf(.str, r.src[start..i])
+		}
+		if c == backslash_bs {
+			break
+		}
+		if c == nl {
+			r.line++
+			r.line_at = i + 1
+		}
+		i++
+	}
+	// Slow path: escapes, or a truncated tail. off resumes after the
+	// opening quote; the loop below re-walks the plain prefix, which is
+	// bounded by the string length and only paid for when escapes exist.
+	// Positions are restored first so lines are counted exactly once.
+	r.off = start
+	r.line = sline
+	r.line_at = sline_at
 	mut buf := []u8{cap: 32}
 	for {
 		if r.eof() {
@@ -545,12 +636,24 @@ fn (mut r Reader) read_string() ?NodeId {
 		}
 		e := r.next()
 		match e {
-			`n` { buf << `\n` }
-			`t` { buf << `\t` }
-			`r` { buf << `\r` }
-			`0` { buf << 0 }
-			`\\` { buf << `\\` }
-			`"` { buf << `"` }
+			`n` {
+				buf << `\n`
+			}
+			`t` {
+				buf << `\t`
+			}
+			`r` {
+				buf << `\r`
+			}
+			`0` {
+				buf << 0
+			}
+			`\\` {
+				buf << `\\`
+			}
+			`"` {
+				buf << `"`
+			}
 			else {
 				buf << `\\`
 				buf << e
@@ -560,28 +663,40 @@ fn (mut r Reader) read_string() ?NodeId {
 	return r.arena.str_leaf(.str, buf.bytestr())
 }
 
+@[inline]
 fn (mut r Reader) read_bar_symbol() ?NodeId {
-	r.next() // |
-	mut buf := []u8{cap: 16}
-	for !r.eof() && r.peek() != `|` {
-		buf << r.next()
+	start := r.off + 1 // |
+	mut i := start
+	for i < r.src.len && r.src[i] != `|` {
+		if r.src[i] == nl {
+			r.line++
+			r.line_at = i + 1
+		}
+		i++
 	}
-	if r.eof() {
+	if i >= r.src.len {
+		r.off = i
 		r.short('unterminated |symbol|')
-	} else {
-		r.next() // closing |
+		return r.arena.str_leaf(.sym, r.src[start..i])
 	}
-	return r.arena.str_leaf(.sym, buf.bytestr())
+	r.off = i + 1 // closing |
+	return r.arena.str_leaf(.sym, r.src[start..i])
 }
 
 // read_symbol_text consumes the run of non-delimiter bytes at the cursor and
-// returns them, without allocating an arena node.
+// returns them, without allocating an arena node. The text is a slice of the
+// source, not a copy: symbols are immutable and the arena already retains
+// every value, so pinning the source costs nothing new.
+@[inline]
 fn (mut r Reader) read_symbol_text() string {
-	mut buf := []u8{cap: 16}
-	for !r.eof() && !r.is_delimiter(r.peek()) {
-		buf << r.next()
+	start := r.off
+	for r.off < r.src.len {
+		if is_delim_byte(r.src[r.off]) {
+			break
+		}
+		r.off++
 	}
-	return buf.bytestr()
+	return r.src[start..r.off]
 }
 
 fn (mut r Reader) read_hash() ?NodeId {
@@ -626,14 +741,30 @@ fn (mut r Reader) read_character() ?NodeId {
 	}
 	s := name.bytestr()
 	cp := match s {
-		'newline', 'linefeed' { u8(10) }
-		'space' { u8(32) }
-		'tab' { u8(9) }
-		'return', 'carriage-return' { u8(13) }
-		'backspace' { u8(8) }
-		'escape' { u8(27) }
-		'null', 'nul' { u8(0) }
-		'alpha' { u8(7) }
+		'newline', 'linefeed' {
+			u8(10)
+		}
+		'space' {
+			u8(32)
+		}
+		'tab' {
+			u8(9)
+		}
+		'return', 'carriage-return' {
+			u8(13)
+		}
+		'backspace' {
+			u8(8)
+		}
+		'escape' {
+			u8(27)
+		}
+		'null', 'nul' {
+			u8(0)
+		}
+		'alpha' {
+			u8(7)
+		}
 		else {
 			// A single character, or an escape such as #\n or #\x41.
 			if s.len == 1 {
@@ -658,39 +789,83 @@ fn (mut r Reader) read_character() ?NodeId {
 			}
 		}
 	}
+
 	return r.arena.int_leaf(.char, i64(cp))
 }
 
 // read_atom handles keywords, numbers, and symbols.
+@[direct_array_access; inline]
 fn (mut r Reader) read_atom() ?NodeId {
 	start := r.off
-	mut buf := []u8{cap: 16}
-	for !r.eof() && !r.is_delimiter(r.peek()) {
-		// A '#' inside a token is only a prefix when the token is empty, so
-		// "abc#def" is one symbol rather than two forms.
-		buf << r.next()
+	for r.off < r.src.len {
+		if is_delim_byte(r.src[r.off]) {
+			break
+		}
+		r.off++
 	}
-	if buf.len == 0 {
+	if r.off == start {
 		r.fail('unexpected byte 0x' + r.peek().hex())
 		r.next()
 		return r.read()
 	}
-	s := buf.bytestr()
 
 	// Keyword: :foo, :foo/bar, and bare : alone.
-	if s[0] == `:` {
-		return r.arena.str_leaf(.kw, s[1..])
+	if r.src[start] == `:` {
+		return r.arena.str_leaf(.kw, r.src[start + 1..r.off])
 	}
+
+	// Integer fast path: an optional sign followed by digits only. One
+	// pass, no allocation; the token string is never materialised. Anything
+	// else -- floats, rationals, radix prefixes, symbols, overflow -- falls
+	// through to try_number, which reproduces atoi64-then-atof64 exactly.
+	mut i := start
+	if r.src[i] == minus_c || r.src[i] == plus_c {
+		i++
+	}
+	if i < r.off {
+		c := r.src[i]
+		if c >= zero_c && c <= nine_c {
+			neg := r.src[start] == minus_c
+			limit := if neg { u64(9223372036854775808) } else { u64(9223372036854775807) }
+			mut acc := u64(0)
+			mut ok := true
+			mut j := i
+			for j < r.off {
+				d := r.src[j]
+				if d < zero_c || d > nine_c {
+					ok = false
+					break
+				}
+				dig := u64(d - zero_c)
+				if acc > (limit - dig) / 10 {
+					ok = false
+					break
+				}
+				acc = acc * 10 + dig
+				j++
+			}
+			if ok {
+				if neg {
+					if acc == u64(9223372036854775808) {
+						return r.arena.int_leaf(.int, i64(-9223372036854775807 - 1))
+					}
+					return r.arena.int_leaf(.int, -i64(acc))
+				}
+				return r.arena.int_leaf(.int, i64(acc))
+			}
+		}
+	}
+	s := r.src[start..r.off]
 
 	if id := r.try_number(s) {
 		return id
 	}
 
-	_ = start
 	return r.arena.str_leaf(.sym, s)
 }
 
 // try_number returns none for anything that is not a number.
+@[inline]
 fn (mut r Reader) try_number(s string) ?NodeId {
 	if s.len == 0 {
 		return none
@@ -716,12 +891,8 @@ fn (mut r Reader) try_number(s string) ?NodeId {
 	// Rational: 1/3
 	idx := s.index('/') or { -1 }
 	if idx > 0 {
-		n := strconv.atoi64(s[..idx]) or {
-			return none
-		}
-		d := strconv.atoi64(s[idx + 1..]) or {
-			return none
-		}
+		n := strconv.atoi64(s[..idx]) or { return none }
+		d := strconv.atoi64(s[idx + 1..]) or { return none }
 		if d == 0 {
 			r.fail('rational with zero denominator')
 			return r.arena.int_leaf(.int, 0)
@@ -741,6 +912,7 @@ fn (mut r Reader) try_number(s string) ?NodeId {
 			`o`, `O` { 8 }
 			else { 0 }
 		}
+
 		if base != 0 {
 			v := strconv.parse_uint(s[2..], base, 64) or {
 				r.fail('bad ${s} literal')
@@ -902,9 +1074,7 @@ pub fn (mut a Arena) read_source(src string, source string) Forms {
 	mut forms := []NodeId{}
 	for {
 		before := r.off
-		id := r.read() or {
-			break
-		}
+		id := r.read() or { break }
 		forms << id
 		if r.off == before {
 			break

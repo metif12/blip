@@ -4,6 +4,25 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### Reader: lexing+reading is 1.3-8x faster, output byte-identical
+
+- Hot loops index the source directly instead of calling `peek`/`next`/
+  `eof` per byte (`skip_ws`, token scans, the string fast path, bar
+  symbols, block comments). Delimiters are a jump table, not a 14-way OR.
+- Integers parse in one pass with no token materialization (overflow
+  falls back to the exact old `atoi64`-then-`atof64` path). Strings without
+  escapes and plain symbols/keywords are shared slices, not buffer+copy.
+  `set_pos`+origin is one arena visit; collection items pre-size to 8.
+- Measured with `src/bench_reader.v` (best-of-3 per process, median of 3
+  alternating A/B runs, same flags, stock V 0.5.2), MB/s before -> after:
+  identifiers 17.9->39.4 (2.2x), integers 10.3->40.2 (3.9x), strings
+  36.1->113.0 (3.1x), comments ~71.5->~572 (~8x, noisy at these sizes),
+  quoted 3.7->4.8 (1.3x), mixed real corpus 20.8->35.7 (1.7x). Dense tiny
+  forms remain per-form-overhead bound; that is the documented floor.
+- Gate: byte-identical `reader_probe` output on every example, the prelude,
+  both proof programs and a hostile-input file, plus the full battery
+  green. The bench itself is not a CI gate (timings vary by machine).
+
 ### M10: contracts, erased annotations, `blip check`
 
 - `(define/contract (halve x) (->/c even?) (/ x 2))` checks its arguments
