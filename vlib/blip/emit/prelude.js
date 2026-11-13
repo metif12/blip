@@ -434,6 +434,7 @@ const blip = {
   keyword: (s) => (s && s.blip_kw !== undefined ? s : blip.kw(s)),
   vector: (...items) => blip.vec(...items),
   string_not_blank_q: (s) => String(s).trim() !== "",
+  string_blank_q: (s) => String(s).trim() === "",
   // frequencies answers a LIST of `(value count)` pairs in FIRST-SEEN order, not
   // sorted, and each pair carries the ORIGINAL value -- not one rebuilt from its
   // printed form, which is how the quote characters got INTO the data.

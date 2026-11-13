@@ -196,6 +196,8 @@ fn main() {
 
 	s.check('string printing keeps its quotes', '(print "hello")')
 
+	s.check('string-blank? of blanks', '(print (string-blank? "   ")) (print (string-blank? "x"))')
+
 	s.check('if in expression position', '(print (if #t "yes" "no"))')
 
 	s.check('begin sequences', '(print (begin 1 2 3))')
@@ -252,17 +254,18 @@ fn main() {
 // ---- the real bar ---------------------------------------------------------
 
 // The eleven checks above are small and pass. Every real example failed them
-// anyway, and did so SILENTLY: the emitter reported "clean" for five of the six
-// examples while the JavaScript ran and printed nothing. A green run that means
-// nothing is the worst failure mode a backend has, so the honest measure is not
-// the tiny programs -- it is an actual program, end to end.
+// anyway, and did so SILENTLY: the emitter reported "clean" for five of the
+// seven examples while the JavaScript ran and printed nothing. A green run
+// that means nothing is the worst failure mode a backend has, so the honest
+// measure is not the tiny programs -- it is an actual program, end to end.
 //
 // Each example is emitted and the emitted JavaScript is run. A program the
 // backend cannot handle yet must be REFUSED by name; a program it accepts must
 // produce output. Either outcome is a real result. The one that is not allowed
 // is acceptance with no output, which is what this used to do.
 fn (mut s Suite) real_programs() {
-	examples := ['01_basics', '02_data', '03_match', '04_errors', '05_pipelines', '06_modules']
+	examples := ['01_basics', '02_data', '03_match', '04_errors', '05_pipelines', '06_modules',
+		'07_config']
 	mut silent := []string{}
 	mut refused := []string{}
 	mut running := []string{}

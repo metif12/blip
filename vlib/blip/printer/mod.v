@@ -27,7 +27,7 @@ fn write_value(v blip.Value, active []u64, seen map[u64]int, depth int) string {
 		return '...'
 	}
 	// A value already on the print path is a cycle, not shared structure.
-	
+
 	match v.tag {
 		.nil { return 'nil' }
 		.emptylist { return '()' }
@@ -290,5 +290,122 @@ fn close_for(open string) string {
 		'@[' { ']' }
 		'#(' { ')' }
 		else { ')' }
+	}
+}
+
+// ------------------------------------------------------------------ pretty
+
+// pp_form pretty-prints one datum, breaking a long list across lines at the
+// 80-column budget. This is the single implementation behind `blip fmt` and
+// the LSP hover/completion rendering; both used to carry their own copy.
+pub fn pp_form(a &reader.Arena, id reader.NodeId, depth int) string {
+	d := a.node(id)
+	match d.tag {
+		.nil { return 'nil' }
+		.bool { return if d.i == 1 { '#t' } else { '#f' } }
+		.int { return d.i.str() }
+		.rat { return '${d.i}/${d.den}' }
+		.float { return d.f.str() }
+		.char { return char_literal(i32(d.i)) }
+		.str { return quote_string(d.value) }
+		.sym { return d.value }
+		.kw { return ':' + d.value }
+		.list {
+			kids := a.kids_view(id)
+			if kids.len == 0 {
+				return '()'
+			}
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1)
+				ki++
+			}
+			line := '(' + parts.join(' ') + ')'
+			if line.len <= 80 {
+				return line
+			}
+			mut s := '('
+			for i, p in parts {
+				if i == 0 {
+					s += p
+				} else {
+					s += '\n' + '  '.repeat(depth + 1) + p
+				}
+			}
+			s += ')'
+			return s
+		}
+		.vector {
+			kids := a.kids_view(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1)
+				ki++
+			}
+			return '[' + parts.join(' ') + ']'
+		}
+		.table {
+			kids := a.kids_view(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1) + ' ' + pp_form(a, kids[ki + 1], depth + 1)
+				ki += 2
+			}
+			return '{' + parts.join(' ') + '}'
+		}
+		.array {
+			kids := a.kids_view(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1)
+				ki++
+			}
+			return '@[' + parts.join(' ') + ']'
+		}
+		.bytes {
+			kids := a.kids_view(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1)
+				ki++
+			}
+			return '#(' + parts.join(' ') + ')'
+		}
+		.quoted {
+			kids := a.kids_view(id)
+			if kids.len == 0 {
+				return "'()"
+			}
+			return "'" + pp_form(a, kids[0], depth)
+		}
+		.quasi {
+			kids := a.kids_view(id)
+			if kids.len == 0 {
+				return '`()'
+			}
+			return '`' + pp_form(a, kids[0], depth)
+		}
+		.unquote {
+			kids := a.kids_view(id)
+			if kids.len == 0 {
+				return ',()'
+			}
+			return ',' + pp_form(a, kids[0], depth)
+		}
+		.unquote_splice {
+			kids := a.kids_view(id)
+			if kids.len == 0 {
+				return ',@()'
+			}
+			return ',@' + pp_form(a, kids[0], depth)
+		}
+		else {
+			return '#<datum>'
+		}
 	}
 }

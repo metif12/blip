@@ -179,6 +179,8 @@ jobs:
           v -cc gcc -o multi_use tests/multi_use.v
           v -cc gcc -o value_to_datum tests/value_to_datum.v
           v -cc gcc -o macros_gate tests/macros_gate.v
+          v -cc gcc -o fibers tests/fibers.v
+          v -cc gcc -o veb_bridge tests/veb_bridge.v
 
       # These runners print results and do not set an exit code yet, so the
       # output is checked rather than the status. That is listed as a known gap
@@ -203,6 +205,8 @@ jobs:
           ./multi_use      | tee -a out.txt
           ./value_to_datum | tee -a out.txt
           ./macros_gate    | tee -a out.txt
+          ./fibers         | tee -a out.txt
+          ./veb_bridge     | tee -a out.txt
           if grep -qE '^FAIL|panic' out.txt; then
             echo "::error::a check failed or the machine panicked"
             exit 1
@@ -216,8 +220,8 @@ jobs:
   # runs in parallel and is not gated behind the test job, because a change to
   # the build should be visible here before it is merged rather than after.
   #
-  # `docker build` is not run on every push: an image is a promise about a
-  # published artifact, so it builds when the source that defines one changes.
+  # This job has no path filter, so it runs on every push to main and every PR,
+  # like the test job above (see `on:` at the top of this file).
   docker-images:
     runs-on: ubuntu-22.04
     steps:
