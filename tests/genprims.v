@@ -8,9 +8,9 @@ module main
 // designed to be exact (sin 0, cos 0, powers of ten). Anything computed is
 // asserted by type instead.
 
-import vlib.blip.host
-import vlib.blip.machine
-import vlib.blip.printer
+import blip.host
+import blip.machine
+import blip.printer
 
 struct Suite {
 mut:

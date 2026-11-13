@@ -4,10 +4,10 @@ $if !wasm32 {
 	import os
 }
 
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.machine
-import vlib.blip.reader
+import blip
+import blip.host
+import blip.machine
+import blip.reader
 
 fn (mut e Emitter) callable(name string) string {
 	if name in prim_names {

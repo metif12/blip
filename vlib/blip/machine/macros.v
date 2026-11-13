@@ -5,11 +5,11 @@ $if !wasm32 {
 }
 
 import strconv
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.prims
-import vlib.blip.printer
-import vlib.blip.reader
+import blip
+import blip.host
+import blip.prims
+import blip.printer
+import blip.reader
 
 // Frame is the datum_to_value worklist element. It lives beside its only
 // user rather than in mod.v: V 0.5.2 mis-reports "evaluated but not used"
@@ -43,18 +43,18 @@ fn (mut m Machine) eval_defmacro(kids []blip.NodeId) ! {
 fn (mut m Machine) macex1(n blip.NodeId) !blip.Value {
 	// The form is turned into a value first and expanded there, so `macex` can
 	// loop on the RESULT -- which is a value -- without converting back and forth.
-	return m.expand_macro_value(m.datum_to_value(n))
+	return m.expand_macro_value(m.datum_to_value(n)!)
 }
 
 fn (m &Machine) is_macro_form(v blip.Value) bool {
 	if v.tag != .pair {
 		return false
 	}
-	head := v.as_pair().car
+	head := (v.as_pair() or { return false }).car
 	if head.tag != .symbol {
 		return false
 	}
-	found := m.envs.lookup(m.globals, head.as_string()) or {
+	found := m.envs.lookup(m.globals, head.as_string() or { return false }) or {
 		return false
 	}
 	return found.tag == .closure && m.is_macro_closure(found)
@@ -67,7 +67,7 @@ fn (m &Machine) is_macro_closure(v blip.Value) bool {
 	if v.tag != .closure {
 		return false
 	}
-	return v.as_closure().name in m.macros
+	return (v.as_closure() or { return false }).name in m.macros
 }
 
 // expand_macro_value runs one macro over `v` when `v` is a macro call, and
@@ -81,14 +81,16 @@ fn (mut m Machine) expand_macro_value(v blip.Value) !blip.Value {
 	if !m.is_macro_form(v) {
 		return v
 	}
-	name := v.as_pair().car.as_string()
+	name := (v.as_pair() or { return error(err.msg()) }).car.as_string() or {
+		return error(err.msg())
+	}
 	macro := m.envs.lookup(m.globals, name) or {
 		return error('macex: ${name} is not defined')
 	}
 	if !m.is_macro_closure(macro) {
 		return error('macex: ${name} is not a macro')
 	}
-	args := prims.seq(v.as_pair().cdr) or {
+	args := prims.seq((v.as_pair() or { return error(err.msg()) }).cdr) or {
 		return error('macex: ${name} has no arguments')
 	}
 	return m.call_value(macro, args)!
@@ -123,7 +125,7 @@ fn (mut m Machine) macex(n blip.NodeId) !blip.Value {
 // primitive that takes a machine cannot be expressed in the prims table at all.
 // The definitions land in the current frame, so `(define (f p) (point-x p))` can
 // see `point-x` -- a struct you cannot name from another function is not a type.
-pub fn (mut m Machine) datum_to_value(id blip.NodeId) blip.Value {
+pub fn (mut m Machine) datum_to_value(id blip.NodeId) !blip.Value {
 	mut built := map[blip.NodeId]blip.Value{}
 	mut work := []Frame{}
 	work << Frame{
@@ -147,12 +149,12 @@ pub fn (mut m Machine) datum_to_value(id blip.NodeId) blip.Value {
 			}
 			continue
 		}
-		built[f.id] = m.assemble(f.id, f.kids, built).with_tree_origin(m.arena.node(f.id).origin)
+		built[f.id] = (m.assemble(f.id, f.kids, built)!).with_tree_origin(m.arena.node(f.id).origin)
 	}
-	return built[id]
+	return built[id] or { blip.nil_value() }
 }
 
-fn (mut m Machine) assemble(id blip.NodeId, kids []blip.NodeId, built map[blip.NodeId]blip.Value) blip.Value {
+fn (mut m Machine) assemble(id blip.NodeId, kids []blip.NodeId, built map[blip.NodeId]blip.Value) !blip.Value {
 	d := m.arena.node(id)
 	match d.tag {
 		.nil { return blip.nil_value() }
@@ -163,7 +165,7 @@ fn (mut m Machine) assemble(id blip.NodeId, kids []blip.NodeId, built map[blip.N
 		.str { return blip.string(d.value) }
 		.sym { return blip.symbol(d.value) }
 		.kw { return blip.keyword(d.value) }
-		.quoted { return m.datum_to_value(m.arena.kids_view(id)[0]) }
+		.quoted { return m.datum_to_value(m.arena.kids_view(id)[0])! }
 		.unquote, .unquote_splice {
 			// Nested inside a quasiquote. Evaluated here rather than treated as
 			// data, which is the whole difference between `,x` and 'x.
@@ -184,7 +186,7 @@ fn (mut m Machine) assemble(id blip.NodeId, kids []blip.NodeId, built map[blip.N
 					// `,@xs` inside a list splices xs in. This is the one place a
 					// node contributes more than one element, which is why the loop is
 					// over the children and not over `built`.
-					spliced := m.quasi_to_value(child)
+					spliced := m.quasi_to_value(child)!
 					parts := prims.seq(spliced) or {
 						return blip.nil_value()
 					}
@@ -213,7 +215,10 @@ fn (mut m Machine) assemble(id blip.NodeId, kids []blip.NodeId, built map[blip.N
 			mut mm := map[string]blip.Value{}
 			mut i := 0
 			for i + 1 < kids.len {
-				mm[built[kids[i]].as_string()] = built[kids[i + 1]]
+				k := built[kids[i]].as_string() or {
+					return error('quoted table keys must be strings, got ${printer.write(built[kids[i]])}')
+				}
+				mm[k] = built[kids[i + 1]] or { blip.nil_value() }
 				i += 2
 			}
 			return blip.table(mm)
@@ -237,7 +242,10 @@ fn (mut m Machine) assemble(id blip.NodeId, kids []blip.NodeId, built map[blip.N
 			mut mm := map[string]blip.Value{}
 			mut i := 0
 			for i + 1 < kids.len {
-				mm[built[kids[i]].as_string()] = built[kids[i + 1]]
+				k := built[kids[i]].as_string() or {
+					return error('quoted table keys must be strings, got ${printer.write(built[kids[i]])}')
+				}
+				mm[k] = built[kids[i + 1]] or { blip.nil_value() }
 				i += 2
 			}
 			return blip.buffer(mm)
@@ -254,7 +262,7 @@ fn (mut m Machine) assemble(id blip.NodeId, kids []blip.NodeId, built map[blip.N
 // control state. Without the restore, evaluating an unquote would throw away the
 // continuation frames of the form that contained it, and the macro expansion would
 // return into the wrong place.
-pub fn (mut m Machine) quasi_to_value(id blip.NodeId) blip.Value {
+pub fn (mut m Machine) quasi_to_value(id blip.NodeId) !blip.Value {
 	d := m.arena.node(id)
 	if d.tag == .unquote || d.tag == .unquote_splice {
 		inner := m.arena.kids_view(id)[0]
@@ -278,7 +286,103 @@ pub fn (mut m Machine) quasi_to_value(id blip.NodeId) blip.Value {
 		m.env = saved_env
 		return out
 	}
-	return m.datum_to_value(id)
+	return m.datum_to_value(id)!
+}
+
+// value_to_datum is the reverse of datum_to_value: a runtime Value back into
+// an AST node, for the emit-time macro path (macro_embed expands through a
+// real machine, then converts back to source).
+//
+// Status: pure shapes + table/buffer/struct implemented; closure/primitive
+// remain refused (they are not data literals). The returned node carries the
+// value's origin, so expansion does not launder source spans.
+pub fn (mut m Machine) value_to_datum(v blip.Value) !blip.NodeId {
+	id := m.value_to_datum_inner(v)!
+	m.arena.nodes[int(id)].origin = v.origin
+	m.arena.nodes[int(id)].line = v.origin.line
+	m.arena.nodes[int(id)].col = v.origin.col
+	return id
+}
+
+fn (mut m Machine) value_to_datum_inner(v blip.Value) !blip.NodeId {
+	match v.tag {
+		.nil {
+			return m.arena.leaf(.nil)
+		}
+		.boolean {
+			return m.arena.int_leaf(.bool, if v.i == 1 { 1 } else { 0 })
+		}
+		.integer {
+			return m.arena.int_leaf(.int, v.i)
+		}
+		.float {
+			return m.arena.float_leaf(v.f)
+		}
+		.string {
+			s := v.as_string() or { return error(err.msg()) }
+			return m.arena.str_leaf(.str, s)
+		}
+		.symbol {
+			s := v.as_string() or { return error(err.msg()) }
+			return m.arena.str_leaf(.sym, s)
+		}
+		.keyword {
+			s := v.as_string() or { return error(err.msg()) }
+			return m.arena.str_leaf(.kw, s)
+		}
+		.pair {
+			pair_v := v.as_pair() or { return error(err.msg()) }
+			car_id := m.value_to_datum(pair_v.car)!
+			cdr_id := m.value_to_datum(pair_v.cdr)!
+			return m.node_of('', [car_id, cdr_id])
+		}
+		.vector {
+			vec := v.as_vector() or { return error(err.msg()) }
+			mut kids := []blip.NodeId{}
+			for elem in vec.data {
+				kids << m.value_to_datum(elem)!
+			}
+			return m.node_of('', kids)
+		}
+		.emptylist {
+			id := m.arena.open(.list)
+			m.arena.finish(id, []blip.NodeId{})
+			return id
+		}
+		.table, .buffer {
+			tbl := v.as_table() or { return error(err.msg()) }
+			id_tag := if v.tag == .buffer { reader.DatumTag.buffer } else { reader.DatumTag.table }
+			mut items := []blip.NodeId{}
+			mut keys := []string{}
+			for k, _ in tbl.values {
+				keys << k
+			}
+			keys.sort()
+			for k in keys {
+				key_id := m.arena.str_leaf(.kw, k)
+				val_id := m.value_to_datum(tbl.values[k])!
+				items << key_id
+				items << val_id
+			}
+			id := m.arena.open(id_tag)
+			m.arena.finish(id, items)
+			return id
+		}
+		.struct_ {
+			sv := v.as_struct() or { return error(err.msg()) }
+			mut items := []blip.NodeId{}
+			items << m.sym_node(sv.name)
+			for f in sv.fields {
+				items << m.value_to_datum(sv.get(f))!
+			}
+			id := m.arena.open(.list)
+			m.arena.finish(id, items)
+			return id
+		}
+		else {
+			return error('value_to_datum: complex shape ${v.tag} not yet implemented')
+		}
+	}
 }
 
 // ----------------------------------------------------------------- match

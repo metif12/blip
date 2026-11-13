@@ -1,6 +1,6 @@
 module machine
 
-import vlib.blip
+import blip
 
 // CtxPrimFn is a machine-aware primitive: like blip.PrimFn it takes args, but
 // it also gets the machine, so it can reach the host, the current env, gensym,

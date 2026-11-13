@@ -3,8 +3,8 @@ module main
 // veb bridge gate: a blip handler closure can be registered and dispatched.
 
 import os
-import vlib.blip.host
-import vlib.blip.machine
+import blip.host
+import blip.machine
 
 struct Suite {
 mut:

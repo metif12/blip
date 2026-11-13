@@ -8,7 +8,7 @@ One line (clones blip and its pinned V toolchain into `~/.blip`):
 curl -fsSL https://metif12.github.io/blip/install.sh | bash
 ```
 
-To build from a checkout instead, pin V exactly as `.github/workflows/ci.yml` does, then `v -cc gcc -o blip blip.v`. See `CONTRIBUTING.md` for the full recipe.
+To build from a checkout instead, use stock V 0.5.2 exactly as `.github/workflows/ci.yml` does, then `v -cc gcc -path 'vlib|@vlib' -o blip main.v`. See `CONTRIBUTING.md` for the full recipe.
 
 ## First run
 

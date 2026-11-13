@@ -4,10 +4,9 @@ $if !wasm32 {
 	import os
 }
 
-import json2
-import vlib.blip.reader
-import vlib.blip.prims
-import vlib.blip.printer
+import blip.reader
+import blip.prims
+import blip.printer
 import strings
 
 fn extract_raw_id(content string) ?string {

@@ -5,7 +5,7 @@ import os
 import time
 
 fn main() {
-	build := os.execute('v -cc gcc -o server.exe server.v')
+	build := os.execute('v -cc gcc -path \'vlib|@vlib\' -o server.exe server.v')
 	if build.exit_code != 0 {
 		eprintln(build.output)
 		exit(1)

@@ -9,7 +9,7 @@ references, rename, formatting, semantic tokens and more.
 
 1. Build blip:
    ```sh
-   v -cc gcc -o blip.exe blip.v
+   v -cc gcc -path 'vlib|@vlib' -o blip.exe main.v
    ```
    Make sure `blip.exe` is on your `PATH`.
 

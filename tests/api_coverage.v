@@ -126,7 +126,7 @@ fn main() {
 	// in-process, because it owns stdin, so the CLI is where it is engaged.
 	mut corpus_files := []string{}
 	collect('tests', mut corpus_files)
-	for cli in ['blip.v', 'server.v', 'reader_probe.v'] {
+	for cli in ['main.v', 'server.v', 'reader_probe.v'] {
 		if os.exists(cli) {
 			corpus_files << cli
 		}

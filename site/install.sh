@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# blip builds against ONE compiler: the commit pinned in
-# .github/workflows/ci.yml. Building against "whatever vlang/v master is this
-# morning" is how an install works on Friday and fails on Monday -- 1123
-# commits upstream changed the checker out from under vlib/blip. So V and its
-# vc bootstrap are pinned to exactly the pair CI builds, and the same two
-# commits appear in both install scripts and CI.
+# blip builds against stock V 0.5.2: the official release archive, not a
+# master build. A master build reports the same "V 0.5.2" version string for
+# different commits while resolving project modules differently, so "whatever
+# vlang/v master is this morning" is how an install works on Friday and fails
+# on Monday. The release archive is that compiler, byte for byte, on every
+# machine -- no source build, no vc bootstrap.
 #
-# Keep these two lines in sync with ci.yml.
-V_COMMIT=74be97a2d7bd1fce4150abc749a2e64b21d9d082
-VC_COMMIT=0027130e9850c9946fa2c21e9004f13d8e593595
+# Keep the version below in sync with .github/workflows/ci.yml.
+V_VERSION=0.5.2
 
 BLIP_DIR="${BLIP_INSTALL_DIR:-$HOME/.blip}"
 V_DIR="${BLIP_V_DIR:-$HOME/.blip-v}"
@@ -36,39 +35,51 @@ if ! command -v cc >/dev/null 2>&1 && ! command -v gcc >/dev/null 2>&1; then
     exit 1
 fi
 
+# V links its own binary against Boehm GC. Without libgc-dev the build dies
+# with "Boehm GC library was not found" three minutes in.
+if ! (echo '#include <gc.h>' | cc -x c - -o /dev/null 2>/dev/null); then
+    echo "==> ERROR: Boehm GC (libgc) development files not found."
+    echo "    Debian/Ubuntu:  sudo apt install libgc-dev"
+    echo "    Fedora:         sudo dnf install gc-devel"
+    echo "    Alpine:         apk add gc-dev"
+    echo "    macOS:          brew install bdw-gc"
+    exit 1
+fi
+
+case "$(uname -s)-$(uname -m)" in
+    Linux-*)     V_ASSET="v_linux.zip" ;;
+    Darwin-arm64)  V_ASSET="v_macos_arm64.zip" ;;
+    Darwin-*)    V_ASSET="v_macos_x86_64.zip" ;;
+    *) echo "==> ERROR: unsupported platform $(uname -s)-$(uname -m)" >&2; exit 1 ;;
+esac
+
 setup_v() {
-    if [ -x "$V_DIR/v" ] && [ -f "$V_DIR/.blip-commit" ] \
-        && [ "$(cat "$V_DIR/.blip-commit")" = "$V_COMMIT" ]; then
+    if [ -x "$V_DIR/v" ] && [ -f "$V_DIR/.blip-version" ] \
+        && [ "$(cat "$V_DIR/.blip-version")" = "$V_VERSION" ]; then
         return 0
     fi
-    echo "==> V not found (or not the pinned build). Building V $V_COMMIT..."
-    echo "    This compiles V from source once and takes a few minutes."
+    echo "==> V $V_VERSION not found. Downloading the official release..."
     rm -rf "$V_DIR"
-    git init -q "$V_DIR"
-    cd "$V_DIR"
-    git remote add origin https://github.com/vlang/v.git
-    git fetch -q --depth 1 origin "$V_COMMIT"
-    git checkout -q FETCH_HEAD
-    # vc is the C source the bootstrap compiles into `v`, and it is a SEPARATE
-    # repository that V's own Makefile clones at HEAD -- UNPINNED. A vc
-    # snapshot from a newer V can reject the pinned tree's own vlib, so vc is
-    # cloned at its own pin -- the same reasoning CI records in ci.yml.
-    git clone -q https://github.com/vlang/vc vc
-    git -C vc fetch -q --depth 1 origin "$VC_COMMIT"
-    git -C vc checkout -q FETCH_HEAD
-    make -f Makefile v
-    if [ ! -x ./v ]; then
-        echo "==> ERROR: V build finished but produced no ./v binary" >&2
+    mkdir -p "$V_DIR"
+    tmp="$(mktemp -d)"
+    curl -sSL -o "$tmp/v.zip" "https://github.com/vlang/v/releases/download/$V_VERSION/$V_ASSET"
+    unzip -q "$tmp/v.zip" -d "$tmp"
+    mv "$tmp/v"/* "$V_DIR/"
+    rm -rf "$tmp"
+    if [ ! -x "$V_DIR/v" ]; then
+        echo "==> ERROR: V download finished but produced no $V_DIR/v binary" >&2
         exit 1
     fi
-    printf '%s' "$V_COMMIT" > .blip-commit
-    cd "$BLIP_DIR"
+    printf '%s' "$V_VERSION" > "$V_DIR/.blip-version"
 }
 
 setup_v
 export PATH="$V_DIR:$PATH"
 
-"$V_DIR/v" -cc gcc -o "$BLIP_DIR/blip" blip.v
+# From the repo root, so the relative `vlib` in -path resolves: it points the
+# compiler at this repo's own vlib/ for `import blip.*`, with the standard
+# library behind it.
+"$V_DIR/v" -cc gcc -path 'vlib|@vlib' -o "$BLIP_DIR/blip" main.v
 
 echo "==> blip installed to $BLIP_DIR/blip"
 echo "==> Add it to your PATH:  export PATH=\"$BLIP_DIR:\$PATH\""

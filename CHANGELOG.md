@@ -4,6 +4,39 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### Unpinned: blip builds on stock V 0.5.2
+
+- No `V_COMMIT`/`VC_COMMIT` anywhere. The toolchain is the official 0.5.2
+  release archive (`V 0.5.2 7647ce1`), downloaded -- not built from a vlang/v
+  master commit, with no vc bootstrap beside it. Gate: `tests/unit.v`
+  `install_pins` now asserts one `V_VERSION` spelled the same in ci.yml,
+  both installers, both site copies, and the three Dockerfiles, and refuses
+  any `git clone vlang/v` source build in them.
+- Imports spell the short name (`import blip.machine`, used as
+  `machine.…`); builds pass `-path 'vlib|@vlib'` so the compiler finds this
+  repo's own `vlib/`. Stock 0.5.2 has no project-local `vlib.` lookup --
+  `import vlib.blip.*` finds the files but binds nothing, which read as a
+  wall of `unknown function` naming files that exist. The CLI entry moved
+  from `blip.v` to `main.v` for the same reason (a root file colliding with
+  the `blip` module name breaks resolution).
+- Stock-0.5.2 codegen, each verified with a minimal probe before working
+  around it (see roadmap §7.3): `iface as &T` on an interface holding a
+  `&T` panics, so the `as_*` accessors narrow with `is &T` (a helper for
+  the string case); `.str()` on a `!`-unwrap or `or`-default emits
+  unlinkable `str_intp` calls, so tests bind first; `json2` does not exist,
+  so the LSP uses classic `json` and `tools/genprims.vsh` parses
+  `v ast -p` with its own 100-line JSON reader for the 0.5.2 shape
+  (`ast_type`/`short_name`/`return_type`/`params`); `recover()` does not
+  exist, so the drive `defer`/`recover` net is gone and every accessor,
+  prim, and machine path returns `!T` with arity/bounds guards instead.
+- `tools/genprims.vsh --check` passes against the release vlib (8 math
+  prims); all 21 suites, `reader_probe` on all examples, the server, the
+  clib shared library plus its C smoke test, and `blip test` on the
+  examples are green on the release build. (Pre-existing, out of scope:
+  `blip test examples/07_config.lip` reports 5 table-order mismatches --
+  the printer sorts keys while the expectations list insertion order, on
+  master-identical code.)
+
 ### C embedding library: `clib/` ships a stable C ABI
 
 - `clib/blip.h` is the whole surface: opaque `BlipInterp*`, string in,

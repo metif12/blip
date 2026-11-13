@@ -5,11 +5,11 @@ $if !wasm32 {
 }
 
 import strconv
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.prims
-import vlib.blip.printer
-import vlib.blip.reader
+import blip
+import blip.host
+import blip.prims
+import blip.printer
+import blip.reader
 
 fn (mut m Machine) eval_import(kids []blip.NodeId) ! {
 	if kids.len < 2 {

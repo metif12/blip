@@ -4,11 +4,11 @@ module main
 // machine extension surface is exercised here, which also keeps
 // tests/api_coverage.v green (it fails on any pub fn named nowhere).
 
-import vlib.blip
-import vlib.blip.embed
-import vlib.blip.host
-import vlib.blip.machine
-import vlib.blip.printer
+import blip
+import blip.embed
+import blip.host
+import blip.machine
+import blip.printer
 
 struct Suite {
 mut:
@@ -28,7 +28,8 @@ fn my_double(args []blip.Value) !blip.Value {
 	if args.len != 1 {
 		return error('my-double needs 1 arg')
 	}
-	return blip.integer(args[0].as_int() * 2)
+	n := args[0].as_int() or { return error(err.msg()) }
+	return blip.integer(n * 2)
 }
 
 fn my_steps(mut m machine.Machine, _ []blip.Value) !blip.Value {
@@ -241,6 +242,7 @@ fn main() {
 		} else {
 			s.ok('embed is_unbound_error', 'unbound')
 		}
+		blip.nil_value()
 	}
 	e.eval('(define') or {
 		if !embed.is_parse_error(err.msg()) {
@@ -248,6 +250,7 @@ fn main() {
 		} else {
 			s.ok('embed is_parse_error', 'parse')
 		}
+		blip.nil_value()
 	}
 	{
 		h2 := host.new_capture()
@@ -259,6 +262,7 @@ fn main() {
 			} else {
 				s.ok('embed is_limit_error+set_limits', 'limited')
 			}
+			blip.nil_value()
 		}
 	}
 

@@ -13,10 +13,10 @@ module embed
 // which sees the machine (host, env, limits) instead of only its args.
 // Untrusted code runs after restrict_to keeps only the names it may use.
 
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.machine
-import vlib.blip.printer
+import blip
+import blip.host
+import blip.machine
+import blip.printer
 
 // Embedded prelude: the same lib/std.lip `blip run` loads, compiled into the
 // embedder so there is no path to resolve and no file to ship. A file-based
@@ -47,7 +47,7 @@ pub mut:
 // prelude is trusted: a failure to load it is ignored rather than surfaced,
 // because there is nothing the embedder could do about it.
 pub fn new(h host.Host) &Interp {
-	e := &Interp{
+	mut e := &Interp{
 		m: machine.new_standalone(h)
 	}
 	e.m.run_str(embedded_std) or {}
@@ -189,32 +189,34 @@ pub fn to_bool(v blip.Value) bool {
 
 // to_int answers the integer (or rune code point), or an error.
 pub fn to_int(v blip.Value) !i64 {
-	return v.as_int()
+	return v.as_int() or { return error(err.msg()) }
 }
 
 pub fn to_float(v blip.Value) !f64 {
-	return v.as_float()
+	return v.as_float() or { return error(err.msg()) }
 }
 
 // to_str answers the string/symbol/keyword/primitive payload, or an error.
 pub fn to_str(v blip.Value) !string {
-	return v.as_string()
+	return v.as_string() or { return error(err.msg()) }
 }
 
 // to_strs reads a vector/list of strings into V strings.
 pub fn to_strs(v blip.Value) ![]string {
 	mut out := []string{}
 	if v.tag == .vector || v.tag == .array {
-		for item in v.as_vector().data {
-			out << item.as_string()
+		vec := v.as_vector() or { return error(err.msg()) }
+		for item in vec.data {
+			out << item.as_string() or { return error(err.msg()) }
 		}
 		return out
 	}
 	if v.tag == .pair || v.tag == .emptylist {
 		mut cur := v
 		for cur.tag == .pair {
-			out << cur.as_pair().car.as_string()
-			cur = cur.as_pair().cdr
+			pair_v := cur.as_pair() or { return error(err.msg()) }
+			out << pair_v.car.as_string() or { return error(err.msg()) }
+			cur = pair_v.cdr
 		}
 		return out
 	}
@@ -245,25 +247,35 @@ pub fn is_ok(v blip.Value) bool {
 	if v.tag != .pair {
 		return false
 	}
-	head := v.as_pair().car
-	return head.tag == .symbol && head.as_string() == 'ok'
+	pair_v := v.as_pair() or { return false }
+	head := pair_v.car
+	if head.tag != .symbol {
+		return false
+	}
+	s := head.as_string() or { return false }
+	return s == 'ok'
 }
 
 pub fn is_err(v blip.Value) bool {
 	if v.tag != .pair {
 		return false
 	}
-	head := v.as_pair().car
-	return head.tag == .symbol && head.as_string() == 'err'
+	pair_v := v.as_pair() or { return false }
+	head := pair_v.car
+	if head.tag != .symbol {
+		return false
+	}
+	s := head.as_string() or { return false }
+	return s == 'err'
 }
 
 pub fn ok_value(v blip.Value) !blip.Value {
 	if !is_ok(v) {
 		return error('ok_value: not an (ok ...) result')
 	}
-	rest := v.as_pair().cdr
+	rest := (v.as_pair() or { return error(err.msg()) }).cdr
 	if rest.tag == .pair {
-		return rest.as_pair().car
+		return (rest.as_pair() or { return error(err.msg()) }).car
 	}
 	return blip.nil_value()
 }
@@ -272,11 +284,11 @@ pub fn err_message(v blip.Value) !string {
 	if !is_err(v) {
 		return error('err_message: not an (err ...) result')
 	}
-	rest := v.as_pair().cdr
+	rest := (v.as_pair() or { return error(err.msg()) }).cdr
 	if rest.tag == .pair {
-		inner := rest.as_pair().car
+		inner := (rest.as_pair() or { return error(err.msg()) }).car
 		if inner.tag in [.string, .symbol, .keyword] {
-			return inner.as_string()
+			return inner.as_string() or { return error(err.msg()) }
 		}
 		return show(inner)
 	}

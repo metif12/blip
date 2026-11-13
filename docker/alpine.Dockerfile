@@ -4,54 +4,32 @@
 #
 # Three images, one for each toolchain the project is willing to stand behind,
 # and they are meant to be the same. What that means concretely: the V compiler
-# is built from the same pinned commit in all three, because a project pinned to
-# a specific compiler cannot ship an image built by a different one and claim to
-# be the same language. `-cc gcc` everywhere, matching the README.
+# is stock 0.5.2 in all three, because a project that builds on one V and
+# ships another cannot claim to be the same language. `-cc gcc` everywhere,
+# matching the README.
 #
-# multi-stage would break that. A multi-stage build that copies a prebuilt
-# compiler in from a builder stage is fine; one that downloads a binary can only
-# produce a V that cannot find its vlib beside it, which the repo's own notes
-# on the 0.5.2 release archive already say.
+# The compiler comes from the official release archive, not a source build:
+# building V means bootstrapping it, and the bootstrap needs its own C
+# toolchain plus a contemporary vc snapshot -- a second pin hiding inside the
+# first. The archive is the release the V team published, byte for byte.
+# (Alpine is musl while the archive targets glibc, so gcompat is installed
+# for the loader shims. If a future V stops running under it, the fallback
+# is building the 0.5.2 tag from source on this image.)
 
 FROM alpine:3.21
 
-# build-base is gcc, make and the rest of the C toolchain. git and curl are
-# what fetching the pinned compiler needs.
-RUN apk add --no-cache build-base git curl gc-dev
+# build-base is gcc, make and the rest of the C toolchain. curl and unzip are
+# what fetching the stock compiler needs; gcompat shims the glibc loader.
+RUN apk add --no-cache build-base curl unzip gc-dev gcompat
 
-# The commit this project targets. Not the 0.5.2 release: vlang/v master at
-# this commit also reports itself as "V 0.5.2" and resolves modules
-# differently, which is the difference the project was bitten by.
-ARG V_COMMIT=74be97a2d7bd1fce4150abc749a2e64b21d9d082
-
-# vc is the C source V bootstraps itself from, and it lives in a SEPARATE
-# repository from V. The Makefile clones it at HEAD -- unpinned -- which is what
-# broke the build: a vc snapshot generated from a newer V carries a parser that
-# rejects the pinned V's own vlib. vc HEAD gained "reject `if` conditions that
-# start with a parenthesized if expression" on 2026-10-05, and
-# vlib/math/bits/bits.v at this V_COMMIT uses exactly that shape at line 621, so
-# `make` died compiling a file the pinned commit itself ships.
-#
-# This is the vc snapshot taken just after V_COMMIT and before that change. The
-# `v` target is built directly rather than through `all`, because `all` depends
-# on download_vc, which clones vc at HEAD and undoes the pin.
-ARG VC_COMMIT=0027130e9850c9946fa2c21e9004f13d8e593595
+# The compiler this project targets: the official 0.5.2 release.
+ARG V_VERSION=0.5.2
 
 WORKDIR /opt
-RUN git config --global --add safe.directory /opt/v \
-    && git config --global --add safe.directory /opt/v/vc \
-    && git init -q v \
-    && cd v \
-    && git remote add origin https://github.com/vlang/v.git \
-    && git fetch -q --depth 1 origin "$V_COMMIT" \
-    && git checkout -q FETCH_HEAD \
-    && git clone -q https://github.com/vlang/vc vc \
-    && git -C vc fetch -q --depth 1 origin "$VC_COMMIT" \
-    && git -C vc checkout -q FETCH_HEAD \
-    && mkdir -p thirdparty/tcc/lib \
-    && cp /usr/lib/libgc.a thirdparty/tcc/lib/libgc.a 2>/dev/null || cp /lib/libgc.a thirdparty/tcc/lib/libgc.a 2>/dev/null || true \
-    && make -f Makefile v VFLAGS="-d use_bundled_libgc" \
-    && ./v -version
+RUN curl -sSL -o v.zip "https://github.com/vlang/v/releases/download/${V_VERSION}/v_linux.zip" \
+    && unzip -q v.zip \
+    && rm v.zip \
+    && ./v/v -version
 
 ENV PATH=/opt/v:$PATH
 
@@ -65,7 +43,7 @@ COPY lib/std.lip /usr/local/lib/std.lip
 COPY . /src
 WORKDIR /src
 
-RUN v -cc gcc -o /usr/local/bin/blip blip.v \
+RUN v -cc gcc -path 'vlib|@vlib' -o /usr/local/bin/blip main.v \
     && blip version
 
 # /w is where a program gets mounted, so the image is runnable rather than

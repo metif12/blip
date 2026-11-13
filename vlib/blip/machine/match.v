@@ -1,8 +1,8 @@
 module machine
 
-import vlib.blip
-import vlib.blip.prims
-import vlib.blip.reader
+import blip
+import blip.prims
+import blip.reader
 
 // Pattern matching.
 //
@@ -105,7 +105,7 @@ fn (mut m Machine) match_at(pat blip.NodeId, subject blip.Value, depth int) !Mat
 					ok: false
 				}
 			}
-			data := subject.as_vector().data
+			data := (subject.as_vector() or { return error(err.msg()) }).data
 			if data.len != kids.len {
 				return Matched{
 					ok: false
@@ -218,8 +218,9 @@ fn (mut m Machine) match_list_at(pat blip.NodeId, subject blip.Value, depth int)
 			}
 			mut binds := []Bind{}
 			mut i := 1
+			pair_v := subject.as_pair() or { return error(err.msg()) }
 			for i < kids.len {
-				sub := m.match_at(kids[i], subject.as_pair().car, depth + 1)!
+				sub := m.match_at(kids[i], pair_v.car, depth + 1)!
 				if !sub.ok {
 					return Matched{
 						ok: false
@@ -228,7 +229,7 @@ fn (mut m Machine) match_list_at(pat blip.NodeId, subject blip.Value, depth int)
 				binds << sub.binds
 				i++
 			}
-			sub := m.match_at(kids[kids.len - 1], subject.as_pair().cdr, depth + 1)!
+			sub := m.match_at(kids[kids.len - 1], pair_v.cdr, depth + 1)!
 			if !sub.ok {
 				return Matched{
 					ok: false
@@ -241,11 +242,9 @@ fn (mut m Machine) match_list_at(pat blip.NodeId, subject blip.Value, depth int)
 			}
 		}
 		'list', 'vector' {
-			items := prims.seq(subject) or {
-				return Matched{
-					ok: false
-				}
-			}
+			items := prims.seq(subject) or { return Matched{
+				ok: false
+			} }
 			rest := kids[1..]
 			// The length rule, which used to be the whole of this branch and made
 			// `(list 1 rest)` refuse a three-element subject -- contradicting the
@@ -360,9 +359,7 @@ fn (mut m Machine) match_list_at(pat blip.NodeId, subject blip.Value, depth int)
 			mut f := m.prims[head] or {
 				return error('match: ${head} is not a known procedure, and a pattern list needs a known head')
 			}
-			res := f(call) or {
-				return error('match: ${head} failed: ${err.msg()}')
-			}
+			res := f(call) or { return error('match: ${head} failed: ${err.msg()}') }
 			return Matched{
 				ok: res.truthy()
 			}
@@ -379,11 +376,9 @@ fn (mut m Machine) positional(kids []blip.NodeId, subject blip.Value, depth int)
 // WHOLE remaining tail rather than one element -- that is what makes
 // `(list 1 rest)` bind `rest` to `(2 3)`.
 fn (mut m Machine) match_list_tail(kids []blip.NodeId, subject blip.Value, depth int) !Matched {
-	items := prims.seq(subject) or {
-		return Matched{
-			ok: false
-		}
-	}
+	items := prims.seq(subject) or { return Matched{
+		ok: false
+	} }
 	rest := kids[1..]
 	mut binds := []Bind{}
 	mut i := 0
@@ -424,13 +419,13 @@ fn (mut m Machine) match_list_tail(kids []blip.NodeId, subject blip.Value, depth
 }
 
 fn (mut m Machine) match_table_at(pat blip.NodeId, subject blip.Value, depth int) !Matched {
-	if !(subject.tag in [.table, .buffer, .struct_]) {
+	if subject.tag !in [.table, .buffer, .struct_] {
 		return Matched{
 			ok: false
 		}
 	}
 	kids := m.arena.kids(pat)
-	mut tbl := subject.as_table()
+	mut tbl := subject.as_table() or { return error(err.msg()) }
 	mut binds := []Bind{}
 	mut i := 0
 	for i + 1 < kids.len {
@@ -477,7 +472,7 @@ fn (mut m Machine) match_struct_at(pat blip.NodeId, subject blip.Value, depth in
 			ok: false
 		}
 	}
-	s := subject.as_struct()
+	s := subject.as_struct() or { return error(err.msg()) }
 	if s.name != name_node.value {
 		return Matched{
 			ok: false
@@ -539,10 +534,33 @@ fn (m &Machine) is_capturing_tail(n blip.NodeId) bool {
 // meaning because someone defined a function named `list` or `vector`.
 pub fn pattern_predicate(name string) bool {
 	return name in [
-		'<', '>', '<=', '>=', '=', 'not=', 'eq?',
-		'zero?', 'even?', 'odd?', 'positive?', 'negative?',
-		'list?', 'pair?', 'vector?', 'table?', 'array?', 'string?', 'symbol?',
-		'keyword?', 'integer?', 'float?', 'number?', 'boolean?', 'rune?',
-		'nil?', 'null?', 'function?',
+		'<',
+		'>',
+		'<=',
+		'>=',
+		'=',
+		'not=',
+		'eq?',
+		'zero?',
+		'even?',
+		'odd?',
+		'positive?',
+		'negative?',
+		'list?',
+		'pair?',
+		'vector?',
+		'table?',
+		'array?',
+		'string?',
+		'symbol?',
+		'keyword?',
+		'integer?',
+		'float?',
+		'number?',
+		'boolean?',
+		'rune?',
+		'nil?',
+		'null?',
+		'function?',
 	]
 }

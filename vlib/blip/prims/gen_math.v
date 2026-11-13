@@ -4,8 +4,8 @@
 module prims
 
 import math
-import vlib.blip
-import vlib.blip.printer
+import blip
+import blip.printer
 
 // math-cos wraps math.cos(x f64) f64.
 fn prim_gen_math_cos(args []blip.Value) !blip.Value {

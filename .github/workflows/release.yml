@@ -21,13 +21,9 @@ permissions:
   contents: write
 
 env:
-  V_COMMIT: 74be97a2d7bd1fce4150abc749a2e64b21d9d082
+  V_VERSION: 0.5.2
 
-  # vc is the C source V bootstraps itself from, and it is a SEPARATE repository
-  # from V. Pinning V without pinning vc is what broke this: the Makefile clones
-  # vc at HEAD, so a snapshot built from a newer V was used to compile the
-  # pinned V's own vlib. This is the snapshot taken just after V_COMMIT.
-  VC_COMMIT: 0027130e9850c9946fa2c21e9004f13d8e593595
+  # See ci.yml for why the stock release (not a master build) is used.
   V_MACOS_V3_NO_FALLBACK: '1'
 
 jobs:
@@ -42,26 +38,19 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: v
-          key: v-${{ env.V_COMMIT }}-${{ runner.os }}-v2
+          key: v-${{ env.V_VERSION }}-${{ runner.os }}
 
-      - name: Build V if needed
-        # vc is pinned and the `v` target is built directly: the Makefile clones
-        # vc at HEAD, and a vc snapshot generated from a newer V carries a
-        # parser that rejects the pinned V's own vlib. `all` would pull vc back
-        # to HEAD through download_vc.
+      - name: Install V if needed
+        # The release archive is the whole toolchain: binary plus the vlib
+        # beside it. No source build, no vc bootstrap.
         run: |
           set -e
           if [ ! -x v/v ]; then
-            git init -q v
-            cd v
-            git remote add origin https://github.com/vlang/v.git
-            git fetch -q --depth 1 origin "$V_COMMIT"
-            git checkout -q FETCH_HEAD
-            git clone -q https://github.com/vlang/vc vc
-            git -C vc fetch -q --depth 1 origin "$VC_COMMIT"
-            git -C vc checkout -q FETCH_HEAD
-            make -f Makefile v
-            [ -x ./v ] || { echo "::error::no ./v produced"; exit 1; }
+            curl -sSL -o v.zip "https://github.com/vlang/v/releases/download/${V_VERSION}/v_linux.zip"
+            rm -rf v_dl && mkdir v_dl
+            unzip -q v.zip -d v_dl
+            rm -rf v && mv v_dl/v v && rm -rf v_dl v.zip
+            [ -x ./v/v ] || { echo "::error::no ./v/v produced"; exit 1; }
           fi
 
       - name: Put V on PATH
@@ -69,18 +58,18 @@ jobs:
 
       - name: Build and test exactly as CONTRIBUTING says
         run: |
-          v -cc gcc -o blip blip.v
-          v -cc gcc -o reader_probe reader_probe.v
-          v -cc gcc -o tail tests/tail_calls.v
-          v -cc gcc -o non_tail tests/non_tail.v
-          v -cc gcc -o loop_forms tests/loop_forms.v
-          v -cc gcc -o binding_forms tests/binding_forms.v
-          v -cc gcc -o embedding tests/embedding.v
-          v -cc gcc -o repl_golden tests/repl_golden.v
-          v -cc gcc -o examples_run tests/examples_run.v
-          v -cc gcc -o programs_run tests/programs_run.v
-          v -cc gcc -o genprims tests/genprims.v
-          v -cc gcc run tools/genprims.vsh --check
+          v -cc gcc -path 'vlib|@vlib' -o blip main.v
+          v -cc gcc -path 'vlib|@vlib' -o reader_probe reader_probe.v
+          v -cc gcc -path 'vlib|@vlib' -o tail tests/tail_calls.v
+          v -cc gcc -path 'vlib|@vlib' -o non_tail tests/non_tail.v
+          v -cc gcc -path 'vlib|@vlib' -o loop_forms tests/loop_forms.v
+          v -cc gcc -path 'vlib|@vlib' -o binding_forms tests/binding_forms.v
+          v -cc gcc -path 'vlib|@vlib' -o embedding tests/embedding.v
+          v -cc gcc -path 'vlib|@vlib' -o repl_golden tests/repl_golden.v
+          v -cc gcc -path 'vlib|@vlib' -o examples_run tests/examples_run.v
+          v -cc gcc -path 'vlib|@vlib' -o programs_run tests/programs_run.v
+          v -cc gcc -path 'vlib|@vlib' -o genprims tests/genprims.v
+          v -cc gcc -path 'vlib|@vlib' run tools/genprims.vsh --check
           set -o pipefail
           ./tail          | tee out.txt
           ./non_tail      | tee -a out.txt
@@ -105,13 +94,13 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: v
-          key: v-${{ env.V_COMMIT }}-${{ runner.os }}-v2
+          key: v-${{ env.V_VERSION }}-${{ runner.os }}
       - run: |
           if [ ! -x v/v ]; then
-            git init -q v && cd v
-            git remote add origin https://github.com/vlang/v.git
-            git fetch -q --depth 1 origin "$V_COMMIT"
-            git checkout -q FETCH_HEAD && make
+            curl -sSL -o v.zip "https://github.com/vlang/v/releases/download/${V_VERSION}/v_linux.zip"
+            rm -rf v_dl && mkdir v_dl
+            unzip -q v.zip -d v_dl
+            rm -rf v && mv v_dl/v v && rm -rf v_dl v.zip
           fi
           echo "$GITHUB_WORKSPACE/v" >> "$GITHUB_PATH"
 
@@ -121,15 +110,15 @@ jobs:
           # Static-ish linux binary via musl would need another toolchain; the
           # release is a convenience, not a distribution format. Users who care
           # about a self-contained binary should build from source.
-          v -cc gcc -o dist/blip-linux   blip.v
-          v -cc gcc -o dist/blip-macos   blip.v
-          v -cc gcc -o os:windows -cc gcc -o dist/blip.exe blip.v
+          v -cc gcc -path 'vlib|@vlib' -o dist/blip-linux main.v
+          sudo apt-get update && sudo apt-get install -y mingw-w64
+          v -os windows -cc gcc -path 'vlib|@vlib' -o dist/blip.exe main.v
           ls -la dist
 
       - name: Package
         run: |
           cd dist
-          tar czf ../blip-linux-macos.tar.gz blip-linux blip-macos
+          tar czf ../blip-linux.tar.gz blip-linux
           zip -q ../blip-windows.zip blip.exe
           cd ..
           mkdir -p site_out
@@ -146,9 +135,8 @@ jobs:
           name: blip-dist
           path: |
             dist/blip-linux
-            dist/blip-macos
             dist/blip.exe
-            blip-linux-macos.tar.gz
+            blip-linux.tar.gz
             blip-windows.zip
             blip-site.tar.gz
             SHA256SUMS
@@ -175,7 +163,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/blip-linux-macos.tar.gz
+            dist/blip-linux.tar.gz
             dist/blip-windows.zip
             dist/blip-site.tar.gz
             dist/SHA256SUMS
@@ -216,40 +204,31 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: v
-          key: v-${{ env.V_COMMIT }}-${{ runner.os }}-v2
+          key: v-${{ env.V_VERSION }}-${{ runner.os }}
 
-      - name: Build V if needed (linux)
+      - name: Install V if needed (linux)
         if: runner.os == 'Linux'
         run: |
           set -e
           if [ ! -x v/v ]; then
-            git init -q v
-            cd v
-            git remote add origin https://github.com/vlang/v.git
-            git fetch -q --depth 1 origin "$V_COMMIT"
-            git checkout -q FETCH_HEAD
-            git clone -q https://github.com/vlang/vc vc
-            git -C vc fetch -q --depth 1 origin "$VC_COMMIT"
-            git -C vc checkout -q FETCH_HEAD
-            make -f Makefile v
-            [ -x ./v ] || { echo "::error::no ./v produced"; exit 1; }
+            curl -sSL -o v.zip "https://github.com/vlang/v/releases/download/${V_VERSION}/v_linux.zip"
+            rm -rf v_dl && mkdir v_dl
+            unzip -q v.zip -d v_dl
+            rm -rf v && mv v_dl/v v && rm -rf v_dl v.zip
+            [ -x ./v/v ] || { echo "::error::no ./v/v produced"; exit 1; }
           fi
 
-      - name: Build V if needed (windows)
+      - name: Install V if needed (windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           if (!(Test-Path v/v.exe)) {
-            git init -q v
-            cd v
-            git remote add origin https://github.com/vlang/v.git
-            git fetch -q --depth 1 origin "$env:V_COMMIT"
-            git checkout -q FETCH_HEAD
-            git clone -q https://github.com/vlang/vc vc
-            git -C vc fetch -q --depth 1 origin "$env:VC_COMMIT"
-            git -C vc checkout -q FETCH_HEAD
-            cd ..
-            cmd.exe /c "cd v && make.bat"
+            $zip = "$env:TEMP\v_windows.zip"
+            Invoke-WebRequest -Uri "https://github.com/vlang/v/releases/download/$env:V_VERSION/v_windows.zip" -OutFile $zip
+            if (Test-Path v) { Remove-Item -Recurse -Force v }
+            Expand-Archive -Path $zip -DestinationPath v_dl -Force
+            Move-Item v_dl/v v
+            Remove-Item -Recurse -Force v_dl, $zip
             if (!(Test-Path v/v.exe)) { Write-Error "no v/v.exe produced"; exit 1 }
           }
 
@@ -272,7 +251,7 @@ jobs:
           set -e
           set -o pipefail
           mkdir -p dist pkg/blip-clib
-          v -shared -cc gcc -o dist/libblip.so clib/blip.v
+          v -shared -cc gcc -path 'vlib|@vlib' -o dist/libblip.so clib/blip.v
           gcc clib/example_eval.c -o dist/clib_smoke -Ldist -lblip -Wl,-rpath,'$ORIGIN' -Iclib
           ./dist/clib_smoke | tee clib_smoke.txt
           grep -q 'clib smoke: all checks passed' clib_smoke.txt
@@ -288,7 +267,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist, pkg/blip-clib | Out-Null
-          v -shared -cc msvc -o dist/blip.dll clib/blip.v
+          v -shared -cc msvc -path "vlib|@vlib" -o dist/blip.dll clib/blip.v
           if ($LASTEXITCODE -ne 0) { exit 1 }
           lib /def:clib/blip.def /out:dist/blip.lib /machine:x64
           if ($LASTEXITCODE -ne 0) { exit 1 }

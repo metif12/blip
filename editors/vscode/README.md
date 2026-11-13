@@ -10,7 +10,7 @@ the tokens this implementation of blip actually accepts.
 Needs a blip executable on `PATH`. Build it with:
 
 ```sh
-v -cc gcc -o blip.exe blip.v
+v -cc gcc -path 'vlib|@vlib' -o blip.exe main.v
 ```
 
 Then build the extension:

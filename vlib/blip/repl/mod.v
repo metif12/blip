@@ -2,7 +2,7 @@ module repl
 
 // The REPL: one persistent machine, reading through a Host.
 //
-// It lives in the library rather than in blip.v for one reason -- every behaviour
+// It lives in the library rather than in main.v for one reason -- every behaviour
 // worth testing here needs a Host, and without the interface that means a
 // subprocess and a scraped stdout. With it, the whole REPL can be driven from a
 // test by handing it lines and reading back what it printed.
@@ -20,10 +20,10 @@ module repl
 //   * `,l` loads a file into the RUNNING machine, so a definition made in the
 //     REPL is still there afterwards and one made in the file is there before.
 
-import vlib.blip.host
-import vlib.blip.machine
-import vlib.blip.printer
-import vlib.blip.reader
+import blip.host
+import blip.machine
+import blip.printer
+import blip.reader
 
 pub struct Repl {
 pub mut:

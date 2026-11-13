@@ -1,11 +1,11 @@
 # Embedding blip
 
-One import, one struct. `vlib/blip/embed` owns the machine (which owns its
+One import, one struct. `blip/embed` owns the machine (which owns its
 arena), loads the prelude, and keeps per-interpreter hosts and limits.
 
 ```v
-import vlib.blip.embed
-import vlib.blip.host
+import blip.embed
+import blip.host
 
 h := host.new_capture()
 mut e := embed.new(h)

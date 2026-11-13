@@ -19,8 +19,8 @@ Alternatives, in order: **Vexpr** (V + expression, more descriptive, less
 memorable), **Blip** (keep, zero cost), **Vela** (prettier, says nothing about
 Lisp).
 
-The rename touches `v.mod`, `vlib/blip/**`, `blip.v`, `README.md`,
-`docs/000-blip-design.md`, and every `import vlib.blip.*`. Nothing in the design
+The rename touches `v.mod`, `vlib/blip/**`, `main.v`, `README.md`,
+`docs/000-blip-design.md`, and every `import blip.*`. Nothing in the design
 depends on the current spelling.
 
 ## 2. Embedding: can blip be embedded, and what does it take?
@@ -206,7 +206,7 @@ done here; gates are.
 
 | Phase | Goal | Gate |
 |---|---|---|
-| P0 naming | one name everywhere | `blip` in `v.mod`, `vlib/blip/`, `blip.v`, every import |
+| P0 naming | one name everywhere | `blip` in `v.mod`, `vlib/blip/`, `main.v`, every import |
 | P1 embedding core | no panics; `Host`, `run_str`, multi-source `use` | new V tests proving each, plus `tests/embedding.v` |
 | P2 REPL | persistent machine, multiline input, `,l`/`,r`, golden tests | `tests/repl_golden.v` with zero `FAIL` |
 | P3 language | `match`, `match*`, structs, modules; six examples run | `tests/examples_run.v` markers, `tests/binding_forms.v` |
@@ -231,28 +231,37 @@ users, so the risk is wasted effort, not missed SLAs.
 This is the highest-value recurring task and the one most likely to break
 silently.
 
-**Why it is delicate.** The project does not target the `0.5.2` *release*. It
-targets vlang/v **main at a pinned commit** (`V_COMMIT` in
-`.github/workflows/ci.yml`), which also self-reports as `V 0.5.2` but resolves
-modules differently: the release build looks `import vlib.blip.reader` up in V's
-own standard library and reports every module here as an unknown function,
-while the pinned build resolves it in the project's `vlib/`. Nothing in the
-source changed; only the compiler did.
+**Why it is delicate.** The project targets stock V **0.5.2** (the official
+release, `V 0.5.2 7647ce1`) -- not vlang/v master, which reports the same
+version string for other commits while resolving modules differently. A new
+release can change vlib signatures the generated prims bind, resolve modules
+differently, or miscompile a construct this project relies on. DATED
+2026-11-13: the 0.5.2 release miscompiles `iface as &T` for an interface
+holding a `&T` (panics with "cannot cast `unknown`", while dispatch and
+`as T` work), miscompiles field access and rebinding on the narrowed value
+of `is &T`, and emits references to `str_intp` helpers for `.str()` called
+directly on a `!`-unwrap that do not link. `vlib/blip/mod.v` (smart-cast
+accessors plus a helper for the string case), `tools/genprims.vsh` (own
+JSON parser), and the test files (bind-before-`.str()`) all work around
+this. Re-verify each workaround with a minimal probe before removing it;
+see §7.3.
 
 **Procedure.**
 
-1. `git -C <v-install> fetch && git log --oneline HEAD..origin/main` and read
-   what moved. V's changelog is not a reliable summary of what affects
-   codegen.
-2. Bump `V_COMMIT` in `.github/workflows/ci.yml`.
+1. Download the release archive for the new version (see `.github/workflows/ci.yml`
+   for the URLs) and confirm `v version` reports it. Do not build master:
+   a master build reports a nearby version string for a different compiler.
+2. Bump `V_VERSION` in `.github/workflows/ci.yml` (and the copies in
+   `clib.yml`, `release.yml`, `pages.yml`, the Dockerfiles, and both
+   install scripts -- grep for the old version, all of them move together).
 3. Run the suites **locally** against the new compiler before trusting CI:
 
     ```sh
-    v -cc gcc -o tools\tail.exe tests\tail_calls.v       && .\tools\tail.exe
-    v -cc gcc -o tools\nt.exe   tests\non_tail.v         && .\tools\nt.exe
-    v -cc gcc -o tools\lf.exe   tests\loop_forms.v      && .\tools\lf.exe
-    v -cc gcc -o reader_probe.exe reader_probe.v        && .\reader_probe.exe examples\*.lip
-    v -cc gcc -o blip.exe blip.v
+    v -cc gcc -path 'vlib|@vlib' -o tools\tail.exe tests\tail_calls.v       && .\tools\tail.exe
+    v -cc gcc -path 'vlib|@vlib' -o tools\nt.exe   tests\non_tail.v         && .\tools\nt.exe
+    v -cc gcc -path 'vlib|@vlib' -o tools\lf.exe   tests\loop_forms.v      && .\tools\lf.exe
+    v -cc gcc -path 'vlib|@vlib' -o reader_probe.exe reader_probe.v        && .\reader_probe.exe examples\*.lip
+    v -cc gcc -path 'vlib|@vlib' -o blip.exe main.v
     ```
 
    Local first, deliberately: a compiler change that breaks the build should be
@@ -260,7 +269,7 @@ source changed; only the compiler did.
 4. Re-run the prims generator and review what moved:
 
     ```sh
-    v run tools\genprims.vsh
+    v -path 'vlib|@vlib' run tools\genprims.vsh
     ```
 
     A new compiler means a new vlib, and the generator reads vlib's
@@ -269,7 +278,7 @@ source changed; only the compiler did.
     not build noise. Read the "convertible but not allowlisted" report for
     newly bindable functions, bless or skip each one, and commit the
     regenerated `vlib/blip/prims/gen_*.v` files in the same change as the
-    `V_COMMIT` bump so the binding and the compiler it was read from never
+    `V_VERSION` bump so the binding and the compiler it was read from never
     drift apart. CI runs the same script with `--check` and refuses a tree
     whose generated files do not match its compiler.
 5. Re-run the probes in `src/`, which are the regression net for the
@@ -291,27 +300,19 @@ is exercising relative to the Windows development machine.
 Two things about the V installation are invisible in a passing build and very
 visible in a failing one. Both have already cost CI runs here.
 
-**The compiler is not the version.** `vlang/v` main and the `0.5.2` release
+**The compiler is not the version.** vlang/v master and the `0.5.2` release
 both print `V 0.5.2`. The build hash after it is what distinguishes them
-(`6dd8bb8` here). Pin `V_COMMIT` and read `v version` in the log.
+(`7647ce1` is the release; anything else is a master build resolving
+project modules differently). Read `v version` in the log.
 
 **The compiler may not be the one you think, per platform.** On macOS, Linux and
 BSD, `v` tries the experimental **V3** compiler by default and *silently falls
 back* to the established compiler when V3 declines the program. The two resolve
-module paths differently: the established compiler looks up
-`import vlib.blip.reader` in V's own standard library and reports every module
-in this repository as an unknown function — for files that exist, and that
-compile and pass locally from the same commit.
-
-That is the whole story behind four consecutive red CI runs that all reported
-the same "unknown function" errors on a codebase that was fine.
+module paths differently, which is the whole story behind consecutive red CI
+runs reporting the same "unknown function" errors on a codebase that was fine.
 
 - `V_MACOS_V3_NO_FALLBACK=1` stops the fallback, so a Linux runner behaves like
   the Windows development machine. Set in `.github/workflows/ci.yml`.
-- `-old-compiler` forces the established compiler. Do **not** reach for it to
-  "fix" this: it produces the module errors directly, and it also rejects
-  `drive()` in `vlib/blip/machine/mod.v` for a missing return after an infinite
-  `for`, which the compiler V3 accepts.
 - `v help build-c` documents `-old-compiler` and the related flags.
 
 Rule: when a build fails on files that compile locally from the same commit,
@@ -340,18 +341,29 @@ move.
 
 ### 7.3 Watching for V codegen bugs — continuous
 
-V 0.5.2 miscompiles two things this codebase leans on, both found by hitting
-them rather than by reading a changelog:
+Stock V 0.5.2 miscompiles several things this codebase leans on, all found
+by hitting them rather than by reading a changelog (DATED 2026-11-13, each
+verified with a minimal probe before working around it):
 
 - `for x in slice` where the element type is a type alias from another module
   emits an unresolved type name into the generated C. `vlib/blip/machine/mod.v`
   works around it with an index loop in `transform_letrec`.
 - Interpolating a `[]blip.NodeId` into a string emits the same unresolved name.
   The AST-dumping probes were rewritten to avoid it.
+- `iface as &T` for an interface holding a `&T` panics at run time with
+  "cannot cast `unknown`", while dispatch on the same value and `as T`
+  (a copy) both work. The `as_*` accessors in `vlib/blip/mod.v` narrow
+  with `is &T` and return the value instead; `as_string` goes through a
+  one-line helper because touching the narrowed value in the same branch
+  miscompiles too (an extra indirection in the generated C).
+- Calling `.str()` directly on a `!`-unwrapped or `or`-defaulted expression
+  emits references to `str_intp` C helpers that do not link. Bind the
+  value first, then call `.str()` on the plain binding. The test files do
+  this throughout.
 
-When either is fixed upstream, the workaround should be removed in the same
-change that removes the comment explaining it. A workaround with no comment
-becomes folklore; a comment with no workaround becomes a lie.
+When any of these is fixed upstream, the workaround should be removed in the
+same change that removes the comment explaining it. A workaround with no
+comment becomes folklore; a comment with no workaround becomes a lie.
 
 ### 7.4 Keeping the two `vlib`s apart — continuous
 
@@ -361,7 +373,9 @@ them has already cost time:
 - **V's standard library**, reached as `@vlib`, which lives in the V
   installation.
 - **This project's modules**, in `vlib/blip/` at the repository root, imported
-  as `vlib.blip.*`.
+  as `blip.*` with `-path 'vlib|@vlib'` pointing the compiler at the repo's
+  own `vlib/` (stock V has no project-local `vlib.` lookup, so the imports
+  spell the short name).
 
 If the project is renamed (section 1), rename the directory in the same commit
 that renames the module references, and update `.gitignore`, which already has a
@@ -490,7 +504,7 @@ and the `read_forms` diagnostics share one source of positions.
 
 ## 9. A CLI shaped like `v`'s
 
-`blip.v` dispatches one binary into subcommands, the way `cmd/v/v.v` does
+`main.v` dispatches one binary into subcommands, the way `cmd/v/v.v` does
 (`run`, `build`, `test`, `fmt`, `vet`, `doc`, `new`, `pkg`,
 `version`, `help`). What each one is, and what it waits on:
 

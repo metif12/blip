@@ -6,10 +6,10 @@ module main
 // for every pure shape plus table and struct, plus expand_macro_at_embed end
 // to end. Closures and primitives still refuse — they are code, not data.
 
-import vlib.blip
-import vlib.blip.emit
-import vlib.blip.host
-import vlib.blip.machine
+import blip
+import blip.emit
+import blip.host
+import blip.machine
 
 struct Suite {
 mut:
@@ -51,7 +51,7 @@ fn main() {
 		}),
 	]
 	for v in pure {
-		_ = blip.value_to_datum(mut m, v) or {
+		_ = m.value_to_datum(v) or {
 			s.fail('value_to_datum pure', err.msg())
 			continue
 		}
@@ -66,7 +66,7 @@ fn main() {
 	// primitives are code, not data, and stay refused.
 	closure_val := m.run_str('(fn [x] x)') or { blip.nil_value() }
 	mut did_refuse := false
-	_ = blip.value_to_datum(mut m, closure_val) or {
+	_ = m.value_to_datum(closure_val) or {
 		did_refuse = true
 		blip.NodeId(0)
 	}
@@ -78,7 +78,7 @@ fn main() {
 
 	primitive_val := m.run_str('car') or { blip.nil_value() }
 	did_refuse = false
-	_ = blip.value_to_datum(mut m, primitive_val) or {
+	_ = m.value_to_datum(primitive_val) or {
 		did_refuse = true
 		blip.NodeId(0)
 	}

@@ -1,7 +1,7 @@
 module reader
 
 import strconv
-import vlib.blip
+import blip
 
 // strict_float rejects trailing junk. AtoF64Param is not exported by name in
 // this V version, so the struct is built by its only public field.
@@ -897,7 +897,7 @@ pub fn (mut a Arena) read_source(src string, source string) Forms {
 	mut r := Reader{
 		src:    src
 		source: source
-		arena:  &a
+		arena:  unsafe { &a }
 	}
 	mut forms := []NodeId{}
 	for {

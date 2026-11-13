@@ -24,7 +24,7 @@ module host
 
 // The rules and the reason they exist are above; this file only needs os.
 $if !wasm32 {
-import os
+	import os
 }
 
 pub interface Host {
@@ -54,40 +54,29 @@ pub fn (c &ConsoleHost) host_write(s string) {
 }
 
 $if wasm32 {
-pub fn (c &ConsoleHost) host_read_line() ?string {
-	return none
-}
+	pub fn (c &ConsoleHost) host_read_line() ?string {
+		return none
+	}
 } $else {
-pub fn (c &ConsoleHost) host_read_line() ?string {
-	return os.get_line()
-}
+	pub fn (c &ConsoleHost) host_read_line() ?string {
+		return os.get_line()
+	}
 }
 
 $if wasm32 {
-pub fn (c &ConsoleHost) host_load(path string) !string {
-	return error('not available in wasm build')
-}
+	pub fn (c &ConsoleHost) host_load(path string) !string {
+		return error('not available in wasm build')
+	}
 } $else {
-pub fn (c &ConsoleHost) host_load(path string) !string {
-	return os.read_file(path)
-}
+	pub fn (c &ConsoleHost) host_load(path string) !string {
+		return os.read_file(path)
+	}
 }
 
 // CaptureHost collects output instead of writing it, and answers reads and loads
 // from lists supplied by the test. This is the type that makes a golden test
 // possible without spawning a process, and it is the reason the interface is
 // four methods rather than one.
-//
-// The mutable state below is behind a pointer and every write to it is inside an
-// `unsafe` block. That is forced by V, not chosen. A V interface method has an
-// IMMUTABLE receiver -- the checker offers `(mut h &CaptureHost)` and there is no
-// `(mut &T)` receiver -- and an immutable receiver cannot assign into a map it
-// holds either: "field state of struct &CaptureHost is immutable", with no
-// method-call spelling available because `map.set` is private in this V version.
-//
-// The alternative was rejected: a stateless CaptureHost, with the golden test
-// spawning a real process and scraping its stdout. That makes every REPL check
-// cost a process spawn, and the REPL is where all the interesting behaviour is.
 pub struct CaptureState_ {
 pub mut:
 	out   []string
@@ -122,47 +111,52 @@ pub fn (h &CaptureHost) transcript() string {
 	return h.state.raw
 }
 
-// give_file scripts a file to load, which is how the REPL's `,l` is tested
-// without a filesystem.
+// The mutable state lives behind a pointer and every write to it goes through
+// a local `mut` copy of that pointer. A V interface method has an IMMUTABLE
+// receiver -- the checker offers `(mut h &CaptureHost)` and there is no
+// `(mut &T)` receiver -- and an immutable receiver cannot assign into a map
+// it holds either: "field state of struct &CaptureHost is immutable", with no
+// method-call spelling available because `map.set` is private in this V version.
+// Copying the pointer into a `mut` local is the shape that compiles, on the
+// pinned compiler and on the 0.5.2 release alike.
+//
+// The alternative was rejected: a stateless CaptureHost, with the golden test
+// spawning a real process and scraping its stdout. That makes every REPL check
+// cost a process spawn, and the REPL is where all the interesting behaviour is.
 pub fn (h &CaptureHost) give_file(path string, src string) {
-	unsafe {
-		h.state.files[path] = src
-	}
+	mut st := h.state
+	st.files[path] = src
 }
 
 // give_input queues lines for host_read_line.
 pub fn (h &CaptureHost) give_input(lines []string) {
-	unsafe {
-		for line in lines {
-			h.state.in << line
-		}
+	mut st := h.state
+	for line in lines {
+		st.in << line
 	}
 }
 
 pub fn (h &CaptureHost) host_print(s string) {
-	unsafe {
-		h.state.out << s
-		h.state.raw += s + '\n'
-	}
+	mut st := h.state
+	st.out << s
+	st.raw += s + '\n'
 }
 
 // host_write buffers into the transcript but not into `out`: a prompt is not
 // output. Mixing the two would make a golden test assert on its own prompt.
 pub fn (h &CaptureHost) host_write(s string) {
-	unsafe {
-		h.state.raw += s
-	}
+	mut st := h.state
+	st.raw += s
 }
 
 pub fn (h &CaptureHost) host_read_line() ?string {
-	unsafe {
-		if h.state.in.len == 0 {
-			return none
-		}
-		first := h.state.in[0]
-		h.state.in = h.state.in[1..]
-		return first
+	mut st := h.state
+	if st.in.len == 0 {
+		return none
 	}
+	first := st.in[0]
+	st.in = st.in[1..]
+	return first
 }
 
 pub fn (h &CaptureHost) host_load(path string) !string {

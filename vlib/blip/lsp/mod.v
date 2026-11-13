@@ -1,14 +1,13 @@
 module lsp
 
-import json2
+import json
 
 $if !wasm32 {
 	import os
 }
-
-import vlib.blip.reader
-import vlib.blip.prims
-import vlib.blip.printer
+import blip.reader
+import blip.prims
+import blip.printer
 import strings
 
 pub struct Position {
@@ -124,6 +123,12 @@ struct FormattingParams {
 	text_document TextDocId @[json: 'textDocument']
 }
 
+struct RenameParams {
+	text_document TextDocId @[json: 'textDocument']
+	position      Position
+	new_name      string @[json: 'newName']
+}
+
 pub struct Server {
 mut:
 	open_files          map[string]string
@@ -186,21 +191,21 @@ fn (mut s Server) send_result(raw_id string, result_json string) {
 
 fn (mut s Server) send_error(raw_id string, code int, message string) {
 	id := if raw_id == '' { 'null' } else { raw_id }
-	s.send_framed('{"jsonrpc":"2.0","id":${id},"error":{"code":${code},"message":${json2.encode(message)}}}')
+	s.send_framed('{"jsonrpc":"2.0","id":${id},"error":{"code":${code},"message":${json.encode(message)}}}')
 }
 
 fn (mut s Server) publish(uri string, diags []LspDiagnostic) {
 	mut sb := '{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{"uri":'
-	sb += json2.encode(uri)
+	sb += json.encode(uri)
 	sb += ',"diagnostics":['
 	for i, d in diags {
 		if i > 0 {
 			sb += ','
 		}
 		sb += '{"range":{"start":{"line":${d.range.start.line},"character":${d.range.start.character}},"end":{"line":${d.range.end.line},"character":${d.range.end.character}}},"severity":${d.severity},"message":'
-		sb += json2.encode(d.message)
+		sb += json.encode(d.message)
 		sb += ',"source":'
-		sb += json2.encode(d.source)
+		sb += json.encode(d.source)
 		sb += '}'
 	}
 	sb += ']}}'
@@ -208,7 +213,7 @@ fn (mut s Server) publish(uri string, diags []LspDiagnostic) {
 }
 
 pub fn (mut s Server) handle(content string) bool {
-	msg := json2.decode[Incoming](content) or { return false }
+	msg := json.decode(Incoming, content) or { return false }
 	method := msg.method
 	raw := extract_raw_id(content) or { '' }
 	s.current_raw_id = raw
@@ -247,24 +252,26 @@ pub fn (mut s Server) handle(content string) bool {
 		}
 		s.received_initialize = true
 		if has_id {
-			s.send_result(raw, '{"capabilities":{"textDocumentSync":{"openClose":true,"change":1},"hoverProvider":true,"completionProvider":{"triggerCharacters":[" ","("]},"definitionProvider":true,"referencesProvider":true,"documentSymbolProvider":true,"documentFormattingProvider":true,"signatureHelpProvider":{"triggerCharacters":[" ","("]},"documentHighlightProvider":true,"foldingRangeProvider":true,"renameProvider":true,"prepareRenameProvider":true,"semanticTokensProvider":{"legend":{"tokenTypes":["keyword","function","variable","number","string","comment","operator"],"tokenModifiers":[]},"full":true}},"serverInfo":{"name":"blip","version":"0.1.0"}}')
+			s.send_result(raw,
+				'{"capabilities":{"textDocumentSync":{"openClose":true,"change":1},"hoverProvider":true,"completionProvider":{"triggerCharacters":[" ","("]},"definitionProvider":true,"referencesProvider":true,"documentSymbolProvider":true,"documentFormattingProvider":true,"signatureHelpProvider":{"triggerCharacters":[" ","("]},"documentHighlightProvider":true,"foldingRangeProvider":true,"renameProvider":true,"prepareRenameProvider":true,"semanticTokensProvider":{"legend":{"tokenTypes":["keyword","function","variable","number","string","comment","operator"],"tokenModifiers":[]},"full":true}},"serverInfo":{"name":"blip","version":"0.1.0"}}')
 		}
 		return false
 	}
 	if method == 'initialized' {
 		return false
 	}
-	if method == '$/setTrace' || method == '$/cancelRequest' || method == 'workspace/didChangeConfiguration' {
+	if method == '$/setTrace' || method == '$/cancelRequest'
+		|| method == 'workspace/didChangeConfiguration' {
 		return false
 	}
 	if method == 'textDocument/didOpen' {
-		p := json2.decode[DidOpenParams](msg.params) or { return false }
+		p := json.decode(DidOpenParams, msg.params) or { return false }
 		s.open_files[p.text_document.uri] = p.text_document.text
 		s.publish(p.text_document.uri, diagnose(p.text_document.text))
 		return false
 	}
 	if method == 'textDocument/didChange' {
-		p := json2.decode[DidChangeParams](msg.params) or { return false }
+		p := json.decode(DidChangeParams, msg.params) or { return false }
 		if p.content_changes.len > 0 {
 			text := p.content_changes.last().text
 			s.open_files[p.text_document.uri] = text
@@ -273,13 +280,13 @@ pub fn (mut s Server) handle(content string) bool {
 		return false
 	}
 	if method == 'textDocument/didClose' {
-		p := json2.decode[DidCloseParams](msg.params) or { return false }
+		p := json.decode(DidCloseParams, msg.params) or { return false }
 		s.open_files.delete(p.text_document.uri)
 		s.publish(p.text_document.uri, []LspDiagnostic{})
 		return false
 	}
 	if method == 'textDocument/didSave' {
-		p := json2.decode[DidSaveParams](msg.params) or { return false }
+		p := json.decode(DidSaveParams, msg.params) or { return false }
 		if t := s.open_files[p.text_document.uri] {
 			s.publish(p.text_document.uri, diagnose(t))
 		} else if txt := p.text {
@@ -289,7 +296,7 @@ pub fn (mut s Server) handle(content string) bool {
 	}
 
 	if method == 'textDocument/hover' {
-		p := json2.decode[HoverParams](msg.params) or {
+		p := json.decode(HoverParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -305,7 +312,7 @@ pub fn (mut s Server) handle(content string) bool {
 					body = doc + '\n\n'
 				}
 				body += '```blip\n' + di.form + '\n```'
-				escaped := json2.encode(body)
+				escaped := json.encode(body)
 				result = '{"contents":{"kind":"markdown","value":' + escaped + '}}'
 			} else if w in primitive_names() {
 				result = '{"contents":{"kind":"markdown","value":"primitive `' + w + '`"}}'
@@ -318,7 +325,7 @@ pub fn (mut s Server) handle(content string) bool {
 	}
 
 	if method == 'textDocument/completion' {
-		p := json2.decode[CompletionParams](msg.params) or {
+		p := json.decode(CompletionParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -328,17 +335,17 @@ pub fn (mut s Server) handle(content string) bool {
 		for name in special_forms() {
 			if !first { items += ',' }
 			first = false
-			items += '{"label":' + json2.encode(name) + ',"kind":14}'
+			items += '{"label":' + json.encode(name) + ',"kind":14}'
 		}
 		for name in primitive_names() {
 			if !first { items += ',' }
 			first = false
-			items += '{"label":' + json2.encode(name) + ',"kind":3,"detail":"primitive"}'
+			items += '{"label":' + json.encode(name) + ',"kind":3,"detail":"primitive"}'
 		}
 		for di in top_defines(text) {
 			if !first { items += ',' }
 			first = false
-			items += '{"label":' + json2.encode(di.name) + ',"kind":3,"detail":"definition"}'
+			items += '{"label":' + json.encode(di.name) + ',"kind":3,"detail":"definition"}'
 		}
 		if has_id {
 			s.send_result(raw, '{"isIncomplete":false,"items":[' + items + ']}')
@@ -347,7 +354,7 @@ pub fn (mut s Server) handle(content string) bool {
 	}
 
 	if method == 'textDocument/definition' {
-		p := json2.decode[DefinitionParams](msg.params) or {
+		p := json.decode(DefinitionParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -360,7 +367,10 @@ pub fn (mut s Server) handle(content string) bool {
 				start_line := if di.line - 1 >= 0 { di.line - 1 } else { 0 }
 				start_ch := if di.col - 1 >= 0 { di.col - 1 } else { 0 }
 				end_ch := start_ch + w.len
-				result = '{"uri":' + json2.encode(p.text_document.uri) + ',"range":{"start":{"line":' + start_line.str() + ',"character":' + start_ch.str() + '},"end":{"line":' + start_line.str() + ',"character":' + end_ch.str() + '}}}'
+				result = '{"uri":' + json.encode(p.text_document.uri) +
+					',"range":{"start":{"line":' + start_line.str() + ',"character":' +
+					start_ch.str() + '},"end":{"line":' + start_line.str() + ',"character":' +
+					end_ch.str() + '}}}'
 			}
 		}
 		if has_id {
@@ -370,7 +380,7 @@ pub fn (mut s Server) handle(content string) bool {
 	}
 
 	if method == 'textDocument/references' {
-		p := json2.decode[ReferencesParams](msg.params) or {
+		p := json.decode(ReferencesParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -384,7 +394,9 @@ pub fn (mut s Server) handle(content string) bool {
 				if !first { arr += ',' }
 				first = false
 				end_ch := pos.character + w.len
-				arr += '{"uri":' + json2.encode(p.text_document.uri) + ',"range":{"start":{"line":' + pos.line.str() + ',"character":' + pos.character.str() + '},"end":{"line":' + pos.line.str() + ',"character":' + end_ch.str() + '}}}'
+				arr += '{"uri":' + json.encode(p.text_document.uri) + ',"range":{"start":{"line":' +
+					pos.line.str() + ',"character":' + pos.character.str() + '},"end":{"line":' +
+					pos.line.str() + ',"character":' + end_ch.str() + '}}}'
 			}
 		}
 		if has_id {
@@ -394,7 +406,7 @@ pub fn (mut s Server) handle(content string) bool {
 	}
 
 	if method == 'textDocument/documentSymbol' {
-		p := json2.decode[DocumentSymbolParams](msg.params) or {
+		p := json.decode(DocumentSymbolParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -407,7 +419,12 @@ pub fn (mut s Server) handle(content string) bool {
 			end_ch := start_ch + di.name.len
 			if !first { arr += ',' }
 			first = false
-			arr += '{"name":' + json2.encode(di.name) + ',"kind":12,"range":{"start":{"line":' + start_line.str() + ',"character":' + start_ch.str() + '},"end":{"line":' + start_line.str() + ',"character":' + end_ch.str() + '}},"selectionRange":{"start":{"line":' + start_line.str() + ',"character":' + start_ch.str() + '},"end":{"line":' + start_line.str() + ',"character":' + end_ch.str() + '}}}'
+			arr += '{"name":' + json.encode(di.name) + ',"kind":12,"range":{"start":{"line":' +
+				start_line.str() + ',"character":' + start_ch.str() + '},"end":{"line":' +
+				start_line.str() + ',"character":' + end_ch.str() +
+				'}},"selectionRange":{"start":{"line":' + start_line.str() + ',"character":' +
+				start_ch.str() + '},"end":{"line":' + start_line.str() + ',"character":' +
+				end_ch.str() + '}}}'
 		}
 		if has_id {
 			s.send_result(raw, '[' + arr + ']')
@@ -416,7 +433,7 @@ pub fn (mut s Server) handle(content string) bool {
 	}
 
 	if method == 'textDocument/signatureHelp' {
-		p := json2.decode[HoverParams](msg.params) or {
+		p := json.decode(HoverParams, msg.params) or {
 			// reuse hover params shape (textDocument + position)
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
@@ -432,7 +449,7 @@ pub fn (mut s Server) handle(content string) bool {
 			for pm in params {
 				if !pfirst { plist += ',' }
 				pfirst = false
-				plist += '{"label":' + json2.encode(pm) + '}'
+				plist += '{"label":' + json.encode(pm) + '}'
 			}
 			mut label := '(' + name
 			for pm in params {
@@ -440,7 +457,8 @@ pub fn (mut s Server) handle(content string) bool {
 			}
 			label += ')'
 			active := active_parameter_index(text, off)
-			result = '{"signatures":[{"label":' + json2.encode(label) + ',"parameters":[' + plist + ']}],"activeSignature":0,"activeParameter":' + active.str() + '}'
+			result = '{"signatures":[{"label":' + json.encode(label) + ',"parameters":[' + plist +
+				']}],"activeSignature":0,"activeParameter":' + active.str() + '}'
 		}
 		if has_id {
 			s.send_result(raw, result)
@@ -449,7 +467,7 @@ pub fn (mut s Server) handle(content string) bool {
 	}
 
 	if method == 'textDocument/documentHighlight' {
-		p := json2.decode[HoverParams](msg.params) or {
+		p := json.decode(HoverParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -463,7 +481,9 @@ pub fn (mut s Server) handle(content string) bool {
 				if !first { arr += ',' }
 				first = false
 				end_ch := pos.character + w.len
-				arr += '{"range":{"start":{"line":' + pos.line.str() + ',"character":' + pos.character.str() + '},"end":{"line":' + pos.line.str() + ',"character":' + end_ch.str() + '}},"kind":1}'
+				arr += '{"range":{"start":{"line":' + pos.line.str() + ',"character":' +
+					pos.character.str() + '},"end":{"line":' + pos.line.str() + ',"character":' +
+					end_ch.str() + '}},"kind":1}'
 			}
 		}
 		if has_id {
@@ -473,7 +493,7 @@ pub fn (mut s Server) handle(content string) bool {
 	}
 
 	if method == 'textDocument/foldingRange' {
-		p := json2.decode[DocumentSymbolParams](msg.params) or {
+		p := json.decode(DocumentSymbolParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -497,7 +517,7 @@ pub fn (mut s Server) handle(content string) bool {
 	}
 
 	if method == 'textDocument/prepareRename' {
-		p := json2.decode[HoverParams](msg.params) or {
+		p := json.decode(HoverParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -511,10 +531,14 @@ pub fn (mut s Server) handle(content string) bool {
 			mut start := off
 			if start >= text.len && text.len > 0 { start = text.len - 1 }
 			if start >= 0 && !is_ident_char(text[start]) && start > 0 { start-- }
-			for start > 0 && is_ident_char(text[start - 1]) { start-- }
+			for start > 0 && is_ident_char(text[start - 1]) {
+				start--
+			}
 			ws := offset_to_pos(text, start)
 			we := offset_to_pos(text, start + w.len)
-			result = '{"range":{"start":{"line":' + ws.line.str() + ',"character":' + ws.character.str() + '},"end":{"line":' + we.line.str() + ',"character":' + we.character.str() + '}},"placeholder":' + json2.encode(w) + '}'
+			result = '{"range":{"start":{"line":' + ws.line.str() + ',"character":' +
+				ws.character.str() + '},"end":{"line":' + we.line.str() + ',"character":' +
+				we.character.str() + '}},"placeholder":' + json.encode(w) + '}'
 		}
 		if has_id {
 			s.send_result(raw, result)
@@ -524,12 +548,7 @@ pub fn (mut s Server) handle(content string) bool {
 
 	if method == 'textDocument/rename' {
 		// params: textDocument, position, newName
-		struct RenameParams {
-			text_document TextDocId @[json: 'textDocument']
-			position      Position
-			new_name      string @[json: 'newName']
-		}
-		p := json2.decode[RenameParams](msg.params) or {
+		p := json.decode(RenameParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -543,17 +562,20 @@ pub fn (mut s Server) handle(content string) bool {
 				if !first { edits += ',' }
 				first = false
 				end_ch := pos.character + old.len
-				edits += '{"range":{"start":{"line":' + pos.line.str() + ',"character":' + pos.character.str() + '},"end":{"line":' + pos.line.str() + ',"character":' + end_ch.str() + '}},"newText":' + json2.encode(p.new_name) + '}'
+				edits += '{"range":{"start":{"line":' + pos.line.str() + ',"character":' +
+					pos.character.str() + '},"end":{"line":' + pos.line.str() + ',"character":' +
+					end_ch.str() + '}},"newText":' + json.encode(p.new_name) + '}'
 			}
 		}
 		if has_id {
-			s.send_result(raw, '{"changes":{' + json2.encode(p.text_document.uri) + ':[' + edits + ']}}')
+			s.send_result(raw, '{"changes":{' + json.encode(p.text_document.uri) + ':[' + edits +
+				']}}')
 		}
 		return false
 	}
 
 	if method == 'textDocument/semanticTokens/full' {
-		p := json2.decode[DocumentSymbolParams](msg.params) or {
+		p := json.decode(DocumentSymbolParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -573,7 +595,7 @@ pub fn (mut s Server) handle(content string) bool {
 	}
 
 	if method == 'textDocument/formatting' {
-		p := json2.decode[FormattingParams](msg.params) or {
+		p := json.decode(FormattingParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -583,7 +605,8 @@ pub fn (mut s Server) handle(content string) bool {
 			end_pos := offset_to_pos(text, text.len)
 			end_line := end_pos.line
 			end_ch := end_pos.character
-			result = '[{"range":{"start":{"line":0,"character":0},"end":{"line":' + end_line.str() + ',"character":' + end_ch.str() + '}},"newText":' + json2.encode(out) + '}]'
+			result = '[{"range":{"start":{"line":0,"character":0},"end":{"line":' + end_line.str() +
+				',"character":' + end_ch.str() + '}},"newText":' + json.encode(out) + '}]'
 		}
 		if has_id {
 			s.send_result(raw, result)
@@ -591,7 +614,9 @@ pub fn (mut s Server) handle(content string) bool {
 		return false
 	}
 
-	if method == 'textDocument/codeAction' || method == 'textDocument/codeLens' || method == 'textDocument/inlayHint' || method == 'textDocument/documentLink' || method == 'textDocument/onTypeFormatting' || method == 'textDocument/willSaveWaitUntil' {
+	if method == 'textDocument/codeAction' || method == 'textDocument/codeLens'
+		|| method == 'textDocument/inlayHint' || method == 'textDocument/documentLink'
+		|| method == 'textDocument/onTypeFormatting' || method == 'textDocument/willSaveWaitUntil' {
 		if has_id {
 			s.send_result(raw, '[]')
 		}
@@ -599,7 +624,7 @@ pub fn (mut s Server) handle(content string) bool {
 	}
 
 	if method == 'textDocument/rangeFormatting' {
-		p := json2.decode[FormattingParams](msg.params) or {
+		p := json.decode(FormattingParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -607,14 +632,16 @@ pub fn (mut s Server) handle(content string) bool {
 		mut result := '[]'
 		if out := format_text(text) {
 			end_pos := offset_to_pos(text, text.len)
-			result = '[{"range":{"start":{"line":0,"character":0},"end":{"line":' + end_pos.line.str() + ',"character":' + end_pos.character.str() + '}},"newText":' + json2.encode(out) + '}]'
+			result = '[{"range":{"start":{"line":0,"character":0},"end":{"line":' +
+				end_pos.line.str() + ',"character":' + end_pos.character.str() + '}},"newText":' +
+				json.encode(out) + '}]'
 		}
 		if has_id { s.send_result(raw, result) }
 		return false
 	}
 
 	if method == 'textDocument/selectionRange' {
-		p := json2.decode[HoverParams](msg.params) or {
+		p := json.decode(HoverParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -624,19 +651,23 @@ pub fn (mut s Server) handle(content string) bool {
 		mut start := off
 		if start >= text.len && text.len > 0 { start = text.len - 1 }
 		if start >= 0 && !is_ident_char(text[start]) && start > 0 { start-- }
-		for start > 0 && is_ident_char(text[start - 1]) { start-- }
+		for start > 0 && is_ident_char(text[start - 1]) {
+			start--
+		}
 		ws := offset_to_pos(text, start)
 		we := offset_to_pos(text, start + w.len)
 		mut result := '[]'
 		if w != '' {
-			result = '[{"range":{"start":{"line":' + ws.line.str() + ',"character":' + ws.character.str() + '},"end":{"line":' + we.line.str() + ',"character":' + we.character.str() + '}}}]'
+			result = '[{"range":{"start":{"line":' + ws.line.str() + ',"character":' +
+				ws.character.str() + '},"end":{"line":' + we.line.str() + ',"character":' +
+				we.character.str() + '}}}]'
 		}
 		if has_id { s.send_result(raw, result) }
 		return false
 	}
 
 	if method == 'textDocument/linkedEditingRange' {
-		p := json2.decode[HoverParams](msg.params) or {
+		p := json.decode(HoverParams, msg.params) or {
 			if has_id { s.send_error(raw, -32700, 'Parse error') }
 			return false
 		}
@@ -650,7 +681,9 @@ pub fn (mut s Server) handle(content string) bool {
 				if !first { ranges += ',' }
 				first = false
 				end_ch := pos.character + w.len
-				ranges += '{"start":{"line":' + pos.line.str() + ',"character":' + pos.character.str() + '},"end":{"line":' + pos.line.str() + ',"character":' + end_ch.str() + '}}'
+				ranges += '{"start":{"line":' + pos.line.str() + ',"character":' +
+					pos.character.str() + '},"end":{"line":' + pos.line.str() + ',"character":' +
+					end_ch.str() + '}}'
 			}
 		}
 		if has_id {
@@ -670,7 +703,10 @@ pub fn (mut s Server) handle(content string) bool {
 				end_ch := start_ch + di.name.len
 				if !first { arr += ',' }
 				first = false
-				arr += '{"name":' + json2.encode(di.name) + ',"kind":12,"location":{"uri":' + json2.encode(uri) + ',"range":{"start":{"line":' + start_line.str() + ',"character":' + start_ch.str() + '},"end":{"line":' + start_line.str() + ',"character":' + end_ch.str() + '}}}}'
+				arr += '{"name":' + json.encode(di.name) + ',"kind":12,"location":{"uri":' +
+					json.encode(uri) + ',"range":{"start":{"line":' + start_line.str() +
+					',"character":' + start_ch.str() + '},"end":{"line":' + start_line.str() +
+					',"character":' + end_ch.str() + '}}}}'
 			}
 		}
 		if has_id {

@@ -7,31 +7,19 @@ on:
   workflow_dispatch:
 
 env:
-  # The compiler this project is developed against, pinned. Not the 0.5.2
-  # release: vlang/v master at 0137eb5 also reports itself as "V 0.5.2", but it
-  # is a different build.
+  # The compiler this project is developed against: stock V 0.5.2, the
+  # official release (vlang/v tag 0.5.2, reports itself as "V 0.5.2 7647ce1").
+  # Not vlang/v master, which also reports "V 0.5.2" for other commits but
+  # resolves project-local modules differently.
   #
   # A CI runner that installs a different compiler than the developer is worse
   # than no CI: it reports a failure that does not reproduce locally, or -- far
   # worse -- passes while checking something other than what is shipped.
-  V_COMMIT: 74be97a2d7bd1fce4150abc749a2e64b21d9d082
-
-  # vc is the C source V bootstraps itself from, and it is a SEPARATE repository
-  # from V. The Makefile clones it at HEAD -- UNPINNED -- while V_COMMIT is
-  # pinned, so a vc snapshot generated from a newer V carries a parser that
-  # rejects the pinned V's own vlib. vc HEAD gained "reject `if` conditions that
-  # start with a parenthesized if expression" on 2026-10-05, and
-  # vlib/math/bits/bits.v at this V_COMMIT uses exactly that shape at line 621.
-  # This is the snapshot taken just after V_COMMIT, before that change.
-  VC_COMMIT: 0027130e9850c9946fa2c21e9004f13d8e593595
+  # The release archive is that compiler, byte for byte, on every machine.
+  V_VERSION: 0.5.2
 
   # On macOS, Linux and BSD `v` tries its experimental V3 compiler first and
-  # silently falls back to the established one when V3 declines the program. The
-  # two resolve `import vlib.blip.reader` differently -- the established one
-  # looks in V's standard library and reports every module here as unknown --
-  # so the fallback turned a working build into a wall of "unknown function"
-  # errors naming files that exist and compile locally.
-  #
+  # silently falls back to the established one when V3 declines the program.
   # Refusing the fallback makes Linux behave like the Windows development
   # machine instead of quietly testing a different compiler.
   V_MACOS_V3_NO_FALLBACK: '1'
@@ -42,106 +30,58 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The key is the compiler commit AND the runner OS, versioned.
+      # The key is the compiler release AND the runner OS.
       #
       # The OS is in the key because `ubuntu-latest` changed underneath this
-      # workflow: a cache built by an older runner image stopped running on the
-      # current one, and `v version` failed inside a cache hit while the
-      # build step was skipped. A cache key on the compiler alone is a promise
-      # that a binary compiled on one image runs on every later one.
-      #
-      # The `-v2` is because the existing cache is poisoned and a key that only
-      # appends a component will not be re-run for a tree whose key is already
-      # warm: the whole point is to force a fresh build once.
+      # workflow before: a cache built by an older runner image stopped running
+      # on the current one. A cache key on the compiler alone is a promise
+      # that a binary downloaded on one image runs on every later one.
       - name: Cache the V compiler
         id: vcache
         uses: actions/cache@v4
         with:
           path: v
-          key: v-${{ env.V_COMMIT }}-${{ runner.os }}-v2
+          key: v-${{ env.V_VERSION }}-${{ runner.os }}
 
-      # Build V, and say WHY it could not.
+      # Install stock V, and say WHY it could not.
       #
       # This step has failed several times and the failure has been invisible:
       # the log API needs admin rights this token does not have, so `gh run view
       # --log-failed` dies on a TLS handshake timeout from some networks and a
-      # 403 from others. A build that cannot be diagnosed is not a build anyone
-      # can fix. So the compiler is checked for FIRST, the make output is not
-      # swallowed, and the result is verified to actually run.
-      - name: Build V
+      # 403 from others. A toolchain that cannot be diagnosed is not one
+      # anyone can fix. So the download is verified first and the result is
+      # verified to actually run.
+      - name: Install V
         if: steps.vcache.outputs.cache-hit != 'true'
         run: |
           set -e
           set -o pipefail
-          # No release archive: the prebuilt ones are a different compiler, and
-          # installing only the executable out of one leaves V unable to find
-          # the vlib beside it. Build the pinned commit instead.
+          # The release archive is the whole toolchain: the prebuilt binary
+          # plus the vlib beside it. Installing only the executable out of
+          # one leaves V unable to find its vlib, so the zip is kept intact.
           if ! command -v cc >/dev/null 2>&1 && ! command -v gcc >/dev/null 2>&1; then
-            echo "::error::no C compiler: the V bootstrap compiles vc/v.c with cc"
+            echo "::error::no C compiler: V compiles every program with cc"
             cc --version || true
             gcc --version || true
             exit 1
           fi
-          # V links its own binary against Boehm GC. The runner image does not
-          # ship libgc-dev, so the `make -f Makefile v` step dies with
-          # "Boehm GC library was not found". Install it up front.
+          # blip programs link against Boehm GC. The runner image does not
+          # ship libgc-dev, so install it up front rather than debugging a
+          # link failure later.
           if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists bdw-gc 2>/dev/null; then
             sudo apt-get update
             sudo apt-get install -y libgc-dev
           fi
-          git init -q v
-          cd v
-          git remote add origin https://github.com/vlang/v.git
-          git fetch -q --depth 1 origin "$V_COMMIT"
-          git checkout -q FETCH_HEAD
-          # vc is the C source the bootstrap compiles into `v`. The Makefile
-          # clones it at HEAD -- UNPINNED -- while V_COMMIT is pinned, so a vc
-          # snapshot generated from a newer V can carry a parser that rejects
-          # the pinned tree's own vlib. That is exactly what happened here: vc
-          # HEAD gained "reject `if` conditions that start with a parenthesized
-          # if expression" on 2026-10-05, and vlib/math/bits/bits.v at this
-          # V_COMMIT uses exactly that shape at line 621, so the build died
-          # compiling a file the pinned commit itself ships.
-          #
-          # So vc is cloned at its own pin: a snapshot taken after V_COMMIT but
-          # before that parser change. The `v` target is then built directly
-          # rather than through `all`, because `all` depends on download_vc,
-          # which pulls vc back to HEAD and undoes this.
-          git clone -q https://github.com/vlang/vc vc
-          git -C vc fetch -q --depth 1 origin "$VC_COMMIT"
-          git -C vc checkout -q FETCH_HEAD
-          # V builds its own Boehm GC from the source in thirdparty/libgc by
-          # default; on this runner image the prebuilt path lookup failed and
-          # it tried the wrong directory ("thirdparty/tcc/lib/libgc.a", a path
-          # that belongs to tcc, not the GC), dying with "Boehm GC library was
-          # not found". Building from source with -d use_bundled_libgc makes
-          # the Makefile use the bundled gc.c directly and needs no system
-          # libgc at all, so the libgc-dev install above is kept as a fallback
-          # for anything else that wants a shared GC.
-          # Fix: V looks for libgc.a at thirdparty/tcc/lib/libgc.a but libgc-dev
-          # installs to /usr/lib/x86_64-linux-gnu/libgc.a; copy it into place.
-          # NOTE: we already did `cd v` above, so these paths are relative to
-          # the V checkout (not `v/...`).
-          #
-          # VFLAGS MUST be quoted. Unquoted (`VFLAGS=-d use_bundled_libgc`), make
-          # reads the assignment as `VFLAGS=-d` and treats `use_bundled_libgc`
-          # as a second goal; V then dies with `option '-d' requires a value`
-          # and make reports Makefile:33. Three CI runs lost to this before
-          # build.log captured the real error — the Dockerfiles quote it and
-          # pass the same line.
-          mkdir -p thirdparty/tcc/lib
-          cp /usr/lib/x86_64-linux-gnu/libgc.a thirdparty/tcc/lib/libgc.a 2>/dev/null || cp /usr/lib/libgc.a thirdparty/tcc/lib/libgc.a 2>/dev/null || true
-          make -f Makefile v VFLAGS="-d use_bundled_libgc" 2>&1 | tee build.log
-          if [ ! -x ./v ]; then
-            echo "::error::Build V failed — see build.log"
-            cat build.log || true
-            echo "--- dir contents ---"
+          curl -sSL -o v.zip "https://github.com/vlang/v/releases/download/${V_VERSION}/v_linux.zip"
+          rm -rf v_dl && mkdir v_dl
+          unzip -q v.zip -d v_dl
+          rm -rf v && mv v_dl/v v && rm -rf v_dl v.zip
+          if [ ! -x ./v/v ]; then
+            echo "::error::Install V failed — no ./v/v produced"
             ls -la
-            echo "--- libgc check ---"
-            ls -la thirdparty/tcc/lib/libgc.a 2>/dev/null || echo "libgc.a missing"
             exit 1
           fi
-          ./v version
+          ./v/v version
       - name: Put V on PATH
         run: echo "$GITHUB_WORKSPACE/v" >> "$GITHUB_PATH"
 
@@ -151,38 +91,44 @@ jobs:
           gcc --version | head -n 1
 
       # The generated prims must match the compiler they were read from. A
-      # V_COMMIT bump that changes vlib fails here until tools/genprims.vsh
+      # V_VERSION bump that changes vlib fails here until tools/genprims.vsh
       # is re-run and the result reviewed -- see docs/010-roadmap.md 7.1.
       - name: Generated prims are current
-        run: v -cc gcc run tools/genprims.vsh --check
+        run: v -cc gcc -path 'vlib|@vlib' run tools/genprims.vsh --check
 
       # `-cc gcc` everywhere, matching the local build commands in the README.
       # The default C backend fails on this checkout.
+      #
+      # `-path 'vlib|@vlib'` points the compiler at this repo's own vlib/ for
+      # `import blip.*`, with the standard library still behind it. Stock V
+      # does not resolve `vlib.`-prefixed project imports (only the master's
+      # project-local lookup did), so the imports spell the short name and
+      # the path supplies the directory.
       - name: Build everything
         run: |
-          v -cc gcc -o blip blip.v
-          v -cc gcc -o reader_probe reader_probe.v
-          v -cc gcc -o tail tests/tail_calls.v
-          v -cc gcc -o non_tail tests/non_tail.v
-          v -cc gcc -o loop_forms tests/loop_forms.v
-          v -cc gcc -o binding_forms tests/binding_forms.v
-          v -cc gcc -o embedding tests/embedding.v
-          v -cc gcc -o repl_golden tests/repl_golden.v
-          v -cc gcc -o examples_run tests/examples_run.v
-          v -cc gcc -o programs_run tests/programs_run.v
-          v -cc gcc -o genprims tests/genprims.v
-          v -cc gcc -o unit tests/unit.v
-          v -cc gcc -o api_coverage tests/api_coverage.v
-          v -cc gcc -o emit_js tests/emit_js.v
-          v -cc gcc -o lsp tests/lsp.v
-          v -cc gcc -o hostile tests/hostile.v
-          v -cc gcc -o multi_use tests/multi_use.v
-          v -cc gcc -o value_to_datum tests/value_to_datum.v
-          v -cc gcc -o macros_gate tests/macros_gate.v
-          v -cc gcc -o fibers tests/fibers.v
-          v -cc gcc -o veb_bridge tests/veb_bridge.v
-          v -cc gcc -o embed_api tests/embed_api.v
-          v -cc gcc -o provenance tests/provenance.v
+          v -cc gcc -path 'vlib|@vlib' -o blip main.v
+          v -cc gcc -path 'vlib|@vlib' -o reader_probe reader_probe.v
+          v -cc gcc -path 'vlib|@vlib' -o tail tests/tail_calls.v
+          v -cc gcc -path 'vlib|@vlib' -o non_tail tests/non_tail.v
+          v -cc gcc -path 'vlib|@vlib' -o loop_forms tests/loop_forms.v
+          v -cc gcc -path 'vlib|@vlib' -o binding_forms tests/binding_forms.v
+          v -cc gcc -path 'vlib|@vlib' -o embedding tests/embedding.v
+          v -cc gcc -path 'vlib|@vlib' -o repl_golden tests/repl_golden.v
+          v -cc gcc -path 'vlib|@vlib' -o examples_run tests/examples_run.v
+          v -cc gcc -path 'vlib|@vlib' -o programs_run tests/programs_run.v
+          v -cc gcc -path 'vlib|@vlib' -o genprims tests/genprims.v
+          v -cc gcc -path 'vlib|@vlib' -o unit tests/unit.v
+          v -cc gcc -path 'vlib|@vlib' -o api_coverage tests/api_coverage.v
+          v -cc gcc -path 'vlib|@vlib' -o emit_js tests/emit_js.v
+          v -cc gcc -path 'vlib|@vlib' -o lsp tests/lsp.v
+          v -cc gcc -path 'vlib|@vlib' -o hostile tests/hostile.v
+          v -cc gcc -path 'vlib|@vlib' -o multi_use tests/multi_use.v
+          v -cc gcc -path 'vlib|@vlib' -o value_to_datum tests/value_to_datum.v
+          v -cc gcc -path 'vlib|@vlib' -o macros_gate tests/macros_gate.v
+          v -cc gcc -path 'vlib|@vlib' -o fibers tests/fibers.v
+          v -cc gcc -path 'vlib|@vlib' -o veb_bridge tests/veb_bridge.v
+          v -cc gcc -path 'vlib|@vlib' -o embed_api tests/embed_api.v
+          v -cc gcc -path 'vlib|@vlib' -o provenance tests/provenance.v
 
       # These runners print results and do not set an exit code yet, so the
       # output is checked rather than the status. That is listed as a known gap

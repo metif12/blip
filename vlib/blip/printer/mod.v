@@ -11,11 +11,10 @@ module printer
 // visible immediately, so printing shows structure rather than a summary. It
 // also handles shared and cyclic structure, which a naive printer either loops
 // on forever or hides.
-
 import math
 import strconv
-import vlib.blip
-import vlib.blip.reader
+import blip
+import blip.reader
 
 // ------------------------------------------------------------------ values
 
@@ -29,13 +28,23 @@ fn write_value(v blip.Value, active []u64, seen map[u64]int, depth int) string {
 	// A value already on the print path is a cycle, not shared structure.
 
 	match v.tag {
-		.nil { return 'nil' }
-		.emptylist { return '()' }
-		.boolean { return if v.as_bool() { '#t' } else { '#f' } }
-		.integer { return strconv.format_int(v.as_int(), 10) }
-		.rune { return char_literal(i32(v.i)) }
+		.nil {
+			return 'nil'
+		}
+		.emptylist {
+			return '()'
+		}
+		.boolean {
+			return if v.as_bool() or { panic('unreachable: boolean arm') } { '#t' } else { '#f' }
+		}
+		.integer {
+			return strconv.format_int(v.as_int() or { panic('unreachable: integer arm') }, 10)
+		}
+		.rune {
+			return char_literal(i32(v.i))
+		}
 		.float {
-			f := v.as_float()
+			f := v.as_float() or { panic('unreachable: float arm') }
 			// A whole float must print as 2.0 rather than 2, otherwise it is
 			// indistinguishable from an integer when read back.
 			whole := f == math.floor(f)
@@ -44,14 +53,26 @@ fn write_value(v blip.Value, active []u64, seen map[u64]int, depth int) string {
 			}
 			return '${f}'
 		}
-		.string { return quote_string(v.as_string()) }
-		.symbol { return v.as_string() }
-		.keyword { return ':' + v.as_string() }
-		.pair { return write_list(v, active, seen, depth) }
-		.vector { return write_vector(v, active, seen, depth) }
-		.table { return write_table(v, active, seen, depth) }
+		.string {
+			return quote_string(v.as_string() or { panic('unreachable: string arm') })
+		}
+		.symbol {
+			return v.as_string() or { panic('unreachable: symbol arm') }
+		}
+		.keyword {
+			return ':' + (v.as_string() or { panic('unreachable: keyword arm') })
+		}
+		.pair {
+			return write_list(v, active, seen, depth)
+		}
+		.vector {
+			return write_vector(v, active, seen, depth)
+		}
+		.table {
+			return write_table(v, active, seen, depth)
+		}
 		.struct_ {
-			s := v.as_struct()
+			s := v.as_struct() or { panic('unreachable: struct arm') }
 			mut parts := []string{}
 			mut i := 0
 			for i < s.fields.len {
@@ -62,12 +83,24 @@ fn write_value(v blip.Value, active []u64, seen map[u64]int, depth int) string {
 			// way it was written, which is what makes a wrong value obvious.
 			return '(' + s.name + ' ' + parts.join(' ') + ')'
 		}
-		.array { return '@[' + write_seq(v, active, seen, depth) + ']' }
-		.buffer { return '@{' + write_table_body(v, active, seen, depth) + '}' }
-		.closure { return '#<closure>' }
-		.primitive { return '#<primitive ' + v.as_string() + '>' }
-		.continuation { return '#<continuation>' }
-		else { return '#<unknown>' }
+		.array {
+			return '@[' + write_seq(v, active, seen, depth) + ']'
+		}
+		.buffer {
+			return '@{' + write_table_body(v, active, seen, depth) + '}'
+		}
+		.closure {
+			return '#<closure>'
+		}
+		.primitive {
+			return '#<primitive ' + (v.as_string() or { panic('unreachable: primitive arm') }) + '>'
+		}
+		.continuation {
+			return '#<continuation>'
+		}
+		else {
+			return '#<unknown>'
+		}
 	}
 }
 
@@ -86,8 +119,10 @@ fn write_list(v blip.Value, active []u64, seen map[u64]int, depth int) string {
 	mut parts := []string{}
 	mut cur := v
 	for cur.tag == .pair {
-		parts << write_value(cur.as_pair().car, path, seen, depth + 1)
-		cur = cur.as_pair().cdr
+		parts << write_value((cur.as_pair() or { panic('unreachable: pair arm') }).car, path, seen,
+
+			depth + 1)
+		cur = (cur.as_pair() or { panic('unreachable: pair arm') }).cdr
 	}
 	mut out := '('
 	mut i := 0
@@ -109,7 +144,7 @@ fn write_vector(v blip.Value, active []u64, seen map[u64]int, depth int) string 
 }
 
 fn write_seq(v blip.Value, active []u64, seen map[u64]int, depth int) string {
-	vec := v.as_vector()
+	vec := v.as_vector() or { panic('unreachable: vector/array arm') }
 	mut parts := []string{}
 	for item in vec.data {
 		parts << write_value(item, active, seen, depth + 1)
@@ -131,13 +166,15 @@ fn write_table(v blip.Value, active []u64, seen map[u64]int, depth int) string {
 }
 
 fn write_table_body(v blip.Value, active []u64, seen map[u64]int, depth int) string {
-	mut keys := v.as_table().keys()
+	mut keys := (v.as_table() or { panic('unreachable: table/buffer arm') }).keys()
 	// Sorted so that printing is deterministic: a table whose iteration order
 	// varied between runs would make every error message unreproducible.
 	keys.sort()
 	mut parts := []string{}
 	for k in keys {
-		parts << ':' + k + ' ' + write_value(v.as_table().get(k), active, seen, depth + 1)
+		parts << ':' + k + ' ' + write_value((v.as_table() or {
+			panic('unreachable: table/buffer arm')
+		}).get(k), active, seen, depth + 1)
 	}
 	mut out := ''
 	mut i := 0
@@ -172,6 +209,7 @@ fn char_literal(cp i32) string {
 		27 { 'escape' }
 		else { '' }
 	}
+
 	if named != '' {
 		return '#\\' + named
 	}
@@ -301,15 +339,33 @@ fn close_for(open string) string {
 pub fn pp_form(a &reader.Arena, id reader.NodeId, depth int) string {
 	d := a.node(id)
 	match d.tag {
-		.nil { return 'nil' }
-		.bool { return if d.i == 1 { '#t' } else { '#f' } }
-		.int { return d.i.str() }
-		.rat { return '${d.i}/${d.den}' }
-		.float { return d.f.str() }
-		.char { return char_literal(i32(d.i)) }
-		.str { return quote_string(d.value) }
-		.sym { return d.value }
-		.kw { return ':' + d.value }
+		.nil {
+			return 'nil'
+		}
+		.bool {
+			return if d.i == 1 { '#t' } else { '#f' }
+		}
+		.int {
+			return d.i.str()
+		}
+		.rat {
+			return '${d.i}/${d.den}'
+		}
+		.float {
+			return d.f.str()
+		}
+		.char {
+			return char_literal(i32(d.i))
+		}
+		.str {
+			return quote_string(d.value)
+		}
+		.sym {
+			return d.value
+		}
+		.kw {
+			return ':' + d.value
+		}
 		.list {
 			kids := a.kids_view(id)
 			if kids.len == 0 {

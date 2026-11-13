@@ -4,10 +4,10 @@ $if !wasm32 {
 	import os
 }
 
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.machine
-import vlib.blip.reader
+import blip
+import blip.host
+import blip.machine
+import blip.reader
 
 // Blip to JavaScript.
 //
@@ -211,11 +211,11 @@ fn (mut e Emitter) leave() {
 	}
 }
 
-fn (mut e Emitter) kids(id reader.NodeId) []reader.NodeId {
+fn (e &Emitter) kids(id reader.NodeId) []reader.NodeId {
 	return e.arena.kids(id)
 }
 
-fn (mut e Emitter) node(id reader.NodeId) &reader.Datum {
+fn (e &Emitter) node(id reader.NodeId) &reader.Datum {
 	return e.arena.node(id)
 }
 
@@ -870,13 +870,22 @@ fn (mut e Emitter) emit_struct(kids []reader.NodeId) {
 		mi++
 	}
 	low := name.to_lower()
+	// constructor, predicate, accessors (as before). The mangled field list
+	// is built by hand: a method value (`field_names.map(e.mangle_name)`)
+	// captures the receiver as a closure, which the 0.5.2 C backend cannot
+	// pass as a plain `fn (string) string` callback.
+	mut mangled_fields := []string{}
+	for f in field_names {
+		mangled_fields << e.mangle_name(f)
+	}
+	mangled_list := mangled_fields.join(', ')
 	// constructor, predicate, accessors (as before)
-	e.emit('function ${e.mangle_name(name)}(${field_names.map(e.mangle_name).join(', ')}) {')
+	e.emit('function ${e.mangle_name(name)}(${mangled_list}) {')
 	e.depth++
-	e.emit('return { blip_struct: "${name}", ${field_names.map(e.mangle_name).join(', ')} };')
+	e.emit('return { blip_struct: "${name}", ${mangled_list} };')
 	e.depth--
 	e.emit('}')
-	e.emit('function ${e.mangle_name('${low}?')}(v) { return !!v && v.blip_struct === "${name}"; }')
+	e.emit('function ' + e.mangle_name(low + '?') + '(v) { return !!v && v.blip_struct === "' + name + '"; }')
 	for f in field_names {
 		e.emit('function ${e.mangle_name('${low}-${f}')}(v) { return v.${e.mangle_name(f)}; }')
 	}

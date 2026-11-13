@@ -97,10 +97,10 @@ frame in tail position is reused rather than pushed.
 
 ## Install
 
-Requires the pinned V toolchain — vlang/v master at the commit in
-`.github/workflows/ci.yml` (the `install.sh`/`install.ps1` scripts carry the
-same pins, and `tests/unit.v` fails if they drift). Use `-cc gcc`: the
-default C backend fails on this checkout, and CI uses the same flag.
+Requires stock V 0.5.2 — the official release archive
+(`https://github.com/vlang/v/releases/tag/0.5.2`), not a master build.
+Use `-cc gcc`: the default C backend fails on this checkout, and CI uses
+the same flag.
 
 ### macOS & Linux
 
@@ -116,7 +116,7 @@ irm https://metif12.github.io/blip/install.ps1 | iex
 
 ### Docker
 
-Three toolchains, each building the pinned V compiler from source, in
+Three toolchains, each fetching the stock V 0.5.2 release, in
 `docker/`. CI builds and runs all three on every push.
 
 ```sh
@@ -136,20 +136,20 @@ it; the three are interchangeable and differ only in the C toolchain.
 
 ```sh
 git clone https://github.com/metif12/blip.git && cd blip
-v -cc gcc -o blip blip.v
+v -cc gcc -path 'vlib|@vlib' -o blip main.v
 ```
 
-The `v` there must be the pinned commit (see above) — a newer or older
-compiler is how a working checkout breaks. `install.sh` does the whole
-thing: V plus vc at their pins, then blip.
+The `v` there must be stock 0.5.2 (see above) — a master build resolves
+project modules differently and fails the build. `install.sh` does the
+whole thing: download the release V, then build blip.
 
 ## Build and test
 
 ```sh
 ./blip run examples/01_basics.lip
 
-v -cc gcc run tests/tail_calls.v       # a suite, direct from source
-v -cc gcc -o reader_probe reader_probe.v   # every example parses
+v -cc gcc -path 'vlib|@vlib' run tests/tail_calls.v       # a suite, direct from source
+v -cc gcc -path 'vlib|@vlib' -o reader_probe reader_probe.v   # every example parses
 ./reader_probe examples/*.lip
 ```
 
@@ -203,10 +203,10 @@ Lua.
 
 Section 7 of that document is the upkeep checklist: syncing against a new V,
 re-running the representation probes, and keeping the known-broken list honest.
-The compiler sync is the one that matters most, because this project does not
-target the `0.5.2` release — it targets vlang/v master at the commit pinned in
-`.github/workflows/ci.yml`, which resolves `vlib.blip.*` against the project's
-own modules where the release build resolves it against V's standard library.
+The compiler sync is the one that matters most, because a new V release can
+change vlib signatures the generated prims bind (see `tools/genprims.vsh`
+`--check`), resolve modules differently, or miscompile a construct this
+project relies on.
 
 ## Branches and releases
 

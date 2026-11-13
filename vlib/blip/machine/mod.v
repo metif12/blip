@@ -30,11 +30,11 @@ $if !wasm32 {
 }
 
 import strconv
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.prims
-import vlib.blip.printer
-import vlib.blip.reader
+import blip
+import blip.host
+import blip.prims
+import blip.printer
+import blip.reader
 
 @[flag]
 enum Ctl {
@@ -88,17 +88,10 @@ pub mut:
 	// macros names the procedures defmacro created, so macex can tell a macro from
 	// a function without guessing from its shape.
 	macros []string
-	// The panic net's handover channels (see drive). A recovered panic writes
-	// its text to `recovered`, an honest error writes its message to
-	// `step_err`, and a finished run leaves its value in `drv_val`. Three
-	// fields rather than return-value cleverness, because V zero-value
-	// semantics make the drive-through-the-net return ambiguous: on a recovered
-	// panic the function returns its return type's zero value, and blip.Value's
-	// zero value (nil) is a MEANINGFUL value that must never be mistaken for
-	// "nothing happened".
-	recovered string
-	step_err  string
-	drv_val   blip.Value
+	// How a failed run reports itself: `step_err` carries the message, and a
+	// finished run leaves its value in `drv_val`.
+	step_err string
+	drv_val  blip.Value
 	// Single-entry env lookup cache: tight loops re-read the same name in the
 	// same frame, and each lookup walks parent pointers with a map probe per
 	// frame. The entry is valid only when cache_ok and the arena version
@@ -330,42 +323,26 @@ fn (mut m Machine) eval_generated(src string) !blip.Value {
 fn (mut m Machine) drive() !blip.Value {
 	finished := m.drive_steps()
 	if !finished {
-		if m.recovered != '' {
-			// A recovered panic: a wrong call reached a Value accessor or indexed
-			// into an argument list. The message the panic carried is the honest
-			// diagnosis (which accessor, which tag), so it travels through the
-			// same decoration every other machine error gets -- an internal
-			// failure is an error, not a process death.
-			return error(m.decorate_error('internal error: ${m.recovered}'))
-		}
 		return error(m.step_err)
 	}
 	return m.drv_val
 }
 
 // drive_steps is drive's loop. It returns false for "no value: look at
-// `recovered` / `step_err`", and true for "the answer is in `drv_val`".
+// `step_err`", and true for "the answer is in `drv_val`".
 //
-// The defer+recover here is the machine's safety net: a V panic anywhere
-// below this loop -- a wrong-typed call hitting a Value assert in the
-// interpreter, an out-of-range argument index in a primitive -- unwinds to
-// THIS frame, from which `recover()` turns it into an ordinary error
-// message. Without the net the same wrong call killed the whole process:
-// `(car)` exited the REPL and `({:a 1} 5)` took `blip run` down with it,
-// which is the one failure mode a configuration language cannot afford --
-// a config file must be able to say "wrong", not "abort".
+// Every error below this loop is a returned value, never a panic: accessors
+// answer `!T`, prims check arity before indexing, and out-of-range indices
+// are bounds-checked where the index comes from user data. There is no
+// safety net here anymore -- and none is needed, because nothing below can
+// throw. A V panic above this boundary (the reader, the emitter, the suites
+// that call step functions directly) still dies loudly the way it always
+// did, which is correct: those are machinery bugs, not user input.
 //
-// The net is at THIS boundary and nowhere else, so its cost is one function
-// call per form, not one call per step, and so machinery bugs above the
-// boundary (the reader, the emitter, the suites that call step functions
-// directly) still die loudly the way they always did.
+// (The 0.5.2 release has no recover(), so the old defer/recover net could not
+// come along. The discipline above is what replaced it: total functions, with
+// the proof obligation carried by the type rather than caught at runtime.)
 fn (mut m Machine) drive_steps() bool {
-	defer {
-		if code := recover() {
-			m.recovered = '${code}'
-		}
-	}
-	m.recovered = ''
 	m.step_err = ''
 	for {
 		m.steps++
@@ -400,6 +377,10 @@ fn (mut m Machine) drive_steps() bool {
 			}
 		}
 	}
+	// Unreachable: the loop above returns on every path that leaves the
+	// machine (a value, an error, or a limit). It stays because the checker
+	// requires a trailing return for a bool function.
+	return false
 }
 
 // kont builds a continuation frame. The env field inside Kont is a reference
@@ -498,12 +479,12 @@ fn (mut m Machine) step_eval() ! {
 			return m.eval_symbol(d.value)
 		}
 		.quoted {
-			m.val = m.datum_to_value(m.arena.kids_view(id)[0])
+			m.val = m.datum_to_value(m.arena.kids_view(id)[0])!
 			m.ret()
 			return
 		}
 		.quasi {
-			m.val = m.quasi_to_value(m.arena.kids_view(id)[0])
+			m.val = m.quasi_to_value(m.arena.kids_view(id)[0])!
 			m.ret()
 			return
 		}
@@ -527,7 +508,7 @@ fn (mut m Machine) step_eval() ! {
 			// spins at run time: nothing sets `m.val`, so the machine re-enters
 			// the same form until the step limit fires. That is what `(print 1/3)`
 			// did: a step limit error instead of a number.
-			m.val = m.datum_to_value(id)
+			m.val = m.datum_to_value(id)!
 			m.ret()
 			return
 		}
@@ -617,7 +598,7 @@ fn machine_builtin(name string) bool {
 // `print` shows strings with their quotes and `display` does not.
 fn show_value(a blip.Value, quoted bool) string {
 	if a.tag == .string && !quoted {
-		return a.as_string()
+		return a.as_string() or { panic('unreachable: show_value matched .string') }
 	}
 	return printer.write(a)
 }
@@ -815,32 +796,32 @@ fn is_result_of(v blip.Value, kind string) bool {
 	if v.tag != .pair {
 		return false
 	}
-	head := v.as_pair().car
+	head := (v.as_pair() or { panic('unreachable: is_result_of matched .pair') }).car
 	if head.tag != .symbol {
 		return false
 	}
-	return head.as_string() == kind
+	return (head.as_string() or { panic('unreachable: is_result_of checked .symbol') }) == kind
 }
 
 fn kind_of(v blip.Value) string {
 	if v.tag == .pair {
-		head := v.as_pair().car
+		head := (v.as_pair() or { panic('unreachable: kind_of matched .pair') }).car
 		if head.tag == .symbol {
-			return head.as_string()
+			return head.as_string() or { panic('unreachable: kind_of checked .symbol') }
 		}
 	}
 	return 'not-a-result'
 }
 
-fn inner_value(v blip.Value) blip.Value {
+fn inner_value(v blip.Value) !blip.Value {
 	if v.tag != .pair {
 		return blip.nil_value()
 	}
-	cdr := v.as_pair().cdr
+	cdr := (v.as_pair() or { return error(err.msg()) }).cdr
 	if cdr.tag != .pair {
 		return blip.nil_value()
 	}
-	return cdr.as_pair().car
+	return (cdr.as_pair() or { return error(err.msg()) }).car
 }
 
 // result_combinator is map-result, try-result, lazy-map-result and lazy-unwrap.
@@ -882,7 +863,7 @@ fn (mut m Machine) result_combinator(name string, args []blip.Value) ! {
 		return
 	}
 	mut one := []blip.Value{}
-	one << inner_value(args[0])
+	one << inner_value(args[0])!
 	v := m.call_value(args[1], one)!
 	if is_result_of(v, 'err') {
 		m.val = v
@@ -982,14 +963,15 @@ fn (mut m Machine) eval_field_access(what string) ! {
 
 pub fn (m &Machine) field_of(v blip.Value, field string) !blip.Value {
 	if v.tag == .struct_ {
-		s := v.as_struct()
+		s := v.as_struct() or { return error(err.msg()) }
 		if !s.has(field) {
 			return error('${s.name} has no field ${field}')
 		}
 		return s.get(field)
 	}
 	if v.tag == .table || v.tag == .buffer {
-		return v.as_table().get(field)
+		tbl := v.as_table() or { return error(err.msg()) }
+		return tbl.get(field)
 	}
 	return error('cannot read field ${field} of ${printer.write(v)}')
 }
@@ -1150,10 +1132,11 @@ fn (mut m Machine) step_return() !bool {
 			if base.tag != .struct_ {
 				return error('${k.name} := : ${printer.write(base)} is not a struct')
 			}
-			if !base.as_struct().has(k.name) {
-				return error('${base.as_struct().name} has no field ${k.name}')
+			sv := base.as_struct() or { panic('unreachable: field_k checked .struct_') }
+			if !sv.has(k.name) {
+				return error('${sv.name} has no field ${k.name}')
 			}
-			next := base.as_struct().with(k.name, m.val)
+			next := sv.with(k.name, m.val)
 			m.val = blip.Value{
 				tag:     .struct_
 				payload: next
@@ -1231,7 +1214,8 @@ fn (mut m Machine) step_return() !bool {
 			if k.slot == -4 {
 				// `#:finally` on the way out of a raise with no catch clause. The
 				// message rode through val2 as a plain string.
-				return error('raised: ${m.val2.as_string()}')
+				val2s := m.val2.as_string() or { panic('unreachable: val2 carries the raise message as a string') }
+				return error('raised: ${val2s}')
 			}
 			next := k.slot + 1
 			if next < k.clauses.len {
@@ -1301,10 +1285,10 @@ fn (mut m Machine) step_return() !bool {
 fn (mut m Machine) apply_values(callee blip.Value, args []blip.Value) ! {
 	match callee.tag {
 		.closure {
-			m.call_closure(callee.as_closure(), args)!
+			m.call_closure(callee.as_closure() or { return error(err.msg()) }, args)!
 		}
 		.primitive {
-			m.call_primitive(callee.as_string(), args)!
+			m.call_primitive(callee.as_string() or { return error(err.msg()) }, args)!
 		}
 		.keyword, .string, .symbol {
 			// A key used in operator position looks itself up in the one
@@ -1312,7 +1296,7 @@ fn (mut m Machine) apply_values(callee blip.Value, args []blip.Value) ! {
 			if args.len != 1 {
 				return error('a key used as a function takes 1 argument, got ${args.len}')
 			}
-			m.val = m.lookup_key(callee.as_string(), args[0])!
+			m.val = m.lookup_key(callee.as_string() or { return error(err.msg()) }, args[0])!
 			m.ret()
 		}
 		.table, .buffer {
@@ -1322,15 +1306,15 @@ fn (mut m Machine) apply_values(callee blip.Value, args []blip.Value) ! {
 			if args[0].tag !in [.string, .symbol, .keyword] {
 				return error('a table used as a function needs a string key, got ${printer.write(args[0])}')
 			}
-			m.val = m.lookup_key(args[0].as_string(), callee)!
+			m.val = m.lookup_key(args[0].as_string() or { return error(err.msg()) }, callee)!
 			m.ret()
 		}
 		.array, .vector {
 			if args.len != 1 || args[0].tag != .integer {
 				return error('an array used as a function takes 1 integer argument')
 			}
-			data := callee.as_vector().data
-			idx := args[0].as_int()
+			data := (callee.as_vector() or { return error(err.msg()) }).data
+			idx := args[0].as_int() or { return error(err.msg()) }
 			if idx < 0 || idx >= data.len {
 				return error('array index ${idx} out of range (length ${data.len})')
 			}
@@ -1348,17 +1332,18 @@ fn (mut m Machine) apply_values(callee blip.Value, args []blip.Value) ! {
 fn (mut m Machine) lookup_key(key string, coll blip.Value) !blip.Value {
 	match coll.tag {
 		.table, .buffer {
-			return coll.as_table().get(key)
+			return (coll.as_table() or { return error(err.msg()) }).get(key)
 		}
 		.array, .vector {
-			n := coll.as_vector().data.len
+			vec := coll.as_vector() or { return error(err.msg()) }
+			n := vec.data.len
 			i := strconv.atoi(key) or {
 				return error('a vector used as a function needs an integer key, got ${key}')
 			}
 			if i < 0 || i >= n {
 				return error('array index ${i} out of range (length ${n})')
 			}
-			return coll.as_vector().data[i]
+			return vec.data[i]
 		}
 		else {
 			return error('cannot look ${key} up in ${printer.write(coll)}')
@@ -1367,7 +1352,7 @@ fn (mut m Machine) lookup_key(key string, coll blip.Value) !blip.Value {
 }
 
 fn (mut m Machine) call_closure(c &blip.Closure, args []blip.Value) ! {
-	mut use_args := args
+	mut use_args := args.clone()
 	if c.opt_from >= 0 {
 		// The caller's scope is the environment the APPLICATION form was written in.
 		// It is not m.env: after the last argument was evaluated, m.env is whatever
@@ -1466,23 +1451,24 @@ fn (mut m Machine) fill_labels(c &blip.Closure, args []blip.Value, caller blip.E
 	for a < args.len {
 		v := args[a]
 		if v.tag == .keyword {
+			vname := v.as_string() or { return error(err.msg()) }
 			mut slot := -1
 			mut j := c.opt_from
 			for j < c.params.len {
-				if c.opt_names[j - c.opt_from] == v.as_string() {
+				if c.opt_names[j - c.opt_from] == vname {
 					slot = j
 					break
 				}
 				j++
 			}
 			if slot < 0 {
-				return error('${v.as_string()}: ${c.name} has no such labelled parameter')
+				return error('${vname}: ${c.name} has no such labelled parameter')
 			}
 			if a + 1 >= args.len {
-				return error('${v.as_string()}: needs a value')
+				return error('${vname}: needs a value')
 			}
 			if filled[slot] {
-				return error('${c.name}: ${v.as_string()} was given twice')
+				return error('${c.name}: ${vname} was given twice')
 			}
 			slots[slot] = args[a + 1]
 			filled[slot] = true
@@ -1549,7 +1535,7 @@ fn format_args(args []blip.Value) string {
 	}
 	mut fm := ''
 	if args[0].tag in [.string, .symbol, .keyword, .primitive] {
-		fm = args[0].as_string()
+		fm = args[0].as_string() or { panic('unreachable: format checked the tag') }
 	} else {
 		fm = printer.write(args[0])
 	}
@@ -1640,7 +1626,7 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 				}
 				if parts.len > 1 {
 					if parts[1].tag in [.string, .symbol, .keyword, .primitive] {
-						msg = parts[1].as_string()
+						msg = parts[1].as_string() or { return error(err.msg()) }
 					} else {
 						msg = printer.write(parts[1])
 					}
@@ -1732,7 +1718,7 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 			if args.len < 2 {
 				return error('veb-route needs a path and a handler')
 			}
-			path := args[0].as_string()
+			path := args[0].as_string() or { return error(err.msg()) }
 			m.veb_route(path, args[1])
 			m.val = blip.nil_value()
 			m.ret()
@@ -1920,7 +1906,10 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 	// Core forms first.
 	match name {
 		'quote' {
-			m.val = m.datum_to_value(kids[1])
+			if kids.len < 2 {
+				return error('quote needs a form: (quote x)')
+			}
+			m.val = m.datum_to_value(kids[1])!
 			m.ret()
 			return
 		}
@@ -1968,6 +1957,9 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 			return
 		}
 		'set!' {
+			if kids.len < 3 {
+				return error('set! needs a name and a value: (set! name value)')
+			}
 			target := m.arena.node(kids[1])
 			if target.tag != .sym {
 				return error('set! needs a name')
@@ -1988,6 +1980,9 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 		}
 		'fn' {
 			// (fn [x] body) is (lambda (x) body): the short form every Lisp has.
+			if kids.len < 2 {
+				return error('fn needs a parameter list: (fn [x] body)')
+			}
 			return m.eval_lambda([kids[0], m.make_begin(kids[1..2]), m.make_begin(kids[2..])])
 		}
 		'begin' {
@@ -2046,17 +2041,29 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 			m.goto(m.transform_let(kids)!)
 		}
 		'let*' {
+			if kids.len < 2 {
+				return error('let* needs a binding group: (let* ([a 1]) body...)')
+			}
 			m.goto(m.transform_let_star(kids))
 		}
 		'letrec' {
+			if kids.len < 2 {
+				return error('letrec needs a binding group: (letrec ([a 1]) body...)')
+			}
 			m.goto(m.transform_letrec(kids))
 		}
 		'when' {
+			if kids.len < 2 {
+				return error('when needs a test: (when test body...)')
+			}
 			// (when c body...) => (if c (begin body...))
 			body := m.node_of('begin', kids[1..])
 			m.goto(m.node_of('if', [kids[1], body, m.nil_node()]))
 		}
 		'unless' {
+			if kids.len < 2 {
+				return error('unless needs a test: (unless test body...)')
+			}
 			// (unless c body...) => (if c nil (begin body...))
 			body := m.node_of('begin', kids[1..])
 			m.goto(m.node_of('if', [kids[1], m.nil_node(), body]))
@@ -2065,9 +2072,15 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 			m.goto(m.transform_cond(kids))
 		}
 		'case' {
+			if kids.len < 2 {
+				return error('case needs a subject: (case x [(1) one] ...)')
+			}
 			m.goto(m.transform_case(kids))
 		}
 		'loop' {
+			if kids.len < 2 {
+				return error('loop needs a variable: (loop i 0 test body...)')
+			}
 			m.goto(m.transform_loop(kids))
 		}
 		'dotimes' {
@@ -2092,6 +2105,9 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 			return m.eval_match(kids)
 		}
 		'match*' {
+			if kids.len < 2 {
+				return error('match* needs a subject: (match* x [pat body] ...)')
+			}
 			m.goto(m.transform_match_star(kids))
 		}
 		'let-assert' {
@@ -3107,8 +3123,8 @@ fn (mut m Machine) build_collection(id blip.NodeId, items []blip.Value) !blip.Va
 	for i + 1 < items.len {
 		key := items[i]
 		ks := match key.tag {
-			.keyword { key.as_string() }
-			.string { key.as_string() }
+			.keyword { key.as_string() or { return error(err.msg()) } }
+			.string { key.as_string() or { return error(err.msg()) } }
 			else {
 				return error('a table literal needs keyword or string keys, got ${printer.write(key)}')
 			}

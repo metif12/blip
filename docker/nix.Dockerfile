@@ -3,8 +3,8 @@
 # blip on Nix.
 #
 # The toolchain comes from nixpkgs rather than a distro package manager, and
-# the pinned V compiler is still built from the same commit as the Alpine and
-# Debian images. Nix is the third image because it is the third way people get
+# the V compiler is the same stock 0.5.2 release as the Alpine and Debian
+# images. Nix is the third image because it is the third way people get
 # a C toolchain, not because the build is different.
 #
 # What Nix buys is exactness: gcc and its headers are the same on every run, so
@@ -26,46 +26,23 @@ FROM nixos/nix:latest
 # is written to avoid.
 RUN nix-channel --update \
     && nix-env -iA \
-        nixpkgs.gnumake \
         nixpkgs.gcc \
-        nixpkgs.git \
         nixpkgs.curl \
+        nixpkgs.unzip \
         nixpkgs.boehmgc
 
 # The nix profile directories are not on PATH for a fresh shell the way /usr/bin
-# is. Without this `make` is not found on the very first build command.
+# is. Without this `curl` is not found on the very first build command.
 ENV PATH=/nix/var/nix/profiles/default/bin:/root/.nix-profile/bin:$PATH
 
-# The commit this project targets. Not the 0.5.2 release: vlang/v master at
-# this commit also reports itself as "V 0.5.2" and resolves modules
-# differently, which is the difference the project was bitten by.
-ARG V_COMMIT=74be97a2d7bd1fce4150abc749a2e64b21d9d082
-
-# vc is a SEPARATE repository from V and the Makefile clones it at HEAD,
-# unpinned. That is what broke this: a vc snapshot generated from a newer V
-# carries a parser that rejects the pinned V's own vlib -- vc HEAD gained
-# "reject `if` conditions that start with a parenthesized if expression" on
-# 2026-10-05, and vlib/math/bits/bits.v at this V_COMMIT uses that shape at
-# line 621. This is the vc snapshot taken just after V_COMMIT.
-ARG VC_COMMIT=0027130e9850c9946fa2c21e9004f13d8e593595
+# The compiler this project targets: the official 0.5.2 release.
+ARG V_VERSION=0.5.2
 
 WORKDIR /opt
-# V's own build runs git to stamp the version, and a container's repository has
-# no configured owner, so the directory is marked safe up front.
-RUN git config --global --add safe.directory /opt/v \
-    && git config --global --add safe.directory /opt/v/vc \
-    && git init -q v \
-    && cd v \
-    && git remote add origin https://github.com/vlang/v.git \
-    && git fetch -q --depth 1 origin "$V_COMMIT" \
-    && git checkout -q FETCH_HEAD \
-    && git clone -q https://github.com/vlang/vc vc \
-    && git -C vc fetch -q --depth 1 origin "$VC_COMMIT" \
-    && git -C vc checkout -q FETCH_HEAD \
-    && mkdir -p thirdparty/tcc/lib \
-    && (cp $(find /nix/store -name 'libgc.so' -o -name 'libgc.a' 2>/dev/null | head -1 | xargs dirname 2>/dev/null)/libgc.a thirdparty/tcc/lib/libgc.a 2>/dev/null || true) \
-    && make -f Makefile v VFLAGS="-d use_bundled_libgc" \
-    && ./v -version
+RUN curl -sSL -o v.zip "https://github.com/vlang/v/releases/download/${V_VERSION}/v_linux.zip" \
+    && unzip -q v.zip \
+    && rm v.zip \
+    && ./v/v -version
 
 ENV PATH=/opt/v:$PATH
 
@@ -79,7 +56,7 @@ COPY lib/std.lip /usr/local/lib/std.lip
 COPY . /src
 WORKDIR /src
 
-RUN v -cc gcc -o /usr/local/bin/blip blip.v \
+RUN v -cc gcc -path 'vlib|@vlib' -o /usr/local/bin/blip main.v \
     && blip version
 
 # /w is where a program gets mounted, so the image is runnable rather than

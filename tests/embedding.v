@@ -26,10 +26,10 @@ module main
  * half this file until it was noticed.
  */
 
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.machine
-import vlib.blip.printer
+import blip
+import blip.host
+import blip.machine
+import blip.printer
 
 struct Suite {
 mut:
@@ -85,7 +85,7 @@ fn fails(f fn () !blip.Value) bool {
 // ---- the checks ----------------------------------------------------------
 
 fn (mut s Suite) two_machines_are_independent() bool {
-	a, b, _, _ := pair()
+	mut a, mut b, _, _ := pair()
 	a.run_str('(define x 1) (define (f) x)') or {
 		s.fail('two machines are independent', 'a: ${err.msg()}')
 		return false
@@ -101,7 +101,7 @@ fn (mut s Suite) two_machines_are_independent() bool {
 }
 
 fn (mut s Suite) a_definition_does_not_cross_machines() bool {
-	a, b, _, _ := pair()
+	mut a, mut b, _, _ := pair()
 	a.run_str('(define only-in-a 1)') or {
 		s.fail('a definition does not cross machines', 'setup: ${err.msg()}')
 		return false
@@ -123,7 +123,7 @@ fn (mut s Suite) a_definition_does_not_cross_machines() bool {
 }
 
 fn (mut s Suite) run_str_accumulates() bool {
-	_, m, _, _ := pair()
+	_, mut m, _, _ := pair()
 	m.run_str('(define a 1)') or {
 		s.fail('run_str accumulates', 'setup: ${err.msg()}')
 		return false
@@ -141,7 +141,7 @@ fn (mut s Suite) run_str_accumulates() bool {
 }
 
 fn (mut s Suite) a_closure_survives_a_later_read() bool {
-	_, m, _, _ := pair()
+	_, mut m, _, _ := pair()
 	m.run_str('(define (adder n) (fn [x] (+ x n))) (define add10 (adder 10))') or {
 		s.fail('a closure survives a later read', 'setup: ${err.msg()}')
 		return false
@@ -168,7 +168,7 @@ fn (mut s Suite) a_closure_survives_a_later_read() bool {
 }
 
 fn (mut s Suite) load_evaluates_into_the_running_machine() bool {
-	_, m, _, h := pair()
+	_, mut m, _, h := pair()
 	h.give_file('lib.vl',
 		'(define loaded-value 41)\n(define (loaded-fn) (+ loaded-value 1))')
 	m.run_str('(define before 1)') or {
@@ -190,7 +190,7 @@ fn (mut s Suite) load_evaluates_into_the_running_machine() bool {
 }
 
 fn (mut s Suite) a_missing_file_is_an_error() bool {
-	_, m, _, _ := pair()
+	_, mut m, _, _ := pair()
 	m.load('missing.vl') or {
 		return s.record('a missing file is an error', true,
 			'the host reported it and the host survived', '')
@@ -200,7 +200,7 @@ fn (mut s Suite) a_missing_file_is_an_error() bool {
 }
 
 fn (mut s Suite) print_goes_to_the_host_and_to_out() bool {
-	_, m, _, h := pair()
+	_, mut m, _, h := pair()
 	m.run_str('(print "hello" 42)') or {
 		s.fail('print goes to the host', err.msg())
 		return false
@@ -224,7 +224,7 @@ fn (mut s Suite) print_goes_to_the_host_and_to_out() bool {
 }
 
 fn (mut s Suite) output_stays_with_its_machine() bool {
-	a, b, ha, hb := pair()
+	mut a, mut b, ha, hb := pair()
 	a.run_str('(print "from a")') or {}
 	b.run_str('(print "from b")') or {}
 	ok := ha.lines().len == 1 && ha.lines()[0] == '"from a"' && hb.lines().len == 1 && hb.lines()[0] == '"from b"'
@@ -233,7 +233,7 @@ fn (mut s Suite) output_stays_with_its_machine() bool {
 }
 
 fn (mut s Suite) a_step_limit_is_per_machine() bool {
-	mut a, b, _, _ := pair()
+	mut a, mut b, _, _ := pair()
 	a.max_steps = 50
 	// A loop whose test is always true, to trip the step limit.
 	a.run_str('(loop i 0 #t i)') or {
@@ -250,7 +250,7 @@ fn (mut s Suite) a_step_limit_is_per_machine() bool {
 }
 
 fn (mut s Suite) a_machine_survives_a_bad_program() bool {
-	_, m, _, _ := pair()
+	_, mut m, _, _ := pair()
 	m.run_str('(define good 7)') or {
 		s.fail('a machine survives a bad program', 'setup: ${err.msg()}')
 		return false
@@ -258,10 +258,10 @@ fn (mut s Suite) a_machine_survives_a_bad_program() bool {
 	// Two failures in a row. The first is the interesting one: it aborts with
 	// continuation frames still on the stack, and if those frames were left there
 	// the SECOND evaluation would return into them instead of finishing.
-	bad1 := fn [m] () !blip.Value {
+	bad1 := fn [mut m] () !blip.Value {
 		return m.run_str('(car 1)')
 	}
-	bad2 := fn [m] () !blip.Value {
+	bad2 := fn [mut m] () !blip.Value {
 		return m.run_str('(car 1)')
 	}
 	if !fails(bad1) || !fails(bad2) {

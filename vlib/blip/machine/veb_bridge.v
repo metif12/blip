@@ -11,8 +11,8 @@
 
 module machine
 
-import vlib.blip
-import vlib.blip.printer
+import blip
+import blip.printer
 
 // veb_to_value converts a request's fields into a blip table.
 pub fn veb_to_value(method string, path string, body string) blip.Value {
@@ -27,12 +27,12 @@ pub fn veb_to_value(method string, path string, body string) blip.Value {
 // string is the body (status 200); a table may carry :status and :body.
 pub fn value_to_veb_body(resp blip.Value) string {
 	if resp.tag == .string {
-		return resp.as_string()
+		return resp.as_string() or { return printer.write(resp) }
 	}
 	if resp.tag == .table {
-		t := resp.as_table()
+		t := resp.as_table() or { return printer.write(resp) }
 		if 'body' in t.values {
-			return t.values['body'].as_string()
+			return t.values['body'].as_string() or { return printer.write(t.values['body']) }
 		}
 	}
 	return printer.write(resp)

@@ -3,15 +3,14 @@ module main
 $if !wasm32 {
 	import os
 }
-
-import vlib.blip
-import vlib.blip.emit
-import vlib.blip.host
-import vlib.blip.lsp
-import vlib.blip.machine
-import vlib.blip.printer
-import vlib.blip.reader
-import vlib.blip.repl
+import blip
+import blip.emit
+import blip.host
+import blip.lsp
+import blip.machine
+import blip.printer
+import blip.reader
+import blip.repl
 import strings
 
 // blip: a Lisp dialect implemented in V.
@@ -677,7 +676,8 @@ fn doc_file(path string) int {
 				continue
 			}
 			// A definition line: flush the accumulated doc as an entry.
-			is_def := trimmed.starts_with('(define') || trimmed.starts_with('(def ') || trimmed.starts_with('(defmacro') || trimmed.starts_with('(struct')
+			is_def := trimmed.starts_with('(define') || trimmed.starts_with('(def ')
+				|| trimmed.starts_with('(defmacro') || trimmed.starts_with('(struct')
 			if is_def {
 				// Extract the name: second token after the opening paren.
 				mut name := ''

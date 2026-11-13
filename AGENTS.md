@@ -8,7 +8,7 @@ in `CONTRIBUTING.md`, the plan in `docs/010-roadmap.md`, history in
 
 ## Layout
 
-- `blip.v` — CLI entry. `vlib/blip/` — the implementation: `reader/`,
+- `main.v` — CLI entry. `vlib/blip/` — the implementation: `reader/`,
   `machine/`, `prims/` (hand-written plus generated `gen_*.v`, which are
   never hand-edited), `repl/`, `printer/`, `host/`.
 - `lib/std.lip` — prelude, loaded before every program. Ordinary blip.
@@ -25,25 +25,29 @@ in `CONTRIBUTING.md`, the plan in `docs/010-roadmap.md`, history in
 
 ## Build and test
 
-- Toolchain: vlang/v master at the `V_COMMIT` pinned in
-  `.github/workflows/ci.yml`, `-cc gcc` on every build. On Linux also
-  `V_MACOS_V3_NO_FALLBACK=1` (the V3 fallback resolves modules
-  differently; see roadmap §7.1a).
-- `v -cc gcc -o blip.exe blip.v`, then `v run tests/<suite>.v`.
+- Toolchain: stock V 0.5.2 (the official release, `V 0.5.2 7647ce1`),
+  `-cc gcc` on every build; `V_VERSION` in `.github/workflows/ci.yml`
+  names it. On Linux also `V_MACOS_V3_NO_FALLBACK=1` (the V3 fallback
+  resolves modules differently; see roadmap §7.1a).
+- `v -cc gcc -path 'vlib|@vlib' -o blip.exe main.v`, then
+  `v -path 'vlib|@vlib' run tests/<suite>.v`. The `-path` points the
+  compiler at this repo's own `vlib/` for `import blip.*` (stock V has no
+  project-local `vlib.` lookup; master-only, unusable here).
   Suites (the set CI builds and runs): tail_calls, non_tail, loop_forms,
   binding_forms, embedding, repl_golden, examples_run, programs_run,
   genprims, unit, api_coverage, emit_js, lsp, hostile, multi_use,
   value_to_datum, macros_gate. Zero `FAIL` lines.
-- `v -cc gcc run tools/genprims.vsh --check` must pass (generated prims
-  match the pinned compiler); without `--check` it regenerates. DATED
-  2026-10-27: the tool once shelled out to bare `v` — whichever build was
-  on PATH — for BOTH the `v ast` signatures and the header version stamp,
-  so "generated at the pin" depended on the operator's machine. Now both
-  calls use `@VEXE` (the compiler running the script), and `--check`
-  strips the header `at V ...` stamp, comparing content only. The
-  controls, if anyone edits `strip_stamp`: corrupting ONLY the header
-  stamp must still pass; corrupting a body line must fail. A stale check
-  after a compiler sync still means regenerate and review the diff.
+- `v -cc gcc -path 'vlib|@vlib' run tools/genprims.vsh --check` must pass
+  (generated prims match the release compiler); without `--check` it
+  regenerates. DATED 2026-10-27: the tool once shelled out to bare `v` —
+  whichever build was on PATH — for BOTH the `v ast` signatures and the
+  header version stamp, so "generated at the pin" depended on the
+  operator's machine. Now both calls use `@VEXE` (the compiler running
+  the script), and `--check` strips the header `at V ...` stamp,
+  comparing content only. The controls, if anyone edits `strip_stamp`:
+  corrupting ONLY the header stamp must still pass; corrupting a body
+  line must fail. A stale check after a compiler sync still means
+  regenerate and review the diff.
 
 ## Gotchas that cost sessions
 

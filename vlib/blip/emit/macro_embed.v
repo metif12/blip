@@ -16,11 +16,11 @@
 
 module emit
 
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.machine
-import vlib.blip.printer
-import vlib.blip.reader
+import blip
+import blip.host
+import blip.machine
+import blip.printer
+import blip.reader
 
 // is_defmacro_form reports whether `id` is a (defmacro ...) form.
 fn is_defmacro_form(a &reader.Arena, id reader.NodeId) bool {
@@ -36,7 +36,7 @@ fn is_defmacro_form(a &reader.Arena, id reader.NodeId) bool {
 pub fn expand_macro_at_embed(src string, h host.Host) !string {
 	mut m := machine.new_standalone(h)
 	expanded := m.run_str(src)!
-	_ = blip.value_to_datum(mut m, expanded)!
+	_ = m.value_to_datum(expanded)!
 	return 'embedded-machine macro expansion: pure-shape converted (complex deferred)'
 }
 
@@ -45,11 +45,11 @@ fn is_macro_value(m machine.Machine, v blip.Value) bool {
 	if v.tag != .pair {
 		return false
 	}
-	head := v.as_pair().car
+	head := (v.as_pair() or { return false }).car
 	if head.tag != .symbol {
 		return false
 	}
-	name := head.as_string()
+	name := head.as_string() or { return false }
 	return name in m.macros
 }
 
@@ -63,15 +63,15 @@ fn is_registered_macro(m machine.Machine, name string) bool {
 fn expand_value(mut m machine.Machine, v blip.Value) !blip.Value {
 	// Explicit expansion request: run it through the machine.
 	if v.tag == .pair {
-		car := v.as_pair().car
+		car := (v.as_pair() or { return error(err.msg()) }).car
 		if car.tag == .symbol {
-			name := car.as_string()
+			name := car.as_string() or { return error(err.msg()) }
 			if name == 'macex' || name == 'macex1' {
-				cdr := v.as_pair().cdr
+				cdr := (v.as_pair() or { return error(err.msg()) }).cdr
 				if cdr.tag != .pair {
 					return error('macex needs a form')
 				}
-				arg_txt := printer.write(cdr.as_pair().car)
+				arg_txt := printer.write((cdr.as_pair() or { return error(err.msg()) }).car)
 				expanded := m.run_str('(${name} ${arg_txt})')!
 				return expand_value(mut m, expanded)
 			}
@@ -96,12 +96,12 @@ fn expand_value(mut m machine.Machine, v blip.Value) !blip.Value {
 	}
 	match v.tag {
 		.pair {
-			car := expand_value(mut m, v.as_pair().car)!
-			cdr := expand_value(mut m, v.as_pair().cdr)!
+			car := expand_value(mut m, (v.as_pair() or { return error(err.msg()) }).car)!
+			cdr := expand_value(mut m, (v.as_pair() or { return error(err.msg()) }).cdr)!
 			return blip.cons(car, cdr)
 		}
 		.vector {
-			vec := v.as_vector()
+			vec := v.as_vector() or { return error(err.msg()) }
 			mut elems := []blip.Value{}
 			for e in vec.data {
 				elems << expand_value(mut m, e)!

@@ -8,9 +8,9 @@ module main
 // both halves. Cross-file `use` (loading a FILE into the running machine)
 // is a separate property, covered by tests/embedding.v's load checks.
 
-import vlib.blip.host
-import vlib.blip.machine
-import vlib.blip.printer
+import blip.host
+import blip.machine
+import blip.printer
 
 fn main() {
 	h := &host.ConsoleHost{}

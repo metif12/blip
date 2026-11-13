@@ -17,19 +17,20 @@ pub fn (v Value) with_tree_origin(origin SourceLocation) Value {
 		mut x := work.pop()
 		match x.tag {
 			.pair {
-				p := x.as_pair()
+				p := x.as_pair() or { panic('unreachable: pair arm') }
 				if voidptr(p) in seen { continue }
 				seen[voidptr(p)] = true
 				for child in [p.car, p.cdr] {
 					if child.origin.line == 0 { work << child }
 				}
 				unsafe {
-					p.car = p.car.with_origin(origin)
-					p.cdr = p.cdr.with_origin(origin)
+					mut pp := p
+					pp.car = pp.car.with_origin(origin)
+					pp.cdr = pp.cdr.with_origin(origin)
 				}
 			}
 			.vector, .array {
-				p := x.as_vector()
+				p := x.as_vector() or { panic('unreachable: vector/array arm') }
 				if voidptr(p) in seen { continue }
 				seen[voidptr(p)] = true
 				for i, child in p.data {
@@ -40,7 +41,7 @@ pub fn (v Value) with_tree_origin(origin SourceLocation) Value {
 				}
 			}
 			.table, .buffer {
-				p := x.as_table()
+				p := x.as_table() or { panic('unreachable: table/buffer arm') }
 				if voidptr(p) in seen { continue }
 				seen[voidptr(p)] = true
 				for key, child in p.values {
@@ -51,7 +52,7 @@ pub fn (v Value) with_tree_origin(origin SourceLocation) Value {
 				}
 			}
 			.struct_ {
-				mut p := x.as_struct()
+				mut p := x.as_struct() or { panic('unreachable: struct arm') }
 				if voidptr(p) in seen { continue }
 				seen[voidptr(p)] = true
 				for key, child in p.values {

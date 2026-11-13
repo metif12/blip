@@ -2,10 +2,10 @@
 
 # blip on Debian.
 #
-# The same pinned V compiler as docker/alpine.Dockerfile, built the same way.
-# The two images differ only in the C toolchain, which is the entire point of
-# there being two: a language that only builds on one libc is a language with a
-# portability bug nobody has found yet.
+# The same stock V 0.5.2 compiler as docker/alpine.Dockerfile, fetched the
+# same way. The two images differ only in the C toolchain, which is the entire
+# point of there being two: a language that only builds on one libc is a
+# language with a portability bug nobody has found yet.
 #
 # trixie-slim rather than debian:stable, because "stable" is a moving pointer
 # and a build that worked on Tuesday should work on Friday.
@@ -13,37 +13,17 @@
 FROM debian:trixie-slim
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential git ca-certificates libgc-dev \
+    && apt-get install -y --no-install-recommends build-essential curl ca-certificates unzip libgc-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# The commit this project targets. Not the 0.5.2 release: vlang/v master at
-# this commit also reports itself as "V 0.5.2" and resolves modules
-# differently, which is the difference the project was bitten by.
-# vc is a SEPARATE repository from V and the Makefile clones it at HEAD,
-# unpinned. That is what broke this: a vc snapshot generated from a newer V
-# carries a parser that rejects the pinned V's own vlib -- vc HEAD gained
-# "reject `if` conditions that start with a parenthesized if expression" on
-# 2026-10-05, and vlib/math/bits/bits.v at this V_COMMIT uses that shape at
-# line 621. This is the vc snapshot taken just after V_COMMIT.
-ARG V_COMMIT=74be97a2d7bd1fce4150abc749a2e64b21d9d082
-
-# Building the `v` target directly rather than `all`, because `all` depends on
-# download_vc, which clones vc at HEAD and undoes the pin.
-ARG VC_COMMIT=0027130e9850c9946fa2c21e9004f13d8e593595
+# The compiler this project targets: the official 0.5.2 release.
+ARG V_VERSION=0.5.2
 
 WORKDIR /opt
-RUN git init -q v \
-    && cd v \
-    && git remote add origin https://github.com/vlang/v.git \
-    && git fetch -q --depth 1 origin "$V_COMMIT" \
-    && git checkout -q FETCH_HEAD \
-    && git clone -q https://github.com/vlang/vc vc \
-    && git -C vc fetch -q --depth 1 origin "$VC_COMMIT" \
-    && git -C vc checkout -q FETCH_HEAD \
-    && mkdir -p thirdparty/tcc/lib \
-    && cp /usr/lib/x86_64-linux-gnu/libgc.a thirdparty/tcc/lib/libgc.a 2>/dev/null || cp /usr/lib/libgc.a thirdparty/tcc/lib/libgc.a 2>/dev/null || true \
-    && make -f Makefile v VFLAGS="-d use_bundled_libgc" \
-    && ./v -version
+RUN curl -sSL -o v.zip "https://github.com/vlang/v/releases/download/${V_VERSION}/v_linux.zip" \
+    && unzip -q v.zip \
+    && rm v.zip \
+    && ./v/v -version
 
 ENV PATH=/opt/v:$PATH
 
@@ -57,7 +37,7 @@ COPY lib/std.lip /usr/local/lib/std.lip
 COPY . /src
 WORKDIR /src
 
-RUN v -cc gcc -o /usr/local/bin/blip blip.v \
+RUN v -cc gcc -path 'vlib|@vlib' -o /usr/local/bin/blip main.v \
     && blip version
 
 # /w is where a program gets mounted, so the image is runnable rather than

@@ -82,9 +82,14 @@ pub fn (p &StringPayload) payload_tag() Tag {
 	return p.tag
 }
 
+// Pair, Vector and Table are @[heap]: their mutators run through a `&T`
+// receiver, and the compiler only permits the `mut` copy that makes the
+// write legal when the struct is heap-allocated (see below).
+@[heap]
 pub struct Pair {
 pub:
 	tag Tag
+pub mut:
 	car Value
 	cdr Value
 }
@@ -93,9 +98,11 @@ pub fn (p &Pair) payload_tag() Tag {
 	return p.tag
 }
 
+@[heap]
 pub struct Vector {
 pub:
-	tag  Tag
+	tag Tag
+pub mut:
 	data []Value
 }
 
@@ -105,9 +112,11 @@ pub fn (v &Vector) payload_tag() Tag {
 
 // Table is an immutable string-keyed map. A buffer uses the same payload with a
 // different tag, so `get`/`put` serve both and mutability is visible in the tag.
+@[heap]
 pub struct Table {
 pub:
-	tag    Tag
+	tag Tag
+pub mut:
 	values map[string]Value
 }
 
@@ -204,56 +213,57 @@ pub fn (t &Table) has(k string) bool {
 	return k in t.values
 }
 
-// Mutators take `&Vector`/`&Table` and need `unsafe`, because a `&T` receiver is
-// immutable in V and these deliberately mutate the shared payload. They live here
-// rather than in prims because the struct is declared here, and prims cannot reach
+// Mutators take `&Vector`/`&Table`. A `&T` receiver is immutable in V, so the
+// write goes through a `mut` copy of the reference inside `unsafe` (allowed
+// because the payloads are heap structs). They live here rather than in
+// prims because the struct is declared here, and prims cannot reach
 // through an immutable reference to a field of another module's struct.
-//
-// `mut v Vector` is NOT accepted as an alternative on V 0.5.2 for a receiver that
-// is only ever obtained from a `&Vector`: the checker rejects the pair of methods
-// with "use (mut v Vector) or (v &Vector) instead of (mut v &Vector)" and then
-// rejects the mutation itself. The `unsafe` is the shape that compiles.
 pub fn (v &Vector) set_at(i int, val Value) {
 	unsafe {
-		v.data[i] = val
+		mut w := v
+		w.data[i] = val
 	}
 }
 
 pub fn (v &Vector) push(val Value) {
 	unsafe {
+		mut w := v
 		// `.clone()` and not a straight assignment: V treats `mut d := v.data` on an
 		// immutable receiver as aliasing, and rejects it. Cloning is CORRECT here
 		// rather than a copy that breaks sharing, because every accessor reads
 		// `v.data` again -- nothing else holds the old slice descriptor.
-		mut d := v.data.clone()
+		mut d := w.data.clone()
 		d << val
-		v.data = d
+		w.data = d
 	}
 }
 
 pub fn (v &Vector) pop() Value {
 	unsafe {
-		mut d := v.data.clone()
+		mut w := v
+		mut d := w.data.clone()
 		last := d[d.len - 1]
 		d = d[..d.len - 1]
-		v.data = d
+		w.data = d
 		return last
 	}
 }
 
 pub fn (t &Table) set_at(k string, val Value) {
 	unsafe {
-		mut m := t.values
+		mut tt := t
+		mut m := tt.values
 		m[k] = val
-		t.values = m
+		tt.values = m
 	}
 }
 
 pub fn (t &Table) delete_at(k string) {
 	unsafe {
-		mut m := t.values
+		mut tt := t
+		mut m := tt.values
 		m.delete(k)
-		t.values = m
+		tt.values = m
 	}
 }
 
@@ -445,73 +455,109 @@ pub fn buffer(m map[string]Value) Value {
 
 // ---- accessors -------------------------------------------------------------
 //
-// Every accessor type-checks, and does so with a RECOVERABLE panic rather
-// than an `assert`: V asserts are not catchable -- the process dies with the
-// printout and no defer can intercept -- while `panic(...)` unwinds to the
-// machine's drive loop, from which a wrong call reaches the user as an
-// ordinary error naming the accessor and the tag it met ("internal error:
-// as_table: called on a integer, not a table"). The distinction matters for
-// the configuration use case, where a program that says "wrong type" and
-// keeps going is usable and one that aborts is not.
+// Every accessor type-checks, and reports the mismatch as a returned error
+// naming the accessor and the tag it met ("as_table: called on a integer,
+// not a table"). The error composes with `or`: prims and machine paths
+// propagate it, and the user sees an ordinary blip error -- never a dead
+// process. That is the whole contract with hostile input: a config file that
+// says something wrong must be answerable as an error.
+//
+// An earlier revision did this with a RECOVERABLE panic caught in the drive
+// loop's defer/recover net (V asserts are not catchable -- the process dies
+// with the printout and no defer can intercept). The 0.5.2 release has no
+// recover, so the check lives in the return type instead: every call site
+// ends in `or`, and the net is gone. Sites the tag-match above already
+// proves safe still spell the `or` out, with a panic naming the invariant;
+// if one ever fires it is a logic bug, and loud is correct.
+//
+// The payload itself is recovered with a smart cast, not `as`: stock 0.5.2
+// miscompiles `iface as &T` for an interface holding a `&T` (the cast
+// panics with "cannot cast `unknown`", while dispatch on the same value
+// works), and only `as T` -- a copy -- succeeds. The smart cast keeps the
+// live pointer, so in-place writers (push, set_at, with_tree_origin) still
+// reach the shared struct.
 
 fn tag_name(t Tag) string {
 	return '${t}'.replace('Tag.', '')
 }
 
 @[inline]
-pub fn (v Value) as_int() i64 {
+pub fn (v Value) as_int() !i64 {
 	if v.tag != .integer && v.tag != .rune {
-		panic('as_int: called on a ${tag_name(v.tag)}, not an integer')
+		return error('as_int: called on a ${tag_name(v.tag)}, not an integer')
 	}
 	return v.i
 }
 
 @[inline]
-pub fn (v Value) as_float() f64 {
+pub fn (v Value) as_float() !f64 {
 	if v.tag != .float {
-		panic('as_float: called on a ${tag_name(v.tag)}, not a float')
+		return error('as_float: called on a ${tag_name(v.tag)}, not a float')
 	}
 	return v.f
 }
 
 @[inline]
-pub fn (v Value) as_bool() bool {
+pub fn (v Value) as_bool() !bool {
 	if v.tag != .boolean {
-		panic('as_bool: called on a ${tag_name(v.tag)}, not a boolean')
+		return error('as_bool: called on a ${tag_name(v.tag)}, not a boolean')
 	}
 	return v.i != 0
 }
 
+// string_payload recovers the string payload without `as`: narrowing to a
+// `&T` and touching the result in the same branch miscompiles on stock
+// 0.5.2 (an extra indirection in the generated C), while returning the
+// narrowed value through a helper keeps the live pointer intact.
+fn string_payload(p Payload) !&StringPayload {
+	if p is &StringPayload {
+		return p
+	}
+	return error('payload is not a string')
+}
+
 @[inline]
-pub fn (v Value) as_string() string {
+pub fn (v Value) as_string() !string {
 	if v.tag !in [.string, .symbol, .keyword, .primitive] {
-		panic('as_string: called on a ${tag_name(v.tag)}, not a string')
+		return error('as_string: called on a ${tag_name(v.tag)}, not a string')
 	}
-	return (v.payload as &StringPayload).s
+	sp := string_payload(v.payload) or {
+		return error('as_string: payload is not a string')
+	}
+	return sp.s
 }
 
 @[inline]
-pub fn (v Value) as_pair() &Pair {
+pub fn (v Value) as_pair() !&Pair {
 	if v.tag != .pair {
-		panic('as_pair: called on a ${tag_name(v.tag)}, not a pair')
+		return error('as_pair: called on a ${tag_name(v.tag)}, not a pair')
 	}
-	return v.payload as &Pair
+	if v.payload is &Pair {
+		return v.payload
+	}
+	return error('as_pair: payload is not a pair')
 }
 
 @[inline]
-pub fn (v Value) as_vector() &Vector {
+pub fn (v Value) as_vector() !&Vector {
 	if v.tag != .vector && v.tag != .array {
-		panic('as_vector: called on a ${tag_name(v.tag)}, not a vector')
+		return error('as_vector: called on a ${tag_name(v.tag)}, not a vector')
 	}
-	return v.payload as &Vector
+	if v.payload is &Vector {
+		return v.payload
+	}
+	return error('as_vector: payload is not a vector')
 }
 
 @[inline]
-pub fn (v Value) as_table() &Table {
+pub fn (v Value) as_table() !&Table {
 	if v.tag != .table && v.tag != .buffer {
-		panic('as_table: called on a ${tag_name(v.tag)}, not a table')
+		return error('as_table: called on a ${tag_name(v.tag)}, not a table')
 	}
-	return v.payload as &Table
+	if v.payload is &Table {
+		return v.payload
+	}
+	return error('as_table: payload is not a table')
 }
 
 pub fn struct_value(name string, fields []string, vals map[string]Value) Value {
@@ -526,11 +572,14 @@ pub fn struct_value(name string, fields []string, vals map[string]Value) Value {
 }
 
 @[inline]
-pub fn (v Value) as_struct() &StructVal {
+pub fn (v Value) as_struct() !&StructVal {
 	if v.tag != .struct_ {
-		panic('as_struct: called on a ${tag_name(v.tag)}, not a struct')
+		return error('as_struct: called on a ${tag_name(v.tag)}, not a struct')
 	}
-	return v.payload as &StructVal
+	if v.payload is &StructVal {
+		return v.payload
+	}
+	return error('as_struct: payload is not a struct')
 }
 
 // Only `#f` is false -- as in R5RS and Clojure. `0`, `""`, `nil`, `()` and
@@ -734,11 +783,14 @@ pub fn labelled(params []string, body NodeId, env EnvId, name string, opt_from i
 }
 
 @[inline]
-pub fn (v Value) as_closure() &Closure {
+pub fn (v Value) as_closure() !&Closure {
 	if v.tag != .closure {
-		panic('as_closure: called on a ${tag_name(v.tag)}, not a closure')
+		return error('as_closure: called on a ${tag_name(v.tag)}, not a closure')
 	}
-	return v.payload as &Closure
+	if v.payload is &Closure {
+		return v.payload
+	}
+	return error('as_closure: payload is not a closure')
 }
 
 // PrimFn takes only its arguments, deliberately: if it took the machine, this

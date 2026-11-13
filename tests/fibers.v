@@ -2,10 +2,10 @@ module main
 
 // Fiber gate: yield round-trips a value through the machine.
 
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.machine
-import vlib.blip.printer
+import blip
+import blip.host
+import blip.machine
+import blip.printer
 
 struct Suite {
 mut:

@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'site/**'
-      - 'blip.v'
+      - 'main.v'
       - 'vlib/blip/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
@@ -24,8 +24,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     env:
-      V_COMMIT: 74be97a2d7bd1fce4150abc749a2e64b21d9d082
-      VC_COMMIT: 0027130e9850c9946fa2c21e9004f13d8e593595
+      V_VERSION: 0.5.2
       V_MACOS_V3_NO_FALLBACK: '1'
     steps:
       - uses: actions/checkout@v4
@@ -33,27 +32,23 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: v
-          key: v-${{ env.V_COMMIT }}-${{ runner.os }}-v2
+          key: v-${{ env.V_VERSION }}-${{ runner.os }}
 
-      - name: Build V if needed
+      - name: Install V if needed
         run: |
           set -e
           if [ ! -x v/v ]; then
-            git init -q v && cd v
-            git remote add origin https://github.com/vlang/v.git
-            git fetch -q --depth 1 origin "$V_COMMIT"
-            git checkout -q FETCH_HEAD
-            git clone -q https://github.com/vlang/vc vc
-            git -C vc fetch -q --depth 1 origin "$VC_COMMIT"
-            git -C vc checkout -q FETCH_HEAD
-            make -f Makefile v VFLAGS="-d use_bundled_libgc"
-            [ -x ./v ] || { echo "::error::no ./v produced"; exit 1; }
+            curl -sSL -o v.zip "https://github.com/vlang/v/releases/download/${V_VERSION}/v_linux.zip"
+            rm -rf v_dl && mkdir v_dl
+            unzip -q v.zip -d v_dl
+            rm -rf v && mv v_dl/v v && rm -rf v_dl v.zip
+            [ -x ./v/v ] || { echo "::error::no ./v/v produced"; exit 1; }
           fi
           echo "$GITHUB_WORKSPACE/v" >> "$GITHUB_PATH"
 
       - name: Build blip
         run: |
-          v -cc gcc -d use_bundled_libgc -o blip blip.v
+          v -cc gcc -path 'vlib|@vlib' -o blip main.v
           [ -x ./blip ] || { echo "::error::no ./blip produced"; exit 1; }
           echo "$GITHUB_WORKSPACE" >> "$GITHUB_PATH"
 

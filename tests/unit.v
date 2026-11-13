@@ -1,14 +1,14 @@
 module main
 
 import os
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.lsp
-import vlib.blip.machine
-import vlib.blip.prims
-import vlib.blip.printer
-import vlib.blip.reader
-import vlib.blip.repl
+import blip
+import blip.host
+import blip.lsp
+import blip.machine
+import blip.prims
+import blip.printer
+import blip.reader
+import blip.repl
 
 // The unit suite.
 //
@@ -58,8 +58,8 @@ fn (mut s Suite) constructors() {
 	s.eq('boolean true', printer.write(blip.boolean(true)), '#t')
 	s.eq('boolean false', printer.write(blip.boolean(false)), '#f')
 	s.eq('cons', printer.write(blip.cons(blip.integer(1), blip.nil_value())), '(1)')
-	s.eq('list_from', printer.write(blip.list_from([blip.integer(1), blip.integer(2)])),
-		'(1 2)')
+	s.eq('list_from', printer.write(blip.list_from([blip.integer(1),
+		blip.integer(2)])), '(1 2)')
 	s.eq('vector', printer.write(blip.vector([blip.integer(1)])), '[1]')
 	s.eq('table', printer.write(blip.table({
 		'a': blip.integer(1)
@@ -75,23 +75,32 @@ fn (mut s Suite) constructors() {
 }
 
 fn (mut s Suite) accessors() {
-	s.eq('as_int', blip.integer(9).as_int().str(), '9')
-	s.eq('as_float', blip.float(1.5).as_float().str(), '1.5')
-	s.eq('as_bool', blip.boolean(true).as_bool().str(), 'true')
-	s.eq('as_string', blip.string('z').as_string(), 'z')
-	s.eq('as_pair', printer.write(blip.cons(blip.integer(1), blip.nil_value()).as_pair().car), '1')
+	n_int := blip.integer(9).as_int() or { panic('unreachable: valid test input') }
+	s.eq('as_int', n_int.str(), '9')
+	n_float := blip.float(1.5).as_float() or { panic('unreachable: valid test input') }
+	s.eq('as_float', n_float.str(), '1.5')
+	n_bool := blip.boolean(true).as_bool() or { panic('unreachable: valid test input') }
+	s.eq('as_bool', n_bool.str(), 'true')
+	s.eq('as_string', blip.string('z').as_string() or { panic('unreachable: valid test input') },
+		'z')
+	s.eq('as_pair', printer.write(blip.cons(blip.integer(1), blip.nil_value()).as_pair() or {
+		panic('unreachable: valid test input')
+	}.car), '1')
 	v := blip.vector([blip.integer(5)])
-	s.eq('as_vector', v.as_vector().data.len.str(), '1')
+	s.eq('as_vector', v.as_vector() or { panic('unreachable: valid test input') }.data.len.str(),
+		'1')
 	t := blip.table({
 		'k': blip.integer(3)
 	})
-	s.eq('as_table', printer.write(t.as_table().get('k')), '3')
+	s.eq('as_table',
+		printer.write(t.as_table() or { panic('unreachable: valid test input') }.get('k')), '3')
 	sv := blip.struct_value('p', ['q'], {
 		'q': blip.integer(4)
 	})
-	s.eq('as_struct', printer.write(sv.as_struct().get('q')), '4')
+	s.eq('as_struct',
+		printer.write(sv.as_struct() or { panic('unreachable: valid test input') }.get('q')), '4')
 	c := blip.new_closure(['x'], reader.NodeId(0), blip.EnvId(0), 'f')
-	s.eq('as_closure', c.as_closure().name, 'f')
+	s.eq('as_closure', c.as_closure() or { panic('unreachable: valid test input') }.name, 'f')
 }
 
 fn (mut s Suite) predicates() {
@@ -101,13 +110,20 @@ fn (mut s Suite) predicates() {
 	s.record('truthy zero is true', blip.integer(0).truthy(), '0 is true')
 	s.record('is_empty_seq empty list', blip.empty_list().is_empty_seq(), '()')
 	s.record('is_empty_seq int is false', !blip.integer(1).is_empty_seq(), '1')
-	s.eq('payload_tag of an int', blip.integer(1).as_int().str(), '1')
-	s.record('payload_tag of a pair', blip.cons(blip.integer(1), blip.nil_value()).as_pair().payload_tag() == blip.Tag.pair,
-		'Tag.pair')
-	s.record('payload_tag of a vector', blip.vector([]).as_vector().payload_tag() == blip.Tag.vector, 'Tag.vector')
-	s.record('payload_tag of a table', blip.table({}).as_table().payload_tag() == blip.Tag.table, 'Tag.table')
-	s.record('payload_tag of a closure', blip.new_closure([], reader.NodeId(0), blip.no_env,
-		'f').as_closure().payload_tag() == blip.Tag.closure, 'Tag.closure')
+	n_tag := blip.integer(1).as_int() or { panic('unreachable: valid test input') }
+	s.eq('payload_tag of an int', n_tag.str(), '1')
+	s.record('payload_tag of a pair', blip.cons(blip.integer(1), blip.nil_value()).as_pair() or {
+		panic('unreachable: valid test input')
+	}.payload_tag() == blip.Tag.pair, 'Tag.pair')
+	s.record('payload_tag of a vector', blip.vector([]).as_vector() or {
+		panic('unreachable: valid test input')
+	}.payload_tag() == blip.Tag.vector, 'Tag.vector')
+	s.record('payload_tag of a table', blip.table({}).as_table() or {
+		panic('unreachable: valid test input')
+	}.payload_tag() == blip.Tag.table, 'Tag.table')
+	s.record('payload_tag of a closure', blip.new_closure([], reader.NodeId(0), blip.no_env, 'f').as_closure() or {
+		panic('unreachable: valid test input')
+	}.payload_tag() == blip.Tag.closure, 'Tag.closure')
 	s.eq('new_prim', printer.write(blip.new_prim('+')), '#<primitive +>')
 }
 
@@ -116,28 +132,38 @@ fn (mut s Suite) collections() {
 	// because that is where they are defined. Mutating the payload mutates the
 	// value that owns it, which is what the assertions then observe.
 	mut v := blip.vector([blip.integer(1)])
-	v.as_vector().push(blip.integer(2))
-	v.as_vector().set_at(0, blip.integer(9))
+	v.as_vector() or { panic('unreachable: valid test input') }.push(blip.integer(2))
+	v.as_vector() or { panic('unreachable: valid test input') }.set_at(0, blip.integer(9))
 	s.eq('vector push and set_at', printer.write(v), '[9 2]')
-	s.eq('vector pop', printer.write(v.as_vector().pop()), '2')
+	s.eq('vector pop',
+		printer.write(v.as_vector() or { panic('unreachable: valid test input') }.pop()), '2')
 	s.eq('vector after pop', printer.write(v), '[9]')
 
 	mut t := blip.table({})
-	t.as_table().set_at('a', blip.integer(1))
-	s.record('table has after set_at', t.as_table().has('a'), 'a is present')
-	s.eq('table get', printer.write(t.as_table().get('a')), '1')
-	t.as_table().delete_at('a')
-	s.record('table has after delete_at', !t.as_table().has('a'), 'a is gone')
-	s.eq('table keys is empty', t.as_table().keys().join(','), '')
+	t.as_table() or { panic('unreachable: valid test input') }.set_at('a', blip.integer(1))
+	s.record('table has after set_at',
+		t.as_table() or { panic('unreachable: valid test input') }.has('a'), 'a is present')
+	s.eq('table get',
+		printer.write(t.as_table() or { panic('unreachable: valid test input') }.get('a')), '1')
+	t.as_table() or { panic('unreachable: valid test input') }.delete_at('a')
+	s.record('table has after delete_at', !t.as_table() or {
+		panic('unreachable: valid test input')
+	}.has('a'), 'a is gone')
+	s.eq('table keys is empty',
+		t.as_table() or { panic('unreachable: valid test input') }.keys().join(','), '')
 
 	mut sv := blip.struct_value('p', ['a'], {
 		'a': blip.integer(1)
 	})
-	with_a := sv.as_struct().with('a', blip.integer(8))
+	with_a := sv.as_struct() or { panic('unreachable: valid test input') }.with('a',
+		blip.integer(8))
 	s.eq('struct with replaces the field', printer.write(with_a.at(0)), '8')
-	s.record('struct has', sv.as_struct().has('a'), 'a present')
-	s.record('struct has missing', !sv.as_struct().has('zz'), 'zz absent')
-	s.eq('struct at', printer.write(sv.as_struct().at(0)), '1')
+	s.record('struct has', sv.as_struct() or { panic('unreachable: valid test input') }.has('a'),
+		'a present')
+	s.record('struct has missing',
+		!sv.as_struct() or { panic('unreachable: valid test input') }.has('zz'), 'zz absent')
+	s.eq('struct at',
+		printer.write(sv.as_struct() or { panic('unreachable: valid test input') }.at(0)), '1')
 }
 
 // ---- environments ---------------------------------------------------------
@@ -165,13 +191,19 @@ fn (mut s Suite) envs() {
 
 fn (mut s Suite) closures() {
 	c := blip.new_closure(['a'], reader.NodeId(0), blip.EnvId(0), 'f')
-	s.eq('new_closure name', c.as_closure().name, 'f')
-	s.eq('new_closure params', c.as_closure().params.len.str(), '1')
+	s.eq('new_closure name', c.as_closure() or { panic('unreachable: valid test input') }.name, 'f')
+	s.eq('new_closure params',
+		c.as_closure() or { panic('unreachable: valid test input') }.params.len.str(), '1')
 	r := blip.new_rest_closure(['a'], 'rest', reader.NodeId(0), blip.EnvId(0), 'g')
-	s.eq('new_rest_closure rest name', r.as_closure().rest_name, 'rest')
-	l := blip.labelled(['a'], reader.NodeId(0), blip.EnvId(0), 'h', 1, ['b'], [reader.NodeId(1)])
-	s.eq('labelled opt_from', l.as_closure().opt_from.str(), '1')
-	s.eq('labelled opt names', l.as_closure().opt_names.join(','), 'b')
+	s.eq('new_rest_closure rest name',
+		r.as_closure() or { panic('unreachable: valid test input') }.rest_name, 'rest')
+	l := blip.labelled(['a'], reader.NodeId(0), blip.EnvId(0), 'h', 1, ['b'], [
+		reader.NodeId(1),
+	])
+	s.eq('labelled opt_from',
+		l.as_closure() or { panic('unreachable: valid test input') }.opt_from.str(), '1')
+	s.eq('labelled opt names',
+		l.as_closure() or { panic('unreachable: valid test input') }.opt_names.join(','), 'b')
 	s.eq('new_prim', printer.write(blip.new_prim('+')), '#<primitive +>')
 }
 
@@ -223,7 +255,8 @@ fn (mut s Suite) reader_depth() {
 	s.record('depth in string', reader.depth('(+ "x').in_string, 'string is open')
 	s.eq('depth a bracket inside a string', reader.depth('(print "(")').n.str(), '0')
 	s.eq('depth a comment is not a bracket', reader.depth('; a ( comment').n.str(), '0')
-	s.record('depth a block comment is not a bracket', reader.depth('#| ( |# (+ 1 2)').n == 0, 'balanced')
+	s.record('depth a block comment is not a bracket', reader.depth('#| ( |# (+ 1 2)').n == 0,
+		'balanced')
 	s.eq('depth a bar symbol is not a string', reader.depth('(a |x| b)').n.str(), '0')
 	s.record('depth a bar symbol leaves no string', !reader.depth('(a |x| b)').in_string,
 		'not a string')
@@ -306,8 +339,9 @@ fn (mut s Suite) machine_nodes() {
 	s.eq('render_node of an int', m.render_node(m.int_node(7)), '7')
 	s.eq('render_node of a string', m.render_node(m.string_node('s')), '"s"')
 	id := m.arena.read_forms('(+ 1 2)')
-	s.eq('datum_to_value', printer.write(m.datum_to_value(id.forms[0])), '(+ 1 2)')
-	q := m.quasi_to_value(id.forms[0])
+	s.eq('datum_to_value', printer.write(m.datum_to_value(id.forms[0]) or { blip.nil_value() }),
+		'(+ 1 2)')
+	q := m.quasi_to_value(id.forms[0]) or { blip.nil_value() }
 	s.eq('quasi_to_value', printer.write(q), '(+ 1 2)')
 	joined := m.list_of([m.sym_node('a'), m.sym_node('b')])
 	s.eq('list_of', m.render_node(joined), '(a b)')
@@ -326,7 +360,8 @@ fn (mut s Suite) machine_nodes() {
 	s.record('fresh makes distinct names', fresh.starts_with('tmp'), '${fresh}')
 
 	s.eq('resolve_path of an absolute path', m.resolve_path('/x/y.lip'), '/x/y.lip')
-	s.eq('clean_path collapses dot-dot', machine.clean_path('site/../programs/markdown.lip'), 'programs/markdown.lip')
+	s.eq('clean_path collapses dot-dot', machine.clean_path('site/../programs/markdown.lip'),
+		'programs/markdown.lip')
 	s.eq('clean_path drops dots', machine.clean_path('site/./x.lip'), 'site/x.lip')
 	s.eq('clean_path keeps a leading dot-dot', machine.clean_path('../x.lip'), '../x.lip')
 
@@ -477,8 +512,7 @@ fn (mut s Suite) lsp_api() {
 
 	mut srv2 := lsp.new_test_server()
 	srv2.handle('{"jsonrpc":"2.0","method":"exit"}')
-	s.record('exit is reported as a stop', srv2.handle('{"jsonrpc":"2.0","method":"exit"}'),
-		'true')
+	s.record('exit is reported as a stop', srv2.handle('{"jsonrpc":"2.0","method":"exit"}'), 'true')
 
 	// A message before initialize is refused, per LSP 3.5, and refused silently
 	// when it is a notification -- there is no id to answer on.
@@ -514,62 +548,64 @@ fn (mut s Suite) lsp_api() {
 	os.rm('tmp/lsp_out.txt') or {}
 }
 
-// ---- the pinned toolchain, synced everywhere -------------------------------
-
-// install_pins is the gate for the pin itself. blip builds against ONE
-// compiler commit, and that decision is written in four places and used by
-// two audiences: ci.yml builds it in CI, install.sh / install.ps1 build it on
-// a stranger's machine, and the site/ copies are what the website hands out.
-// Drift between them is invisible until someone's install produces a broken
-// binary -- which is worse than a red suite, because nothing looks red.
-// Root scripts and site copies must therefore carry BOTH pins, exactly as
-// ci.yml spells them.
+// ---- the stock toolchain, synced everywhere -------------------------------
+//
+// install_pins is the gate for the toolchain decision. blip builds against
+// ONE compiler -- stock V 0.5.2, the official release, not a master build --
+// and that decision is written in several places for two audiences: ci.yml
+// (plus clib/release/pages, which copy it) downloads it in CI,
+// install.sh / install.ps1 download it on a stranger's machine, and the
+// site/ copies are what the website hands out. Drift between them is
+// invisible until someone's install produces a broken binary -- which is
+// worse than a red suite, because nothing looks red.
+// Root scripts and site copies must therefore carry the SAME version,
+// exactly as ci.yml spells it, and none of them may build V from source
+// (a source build reintroduces the vc bootstrap -- a second pin hiding
+// inside the first).
 fn (mut s Suite) install_pins() {
 	ci := os.read_file('.github/workflows/ci.yml') or {
 		s.fails++
 		println('FAIL pins => cannot read ci.yml: ${err.msg()}')
 		return
 	}
-	mut v_commit := ''
-	mut vc_commit := ''
+	mut v_version := ''
 	for line in ci.split_into_lines() {
 		fields := line.trim_space().split(':')
 		if fields.len == 2 {
 			v := fields[0].trim_space()
 			val := fields[1].trim_space()
-			if v == 'V_COMMIT' {
-				v_commit = val
-			}
-			if v == 'VC_COMMIT' {
-				vc_commit = val
+			if v == 'V_VERSION' {
+				v_version = val
 			}
 		}
 	}
-	s.record('ci.yml pins V', v_commit.len == 40, v_commit)
-	s.record('ci.yml pins vc', vc_commit.len == 40, vc_commit)
+	s.record('ci.yml names V', v_version != '' && v_version[0].is_digit(), v_version)
 	for path in ['install.sh', 'install.ps1', 'site/install.sh', 'site/install.ps1'] {
 		src := os.read_file(path) or {
 			s.fails++
 			println('FAIL pins => cannot read ${path}: ${err.msg()}')
 			continue
 		}
-		s.record('${path} pins V', src.contains(v_commit), if src.contains(v_commit) {
-			v_commit
+		s.record('${path} names V', src.contains(v_version), if src.contains(v_version) {
+			v_version
 		} else {
 			'MISSING'
 		})
-		s.record('${path} pins vc', src.contains(vc_commit), if src.contains(vc_commit) {
-			vc_commit
-		} else {
-			'MISSING'
-		})
-		// An unpinned fallback is the bug this gate exists for: a script that
-		// also clones V at HEAD would work today and break next week, so the
-		// literal "clone vlang/v then make" must not appear even WITH the pin
-		// present. (The remote add + fetch at a commit, which the pinned
-		// recipes use, does not match this literal.)
-		s.record('${path} clones V only at a pin', !src.contains('git clone https://github.com/vlang/v '),
-			'checked')
+		// A source build is the bug this gate exists for: cloning vlang/v
+		// and running make works today and breaks on the next upstream
+		// commit, so neither the clone nor the old commit pins may appear
+		// even WITH the version present.
+		s.record('${path} downloads V, no source build',
+			!src.contains('git clone https://github.com/vlang/v') && !src.contains('V_COMMIT')
+			&& !src.contains('VC_COMMIT'), 'checked')
+	}
+	for path in ['docker/alpine.Dockerfile', 'docker/debian.Dockerfile', 'docker/nix.Dockerfile'] {
+		src := os.read_file(path) or {
+			s.fails++
+			println('FAIL pins => cannot read ${path}: ${err.msg()}')
+			continue
+		}
+		s.record('${path} names V', src.contains('V_VERSION=${v_version}'), 'checked')
 	}
 }
 

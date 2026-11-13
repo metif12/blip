@@ -7,10 +7,10 @@ import rand
 //
 // It is NOT a CI gate: it is non-deterministic by design, and a red run
 // means "investigate", not "revert". Its job is to find the next panic
-// before a user does. Every input is run in its OWN process, because the
-// whole point of the panic net (drive's defer/recover) is that a wrong
-// form must not take the interpreter down -- and a fuzzer that dies at the
-// first panic can never tell you which one did it.
+// before a user does. Every input is run in its OWN process, because a
+// wrong form must answer as an error, never take the interpreter down --
+// and a fuzzer that dies at the first panic can never tell you which one
+// did it.
 //
 // Usage: v run tools/fuzz.vsh [iterations]   (default 200)
 

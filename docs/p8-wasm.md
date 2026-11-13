@@ -28,9 +28,9 @@ later.
 ### 2. `blip build --target wasm`
 
 `blip build <file> --target wasm` should produce a .wasm module. With
-Option A, this means: compile blip.v + the program to WASM using V's
+Option A, this means: compile main.v + the program to WASM using V's
 `-b wasm` backend, embedding the program source. The current blocker is
-that blip.v uses OS-specific functions (`os.executable`, `os.path_separator`,
+that main.v uses OS-specific functions (`os.executable`, `os.path_separator`,
 `os.exists`) that V's WASM backend does not support. These need `$if wasm`
 guards with WASM-compatible alternatives (or compile-time defaults).
 
@@ -41,13 +41,13 @@ This is the proof that blip is embedded in the strongest sense.
 
 ## First concrete step
 
-Guard the OS-specific code in blip.v with `$if !wasm` so `v -b wasm`
+Guard the OS-specific code in main.v with `$if !wasm` so `v -b wasm`
 can compile blip. Then `blip build --target wasm` can invoke V's WASM
-backend. Estimated: small changes to blip.v (std_path, programs_path).
+backend. Estimated: small changes to main.v (std_path, programs_path).
 
 ## Gate
 
-`v -b wasm -o blip.wasm blip.v` succeeds, and the resulting module evaluates
+`v -b wasm -o blip.wasm main.v` succeeds, and the resulting module evaluates
 `(print "hello")` in a WASM runtime (node --experimental-wasm-modules or
 browser).
 
@@ -62,23 +62,22 @@ compiling arbitrary .lip programs to standalone .wasm.
 ## Findings (2026-10-30)
 
 The first concrete step (guarding OS-specific code) is done: every os.* call in
-blip.v and the six vlib/blip/* modules that use os is now behind
+main.v and the six vlib/blip/* modules that use os is now behind
 ` $if !wasm32 ` / ` $if wasm32 ` guards, and the os import itself is
-conditional. `blip.v` no longer fails on `os.executable`/`os.read_file`.
+conditional. `main.v` no longer fails on `os.executable`/`os.read_file`.
 
-What still blocks `v -b wasm -o blip.wasm blip.v` is V's own standard
-library, not blip code:
+What still blocks `v -b wasm -o blip.wasm main.v` is V's own standard
+library, not blip code (the machine's old `defer`/`recover` net is gone
+entirely -- errors are returned `!T` values on every backend now):
 
 - `strconv` (`format_int`, `atof64`, `AtoF64Param`) does not compile
   for wasm32. Used by the reader (number parsing) and printer (number
   formatting).
-- `recover` (used in machine/mod.v for error handling) is not available
-  for wasm32.
 - `v/embed_file` uses `os.read_bytes`, which is missing for wasm32.
 
 These are V toolchain limitations. Until V's wasm32 backend provides them,
 blip cannot be compiled to wasm. The guards are in place so that once V
-catches up, `v -b wasm -o blip.wasm blip.v` will succeed without further
+catches up, `v -b wasm -o blip.wasm main.v` will succeed without further
 blip changes.
 
 `blip build --target wasm` reports this status honestly.

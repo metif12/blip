@@ -23,8 +23,6 @@
 //     proven paths, and untested template branches do not ship.
 //   * Generated files are never hand-edited. The header says how to regen,
 //     and --check enforces that the checked-in copy matches.
-
-import json2
 import os
 import strings
 
@@ -34,16 +32,16 @@ import strings
 // upstream reorganization fails here with a filename instead of silently
 // binding nothing) and the function names to take from them.
 struct GenTarget {
-	module string
-	files  []string
-	fns    []string
+	mod_name string
+	files    []string
+	fns      []string
 }
 
 const allowlist = [
 	GenTarget{
-		module: 'math'
-		files:  ['floor.v', 'sin.v', 'log.v', 'exp.v', 'factorial.v']
-		fns:    ['floor', 'sin', 'cos', 'log', 'log10', 'log2', 'factorial', 'exp']
+		mod_name: 'math'
+		files:    ['floor.v', 'sin.v', 'log.v', 'exp.v', 'factorial.v']
+		fns:      ['floor', 'sin', 'cos', 'log', 'log10', 'log2', 'factorial', 'exp']
 	},
 ]
 
@@ -65,67 +63,354 @@ mut:
 	params []Param
 }
 
-fn node_map(n json2.Any) map[string]json2.Any {
-	return n.as_map()
+// ------------------------------------------------------------------ json
+//
+// `v ast -p` JSON is read with a minimal hand-written parser, not the `json`
+// module: stock 0.5.2 has no `json2` (dynamic `Any` traversal), and classic
+// `json.decode` needs a static target type, which an AST has no use for.
+// The DOM below is the smallest thing the collector needs: objects keyed by
+// string, arrays, strings, booleans. Numbers keep their raw text; only
+// strings, booleans, and structure are ever read.
+//
+// kinds: 0=null 1=true 2=false 3=string 4=number 5=array 6=object.
+struct JNode {
+	kind int
+mut:
+	s string
+	// kids holds array items or object values; keys the object keys, so
+	// keys[i] names kids[i]. ([]string and []int are reference types, so a
+	// node keeps its own slices rather than windows into a shared array:
+	// nested values would interleave and a start/len window cannot work.)
+	kids []int
+	keys []string
 }
 
-fn child_list(n json2.Any) []json2.Any {
-	m := node_map(n)
-	return (m['children'] or { json2.Any('') }).as_array()
+struct JParser {
+	text string
+mut:
+	failed bool
+	pos    int
+	nodes  []JNode
 }
 
-fn field_str(n json2.Any, field string) string {
-	m := node_map(n)
-	return (m[field] or { json2.Any('') }).str()
+fn (mut p JParser) add(kind int) int {
+	p.nodes << JNode{
+		kind: kind
+	}
+	return p.nodes.len - 1
 }
 
-fn field_bool(n json2.Any, field string) bool {
-	m := node_map(n)
-	return (m[field] or { json2.Any(false) }).bool()
+// add_kid appends one child with an explicit write-back: indexing a slice
+// yields a copy, so `p.nodes[id].kids << c` would grow a temporary.
+fn (mut p JParser) add_kid(id int, key string, val int) {
+	mut n := p.nodes[id]
+	n.kids << val
+	n.keys << key
+	p.nodes[id] = n
 }
 
-// collect_sigs returns every fn_decl in one `v ast -p` document: name,
-// params in order, return type string. Bodies are ignored by construction --
-// only `param` children are read.
+fn (mut p JParser) skip_ws() {
+	for p.pos < p.text.len && p.text[p.pos] in [` `, `\t`, `\n`, `\r`] {
+		p.pos++
+	}
+}
 
-fn collect_fns(n json2.Any, mut out []Sig, depth int) {
-	if depth > 50 {
+fn (mut p JParser) expect(lit string) {
+	if p.text[p.pos..].starts_with(lit) {
+		p.pos += lit.len
 		return
 	}
-	m := node_map(n)
-	kind := (m['kind'] or { json2.Any('') }).str()
-	if kind == 'fn_decl' {
-		mut s := Sig{
-			name:   field_str(n, 'value')
-			ret:    field_str(n, 'type')
-			params: []
+	p.failed = true
+}
+
+fn (mut p JParser) parse_value() int {
+	p.skip_ws()
+	if p.pos >= p.text.len {
+		p.failed = true
+		return p.add(0)
+	}
+	c := p.text[p.pos]
+	match c {
+		`{` {
+			return p.parse_object()
 		}
-		for c in child_list(n) {
-			if field_str(c, 'kind') != 'param' {
-				continue
+		`[` {
+			return p.parse_array()
+		}
+		`"` {
+			return p.parse_string()
+		}
+		`t` {
+			p.expect('true')
+			return p.add(1)
+		}
+		`f` {
+			p.expect('false')
+			return p.add(2)
+		}
+		`n` {
+			p.expect('null')
+			return p.add(0)
+		}
+		else {
+			return p.parse_number()
+		}
+	}
+}
+
+fn (mut p JParser) parse_object() int {
+	id := p.add(6)
+	p.pos++ // {
+	p.skip_ws()
+	if p.pos < p.text.len && p.text[p.pos] == `}` {
+		p.pos++
+		return id
+	}
+	for {
+		p.skip_ws()
+		if p.pos >= p.text.len || p.text[p.pos] != `"` {
+			p.failed = true
+			return id
+		}
+		key := p.parse_string()
+		p.skip_ws()
+		if p.pos >= p.text.len || p.text[p.pos] != `:` {
+			p.failed = true
+			return id
+		}
+		p.pos++
+		val := p.parse_value()
+		p.add_kid(id, p.nodes[key].s, val)
+		p.skip_ws()
+		if p.pos >= p.text.len {
+			p.failed = true
+			return id
+		}
+		if p.text[p.pos] == `,` {
+			p.pos++
+			continue
+		}
+		if p.text[p.pos] == `}` {
+			p.pos++
+			break
+		}
+		p.failed = true
+		return id
+	}
+	return id
+}
+
+fn (mut p JParser) parse_array() int {
+	id := p.add(5)
+	p.pos++ // [
+	p.skip_ws()
+	if p.pos < p.text.len && p.text[p.pos] == `]` {
+		p.pos++
+		return id
+	}
+	for {
+		val := p.parse_value()
+		p.add_kid(id, '', val)
+		p.skip_ws()
+		if p.pos >= p.text.len {
+			p.failed = true
+			return id
+		}
+		if p.text[p.pos] == `,` {
+			p.pos++
+			continue
+		}
+		if p.text[p.pos] == `]` {
+			p.pos++
+			break
+		}
+		p.failed = true
+		return id
+	}
+	return id
+}
+
+fn (mut p JParser) parse_string() int {
+	// The caller has checked the opening quote; the stored text is unescaped,
+	// so a key lookup never sees backslashes.
+	id := p.add(3)
+	p.pos++ // "
+	mut out := []u8{}
+	for p.pos < p.text.len {
+		c := p.text[p.pos]
+		if c == `"` {
+			p.pos++
+			break
+		}
+		if c != `\\` {
+			out << c
+			p.pos++
+			continue
+		}
+		p.pos++
+		if p.pos >= p.text.len {
+			break
+		}
+		e := p.text[p.pos]
+		p.pos++
+		match e {
+			`"` {
+				out << `"`
 			}
+			`\\` {
+				out << `\\`
+			}
+			`/` {
+				out << `/`
+			}
+			`b` {
+				out << `\b`
+			}
+			`f` {
+				out << `\f`
+			}
+			`n` {
+				out << `\n`
+			}
+			`r` {
+				out << `\r`
+			}
+			`t` {
+				out << `\t`
+			}
+			`u` {
+				cp := p.parse_hex4()
+				if cp < 0x80 {
+					out << u8(cp)
+				} else if cp < 0x800 {
+					out << u8(0xc0 | (u32(cp) >> 6))
+					out << u8(0x80 | (u32(cp) & 0x3f))
+				} else {
+					out << u8(0xe0 | (u32(cp) >> 12))
+					out << u8(0x80 | ((u32(cp) >> 6) & 0x3f))
+					out << u8(0x80 | (u32(cp) & 0x3f))
+				}
+			}
+			else {
+				out << e
+			}
+		}
+	}
+	p.nodes[id].s = out.bytestr()
+	return id
+}
+
+fn (mut p JParser) parse_hex4() u32 {
+	mut cp := u32(0)
+	mut i := 0
+	for i < 4 && p.pos < p.text.len {
+		c := p.text[p.pos]
+		d := if c >= `0` && c <= `9` {
+			u32(c - `0`)
+		} else if c >= `a` && c <= `f` {
+			u32(c - `a` + 10)
+		} else if c >= `A` && c <= `F` {
+			u32(c - `A` + 10)
+		} else {
+			p.failed = true
+			return 0xfffd
+		}
+		cp = cp * 16 + d
+		p.pos++
+		i++
+	}
+	return cp
+}
+
+fn (mut p JParser) parse_number() int {
+	id := p.add(4)
+	start := p.pos
+	for p.pos < p.text.len
+		&& (p.text[p.pos].is_digit() || p.text[p.pos] in [`-`, `+`, `.`, `e`, `E`]) {
+		p.pos++
+	}
+	if p.pos == start {
+		p.failed = true
+	}
+	p.nodes[id].s = p.text[start..p.pos]
+	return id
+}
+
+fn (p &JParser) obj_get(idx int, key string) int {
+	if idx < 0 || idx >= p.nodes.len || p.nodes[idx].kind != 6 {
+		return -1
+	}
+	for i, k in p.nodes[idx].keys {
+		if k == key {
+			return p.nodes[idx].kids[i]
+		}
+	}
+	return -1
+}
+
+fn (p &JParser) obj_str(idx int, key string) string {
+	c := p.obj_get(idx, key)
+	if c < 0 || p.nodes[c].kind != 3 {
+		return ''
+	}
+	return p.nodes[c].s
+}
+
+fn (p &JParser) obj_bool(idx int, key string) bool {
+	c := p.obj_get(idx, key)
+	if c < 0 {
+		return false
+	}
+	return p.nodes[c].kind == 1
+}
+
+fn (p &JParser) arr_len(idx int) int {
+	if idx < 0 || idx >= p.nodes.len || p.nodes[idx].kind != 5 {
+		return 0
+	}
+	return p.nodes[idx].kids.len
+}
+
+fn (p &JParser) arr_at(idx int, i int) int {
+	return p.nodes[idx].kids[i]
+}
+
+// collect_sigs reads every top-level FnDecl in one `v ast -p` document:
+// short name, return type string, params in order. The 0.5.2 AST carries
+// `is_pub`, `short_name`, `return_type`, and a `params` array directly, so
+// no recursive walk is needed; a method (non-void receiver type) is skipped
+// here rather than later, because its dotted name would otherwise read as a
+// plain function of the module.
+fn collect_sigs(p &JParser) []Sig {
+	mut out := []Sig{}
+	stmts := p.obj_get(0, 'stmts')
+	for i in 0 .. p.arr_len(stmts) {
+		n := p.arr_at(stmts, i)
+		if p.obj_str(n, 'ast_type') != 'FnDecl' {
+			continue
+		}
+		recv := p.obj_get(n, 'receiver')
+		if recv >= 0 && p.obj_str(recv, 'typ') !in ['', 'void'] {
+			continue
+		}
+		mut nm := p.obj_str(n, 'short_name')
+		if nm == '' {
+			nm = p.obj_str(n, 'name')
+		}
+		mut s := Sig{
+			name: nm
+			ret:  p.obj_str(n, 'return_type')
+		}
+		ps := p.obj_get(n, 'params')
+		for j in 0 .. p.arr_len(ps) {
+			c := p.arr_at(ps, j)
 			s.params << Param{
-				name:   field_str(c, 'value')
-				typ:    field_str(c, 'type')
-				is_mut: field_bool(c, 'is_mut')
+				name:   p.obj_str(c, 'name')
+				typ:    p.obj_str(c, 'typ')
+				is_mut: p.obj_bool(c, 'is_mut')
 			}
 		}
 		out << s
-	}
-	children := m['children'] or { json2.Any('') }
-	if children.str() == '' {
-		return
-	}
-	for c in children.as_array() {
-		collect_fns(c, mut out, depth + 1)
-	}
-}
-
-fn collect_sigs(doc json2.Any) []Sig {
-	mut out := []Sig{}
-	files := (doc.as_map()['files'] or { json2.Any('') }).as_array()
-	for f in files {
-		collect_fns(f, mut out, 0)
 	}
 	return out
 }
@@ -224,13 +509,13 @@ struct Emitted {
 	body     string
 }
 
-fn emit_fn(module string, s Sig) Emitted {
-	pname := '${module}-' + kebab(s.name)
+fn emit_fn(mod_name string, s Sig) Emitted {
+	pname := '${mod_name}-' + kebab(s.name)
 	decls, cargs := extract_lines(pname, s.params)
-	call := '${module}.${s.name}(${cargs})'
+	call := '${mod_name}.${s.name}(${cargs})'
 	mut sb := strings.new_builder(512)
-	sb.write_string('// ${pname} wraps ${module}.${s.name}(${param_text(s)}) ${s.ret}.\n')
-	sb.write_string('fn prim_gen_${module}_${s.name}(args []blip.Value) !blip.Value {\n')
+	sb.write_string('// ${pname} wraps ${mod_name}.${s.name}(${param_text(s)}) ${s.ret}.\n')
+	sb.write_string('fn prim_gen_${mod_name}_${s.name}(args []blip.Value) !blip.Value {\n')
 	sb.write_string('\tif args.len != ${s.params.len} {\n')
 	sb.write_string("\t\treturn error('${pname} expects ${s.params.len} argument(s), got \${args.len}')\n")
 	sb.write_string('\t}\n')
@@ -240,7 +525,7 @@ fn emit_fn(module string, s Sig) Emitted {
 	return Emitted{
 		pname:    pname
 		vname:    s.name
-		sig_text: '${module}.${s.name}(${param_text(s)}) ${s.ret}'
+		sig_text: '${mod_name}.${s.name}(${param_text(s)}) ${s.ret}'
 		body:     sb.str()
 	}
 }
@@ -358,27 +643,32 @@ fn main() {
 	mut generated := map[string]string{}
 
 	for target in allowlist {
-		if only_module != '' && target.module != only_module {
+		if only_module != '' && target.mod_name != only_module {
 			continue
 		}
 		mut sigs := map[string]Sig{}
 		mut dupes := []string{}
 		for file in target.files {
-			path := os.join_path(vlib, target.module) + os.path_separator + file
-			r := os.execute('"${@VEXE}" -w ast -p ${path}')
+			path := os.join_path(vlib, target.mod_name) + os.path_separator + file
+			r := os.execute('"${@VEXE}" ast -p ${path}')
 			if r.exit_code != 0 && r.output.trim_space() == '' {
-				eprintln('genprims: v ast failed on ${target.module}/${file}:')
+				eprintln('genprims: v ast failed on ${target.mod_name}/${file}:')
 				eprintln(r.output)
 				eprintln('genprims: file moved upstream? update the allowlist files')
 				fails++
 				continue
 			}
-			doc := json2.decode[json2.Any](r.output) or {
-				eprintln('genprims: bad ast json for ${path}: ${err.msg()}')
+			mut parser := JParser{
+				text: r.output
+			}
+			root := parser.parse_value()
+			if parser.failed {
+				eprintln('genprims: bad ast json for ${path}')
 				fails++
 				continue
 			}
-			for s in collect_sigs(doc) {
+			_ = root
+			for s in collect_sigs(&parser) {
 				if s.name in sigs {
 					dupes << s.name
 					continue
@@ -387,7 +677,7 @@ fn main() {
 			}
 		}
 		for d in dupes {
-			eprintln('genprims: ${target.module}.${d} defined twice in the listed files; disambiguate the file list')
+			eprintln('genprims: ${target.mod_name}.${d} defined twice in the listed files; disambiguate the file list')
 			fails++
 		}
 		mut fns := []Emitted{}
@@ -424,19 +714,19 @@ fn main() {
 			// Visibility is textual: the AST reports no pub flag, so the
 			// source itself is asked below. A private fn compiles nowhere
 			// as math.name from another module.
-			fns << emit_fn(target.module, s)
+			fns << emit_fn(target.mod_name, s)
 		}
 		// pub + collision checks need file sources; re-read cheaply.
 		mut pub_src := ''
 		for file in target.files {
-			pub_src += os.read_file(os.join_path(vlib, target.module) + os.path_separator + file) or {
+			pub_src += os.read_file(os.join_path(vlib, target.mod_name) + os.path_separator + file) or {
 				''
 			}
 		}
 		mut kept := []Emitted{}
 		for e in fns {
 			if !is_pub(pub_src, e.vname) {
-				eprintln('genprims: ${target.module}.${e.vname} is not pub upstream; drop it from the allowlist')
+				eprintln('genprims: ${target.mod_name}.${e.vname} is not pub upstream; drop it from the allowlist')
 				fails++
 				continue
 			}
@@ -457,21 +747,21 @@ fn main() {
 			return 0
 		})
 		mut sb := strings.new_builder(4096)
-		sb.write_string('// Code generated by tools/genprims.vsh from vlib/${target.module} at ${ver}.\n')
+		sb.write_string('// Code generated by tools/genprims.vsh from vlib/${target.mod_name} at ${ver}.\n')
 		sb.write_string('// DO NOT EDIT: rerun `v run tools/genprims.vsh` instead.\n')
-		sb.write_string('// Wired into the table by one line in table(): register_gen_${target.module}(mut p).\n')
-		sb.write_string('module prims\n\nimport math\nimport vlib.blip\nimport vlib.blip.printer\n\n')
+		sb.write_string('// Wired into the table by one line in table(): register_gen_${target.mod_name}(mut p).\n')
+		sb.write_string('module prims\n\nimport math\nimport blip\nimport blip.printer\n\n')
 		for e in kept {
 			sb.write_string(e.body + '\n')
 		}
-		sb.write_string('fn register_gen_${target.module}(mut p map[string]blip.PrimFn) {\n')
+		sb.write_string('fn register_gen_${target.mod_name}(mut p map[string]blip.PrimFn) {\n')
 		for e in kept {
-			sb.write_string("\tp['${e.pname}'] = prim_gen_${target.module}_${e.vname}\n")
+			sb.write_string("\tp['${e.pname}'] = prim_gen_${target.mod_name}_${e.vname}\n")
 		}
 		sb.write_string('}\n')
-		generated['vlib/blip/prims/gen_${target.module}.v'] = sb.str()
+		generated['vlib/blip/prims/gen_${target.mod_name}.v'] = sb.str()
 
-		println('== ${target.module}: ${kept.len} prims, ${skipped.len} skipped, ${missing.len} missing')
+		println('== ${target.mod_name}: ${kept.len} prims, ${skipped.len} skipped, ${missing.len} missing')
 		for e in kept {
 			println('   + ${e.pname}  (${e.sig_text})')
 		}
@@ -479,7 +769,7 @@ fn main() {
 			println('   - ${s}')
 		}
 		for m in missing {
-			eprintln('genprims: ${target.module}.${m} not found in the AST; renamed upstream?')
+			eprintln('genprims: ${target.mod_name}.${m} not found in the AST; renamed upstream?')
 			fails++
 		}
 		// Curation aid: convertible fns nobody allowlisted, so the sync

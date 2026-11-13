@@ -22,9 +22,9 @@ module main
  */
 
 import os
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.repl
+import blip
+import blip.host
+import blip.repl
 
 struct Suite {
 mut:
@@ -200,7 +200,7 @@ fn (mut s Suite) golden_stdin_to_stdout() bool {
 	root := repo_root()
 	exe := os.join_path(root, exe_name)
 	if !os.exists(exe) {
-		s.fail('golden stdin to stdout', 'no ${exe}; build it first with `v -cc gcc -o ${exe_name} blip.v`')
+		s.fail('golden stdin to stdout', 'no ${exe}; build it first with `v -cc gcc -path "vlib|@vlib" -o ${exe_name} main.v`')
 		return false
 	}
 	tmp := os.vtmp_dir()

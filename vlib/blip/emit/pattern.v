@@ -4,10 +4,10 @@ $if !wasm32 {
 	import os
 }
 
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.machine
-import vlib.blip.reader
+import blip
+import blip.host
+import blip.machine
+import blip.reader
 
 fn pat(js string, names []string) Pat {
 	// Names are made UNIQUE here, once, because a pattern may bind the same name

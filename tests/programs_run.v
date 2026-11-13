@@ -16,8 +16,8 @@ module main
 // if a future program does.
 
 import os
-import vlib.blip.host
-import vlib.blip.machine
+import blip.host
+import blip.machine
 
 struct Suite {
 mut:

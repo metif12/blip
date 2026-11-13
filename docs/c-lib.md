@@ -23,14 +23,13 @@ call, print capture, file load, errors, sandbox, limits.
 
 ## Building
 
-Requires the pinned V toolchain (same `V_COMMIT`/`VC_COMMIT` as
-`.github/workflows/ci.yml`; `install.sh` builds it). All commands run from
-the repo root.
+Requires stock V 0.5.2 (same `V_VERSION` as `.github/workflows/ci.yml`;
+`install.sh` downloads it). All commands run from the repo root.
 
 Linux (`.so`):
 
 ```sh
-v -shared -cc gcc -o libblip.so clib/blip.v
+v -shared -cc gcc -path 'vlib|@vlib' -o libblip.so clib/blip.v
 gcc clib/example_eval.c -o clib_smoke -L. -lblip -Wl,-rpath,'$ORIGIN'
 ./clib_smoke            # expect: clib smoke: all checks passed
 ```
@@ -40,20 +39,20 @@ MSVC; under gcc the PE image name comes out as `out.exe`, so always link
 through an import library built from `clib/blip.def`:
 
 ```bat
-v -shared -cc msvc -o blip.dll clib/blip.v
+v -shared -cc msvc -path "vlib|@vlib" -o blip.dll clib/blip.v
 lib /def:clib/blip.def /out:blip.lib /machine:x64
 cl /nologo clib/example_eval.c blip.lib /Feclib_smoke.exe
 clib_smoke.exe          :: run from the repo root: blip_load reads clib/smoke_prog.lip
 ```
 
-MinGW alternative, verified locally: build with `-cc gcc`, then
+MinGW alternative, verified locally: build with `-cc gcc -path "vlib|@vlib"`, then
 `dlltool -d clib/blip.def -l libblip.a`, then
 `gcc clib/example_eval.c libblip.a -o clib_smoke.exe`.
 
 macOS (expected, not CI-gated):
 
 ```sh
-v -shared -cc gcc -o libblip.dylib clib/blip.v
+v -shared -cc gcc -path 'vlib|@vlib' -o libblip.dylib clib/blip.v
 gcc clib/example_eval.c -o clib_smoke -L. -lblip -Wl,-rpath,@loader_path
 ./clib_smoke
 ```
@@ -129,7 +128,7 @@ deep` instead of hanging the host. The smoke test proves both.
   `LD_LIBRARY_PATH`.
 - `blip_load` fails in the smoke test: run from the repo root, so the
   relative path `clib/smoke_prog.lip` resolves.
-- Version drift: `blip_version` mirrors `const version` in `blip.v`; the
+- Version drift: `blip_version` mirrors `const version` in `main.v`; the
   release tarballs always pair one header with the library built from the
   same tag.
 

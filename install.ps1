@@ -1,15 +1,14 @@
 $ErrorActionPreference = 'Stop'
 
-# blip builds against ONE compiler: the commit pinned in
-# .github/workflows/ci.yml. Building against "whatever vlang/v master is this
-# morning" is how an install works on Friday and fails on Monday -- 1123
-# commits upstream changed the checker out from under vlib/blip. So V and its
-# vc bootstrap are pinned to exactly the pair CI builds, and the same two
-# commits appear in both install scripts and CI.
+# blip builds against stock V 0.5.2: the official release archive, not a
+# master build. A master build reports the same "V 0.5.2" version string for
+# different commits while resolving project modules differently, so "whatever
+# vlang/v master is this morning" is how an install works on Friday and fails
+# on Monday. The release archive is that compiler, byte for byte, on every
+# machine -- no source build, no vc bootstrap.
 #
-# Keep these two lines in sync with ci.yml.
-$VCommit  = '74be97a2d7bd1fce4150abc749a2e64b21d9d082'
-$VCCommit = '0027130e9850c9946fa2c21e9004f13d8e593595'
+# Keep the version below in sync with .github/workflows/ci.yml.
+$VVersion = '0.5.2'
 
 $BlipDir = if ($env:BLIP_INSTALL_DIR) { $env:BLIP_INSTALL_DIR } else { "$HOME\.blip" }
 $VDir    = if ($env:BLIP_V_DIR)       { $env:BLIP_V_DIR }       else { "$HOME\.blip-v" }
@@ -24,8 +23,10 @@ if (-not (Test-Path $BlipDir)) {
 Set-Location $BlipDir
 git pull --ff-only
 
-# The bootstrap compiles vc/v.c with a C compiler. Saying so up front beats a
-# bare "failed to find executable cc" three minutes in.
+# V compiles every program with a C compiler. Saying so up front beats a bare
+# link failure minutes in. The easiest on Windows:
+#   scoop install gcc
+# or install TDM-GCC / w64devkit and put it on PATH.
 $hasCc = $false
 foreach ($cc in 'cc', 'gcc', 'clang') {
     if (Get-Command $cc -ErrorAction SilentlyContinue) { $hasCc = $true; break }
@@ -38,40 +39,38 @@ if (-not $hasCc) {
     exit 1
 }
 
-function Install-PinnedV {
-    # Already built, and built from THIS pin? Cheap check via a marker file:
-    # `v version` prints a version string, not a commit, and is no identity.
-    $marker = Join-Path $VDir '.blip-commit'
+function Install-StockV {
+    # Already downloaded, and downloaded at THIS version? Cheap check via a
+    # marker file: `v version` prints a version string, not a build, and is
+    # no identity across master builds.
+    $marker = Join-Path $VDir '.blip-version'
     if ((Test-Path (Join-Path $VDir 'v.exe')) -and (Test-Path $marker) `
-            -and ((Get-Content $marker -Raw).Trim() -eq $VCommit)) {
+            -and ((Get-Content $marker -Raw).Trim() -eq $VVersion)) {
         return
     }
-    Write-Host "==> V not found (or not the pinned build). Building V $VCommit..."
-    Write-Host "    This compiles V from source once and takes a few minutes."
+    Write-Host "==> V $VVersion not found. Downloading the official release..."
     if (Test-Path $VDir) { Remove-Item -Recurse -Force $VDir }
-    git init -q $VDir
-    Set-Location $VDir
-    git remote add origin https://github.com/vlang/v.git
-    git fetch -q --depth 1 origin $VCommit
-    git checkout -q FETCH_HEAD
-    # vc is the C source the bootstrap compiles into `v`, and it is a SEPARATE
-    # repository that V's own build clones at HEAD -- UNPINNED. A vc snapshot
-    # from a newer V can reject the pinned tree's own vlib, so vc is cloned at
-    # its own pin -- the same reasoning CI records in ci.yml.
-    git clone -q https://github.com/vlang/vc vc
-    git -C vc fetch -q --depth 1 origin $VCCommit
-    git -C vc checkout -q FETCH_HEAD
-    & cmd /c "makev.bat -gcc --local"
+    $zip = Join-Path ([System.IO.Path]::GetTempPath()) 'v_windows.zip'
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) 'blip-v-dl'
+    Invoke-WebRequest -Uri "https://github.com/vlang/v/releases/download/$VVersion/v_windows.zip" -OutFile $zip
+    # The archive keeps the toolchain layout (v.exe plus the vlib beside
+    # it); extracting only the executable leaves V unable to find vlib.
+    if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
+    Expand-Archive -Path $zip -DestinationPath $tmp -Force
+    Move-Item (Join-Path $tmp 'v') $VDir
+    Remove-Item -Recurse -Force $tmp, $zip
     if (-not (Test-Path (Join-Path $VDir 'v.exe'))) {
-        throw "V build finished but produced no v.exe"
+        throw "V download finished but produced no v.exe"
     }
-    Set-Content -Path $marker -Value $VCommit -NoNewline
-    Set-Location $BlipDir
+    Set-Content -Path $marker -Value $VVersion -NoNewline
 }
 
-Install-PinnedV
+Install-StockV
 
-& (Join-Path $VDir 'v.exe') -cc gcc -o (Join-Path $BlipDir 'blip.exe') blip.v
+# From the repo root, so the relative `vlib` in -path resolves: it points the
+# compiler at this repo's own vlib/ for `import blip.*`, with the standard
+# library behind it.
+& (Join-Path $VDir 'v.exe') -cc gcc -path "vlib|@vlib" -o (Join-Path $BlipDir 'blip.exe') main.v
 
 Write-Host "==> blip installed to $BlipDir\blip.exe"
 Write-Host "==> Add it to your PATH:  `$env:PATH = `"$BlipDir;`$env:PATH`""

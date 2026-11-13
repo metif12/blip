@@ -1,7 +1,7 @@
 // clib/blip.v -- the C ABI behind clib/blip.h.
 //
 // Build: v -shared -cc gcc -o libblip.so clib/blib.v        (linux)
-//        v -shared -cc msvc -o blip.dll clib/blip.v         (windows)
+//        v -shared -cc msvc -path "vlib|@vlib" -o blip.dll clib/blip.v         (windows)
 // Then link the smoke test / your program against it; see docs/c-lib.md.
 //
 // Boundary rules, enforced by construction rather than convention:
@@ -18,8 +18,8 @@
 module clib
 
 import os
-import vlib.blip
-import vlib.blip.embed
+import blip
+import blip.embed
 
 struct CState {
 mut:
@@ -31,15 +31,13 @@ struct CHost {
 }
 
 fn (c &CHost) host_print(s string) {
-	unsafe {
-		c.state.out << s
-	}
+	mut st := c.state
+	st.out << s
 }
 
 fn (c &CHost) host_write(s string) {
-	unsafe {
-		c.state.out << s
-	}
+	mut st := c.state
+	st.out << s
 }
 
 fn (c &CHost) host_read_line() ?string {
@@ -197,7 +195,7 @@ pub fn blip_restrict(ip voidptr, keep &&char, nkeep int) int {
 @[export: 'blip_version']
 pub fn blip_version() &char {
 	// Static storage: the caller must NOT free this.
-	// Keep in sync with `const version` in blip.v.
+	// Keep in sync with `const version` in main.v.
 	return c'0.1.0'
 }
 

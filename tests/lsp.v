@@ -1,10 +1,10 @@
 module main
 
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.lsp
-import vlib.blip.machine
-import vlib.blip.reader
+import blip
+import blip.host
+import blip.lsp
+import blip.machine
+import blip.reader
 
 // The language-server gate.
 //

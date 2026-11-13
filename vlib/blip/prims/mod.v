@@ -6,16 +6,14 @@ module prims
 // call back into the interpreter -- apply, map, format, error -- are handled by
 // the machine itself, which is what keeps this module free of any dependency on
 // it. Without that separation the two would be mutually dependent.
-
 import math
 
 $if !wasm32 {
 	import os
 }
-
 import strconv
-import vlib.blip
-import vlib.blip.printer
+import blip
+import blip.printer
 
 // AtoF64Param is not exported by name in this V version, so it is built from its
 // only public field. allow_extra_chars must be false: a parse of "12abc" has to
@@ -167,20 +165,20 @@ fn need_int(name string, v blip.Value) !i64 {
 	if v.tag != .integer {
 		return error('${name} expects an integer, got ${printer.write(v)}')
 	}
-	return v.as_int()
+	return v.as_int() or { return error(err.msg()) }
 }
 
 fn need_str(name string, v blip.Value) !string {
-	if !(v.tag in [.string, .symbol, .keyword]) {
+	if v.tag !in [.string, .symbol, .keyword] {
 		return error('${name} expects a string, got ${printer.write(v)}')
 	}
-	return v.as_string()
+	return v.as_string() or { return error(err.msg()) }
 }
 
 fn as_f64(v blip.Value) !f64 {
 	match v.tag {
-		.integer { return f64(v.as_int()) }
-		.float { return v.as_float() }
+		.integer { return f64(v.as_int() or { return error(err.msg()) }) }
+		.float { return v.as_float() or { return error(err.msg()) } }
 		else { return error('expected a number, got ${printer.write(v)}') }
 	}
 }
@@ -232,7 +230,9 @@ fn cmp_text(a string, b string) int {
 // silent false, because a silent false here becomes a mystery much later.
 pub fn compare(a blip.Value, b blip.Value) !int {
 	if a.tag == .integer && b.tag == .integer {
-		return cmp_i64(a.as_int(), b.as_int())
+		return cmp_i64(a.as_int() or { return error(err.msg()) }, b.as_int() or {
+			return error(err.msg())
+		})
 	}
 	if a.tag == .float || b.tag == .float {
 		if !is_number(a) || !is_number(b) {
@@ -240,8 +240,10 @@ pub fn compare(a blip.Value, b blip.Value) !int {
 		}
 		return cmp_f64(as_f64(a)!, as_f64(b)!)
 	}
-	if (a.tag in [.string, .symbol, .keyword]) && (b.tag in [.string, .symbol, .keyword]) {
-		return cmp_text(a.as_string(), b.as_string())
+	if a.tag in [.string, .symbol, .keyword] && b.tag in [.string, .symbol, .keyword] {
+		return cmp_text(a.as_string() or { return error(err.msg()) }, b.as_string() or {
+			return error(err.msg())
+		})
 	}
 	return error('cannot compare ${printer.write(a)} with ${printer.write(b)}')
 }
@@ -348,19 +350,31 @@ pub fn value_eq(a blip.Value, b blip.Value) bool {
 		return false
 	}
 	match a.tag {
-		.integer, .rune, .boolean { return a.i == b.i }
-		.float { return a.f == b.f }
-		.nil, .emptylist { return true }
-		.string, .symbol, .keyword { return a.as_string() == b.as_string() }
+		.integer, .rune, .boolean {
+			return a.i == b.i
+		}
+		.float {
+			return a.f == b.f
+		}
+		.nil, .emptylist {
+			return true
+		}
+		.string, .symbol, .keyword {
+			as_ := a.as_string() or { panic('unreachable: value_eq matched tags') }
+			bs := b.as_string() or { panic('unreachable: value_eq matched tags') }
+			return as_ == bs
+		}
 		.pair {
 			mut x := a
 			mut y := b
 			for x.tag == .pair && y.tag == .pair {
-				if !value_eq(x.as_pair().car, y.as_pair().car) {
+				xp := x.as_pair() or { panic('unreachable: value_eq matched tags') }
+				yp := y.as_pair() or { panic('unreachable: value_eq matched tags') }
+				if !value_eq(xp.car, yp.car) {
 					return false
 				}
-				x = x.as_pair().cdr
-				y = y.as_pair().cdr
+				x = (x.as_pair() or { panic('unreachable: value_eq checked the tag') }).cdr
+				y = (y.as_pair() or { panic('unreachable: value_eq checked the tag') }).cdr
 			}
 			// Both must be EMPTY, and either spelling of empty counts. A quoted
 			// list ends in .emptylist while a consed one ends in .nil, so
@@ -370,8 +384,8 @@ pub fn value_eq(a blip.Value, b blip.Value) bool {
 			return x.is_empty_seq() && y.is_empty_seq()
 		}
 		.vector {
-			x := a.as_vector().data
-			y := b.as_vector().data
+			x := (a.as_vector() or { panic('unreachable: value_eq checked the tag') }).data
+			y := (b.as_vector() or { panic('unreachable: value_eq checked the tag') }).data
 			if x.len != y.len {
 				return false
 			}
@@ -385,8 +399,8 @@ pub fn value_eq(a blip.Value, b blip.Value) bool {
 			return true
 		}
 		.table {
-			x := a.as_table()
-			y := b.as_table()
+			x := a.as_table() or { panic('unreachable: value_eq checked the tag') }
+			y := b.as_table() or { panic('unreachable: value_eq checked the tag') }
 			if x.values.len != y.values.len {
 				return false
 			}
@@ -407,8 +421,8 @@ pub fn value_eq(a blip.Value, b blip.Value) bool {
 			return true
 		}
 		.struct_ {
-			x := a.as_struct()
-			y := b.as_struct()
+			x := a.as_struct() or { panic('unreachable: value_eq checked the tag') }
+			y := b.as_struct() or { panic('unreachable: value_eq checked the tag') }
 			// Two struct instances are equal when they have the same NAME and equal
 			// fields. Comparing the names matters: a Point and a Coord with the same
 			// numbers are not interchangeable, and that is the whole point of a
@@ -428,7 +442,9 @@ pub fn value_eq(a blip.Value, b blip.Value) bool {
 			}
 			return true
 		}
-		else { return false }
+		else {
+			return false
+		}
 	}
 }
 
@@ -445,6 +461,7 @@ fn chain(name string, args []blip.Value) !blip.Value {
 			'<=' { c <= 0 }
 			else { c >= 0 }
 		}
+
 		if !ok {
 			return blip.boolean(false)
 		}
@@ -487,8 +504,8 @@ fn list_slice(v blip.Value) ![]blip.Value {
 		if guard > 50_000_000 {
 			return error('list is cyclic')
 		}
-		out << cur.as_pair().car
-		cur = cur.as_pair().cdr
+		out << (cur.as_pair() or { return error(err.msg()) }).car
+		cur = (cur.as_pair() or { return error(err.msg()) }).cdr
 		guard++
 	}
 	return out
@@ -504,19 +521,26 @@ fn list_slice(v blip.Value) ![]blip.Value {
 // would then need the result to be a list anyway.
 pub fn seq(v blip.Value) ![]blip.Value {
 	match v.tag {
-		.pair { return list_slice(v) }
-		.emptylist, .nil { return []blip.Value{} }
+		.pair {
+			return list_slice(v)
+		}
+		.emptylist, .nil {
+			return []blip.Value{}
+		}
 		.vector {
 			// Vectors are immutable, so sharing the backing store is safe and
 			// avoids a per-call copy.
-			return unsafe { v.as_vector().data }
+			vec := v.as_vector() or { return error(err.msg()) }
+			return unsafe { vec.data }
 		}
 		.array {
 			// Arrays are mutable: clone so a later array-set! cannot rewrite a
 			// slice a caller is still iterating.
-			return v.as_vector().data.clone()
+			return (v.as_vector() or { return error(err.msg()) }).data.clone()
 		}
-		else { return error('expected a sequence, got ${printer.write(v)}') }
+		else {
+			return error('expected a sequence, got ${printer.write(v)}')
+		}
 	}
 }
 
@@ -552,7 +576,7 @@ fn prim_car(args []blip.Value) !blip.Value {
 	if args[0].tag != .pair {
 		return error('car expects a pair, got ${printer.write(args[0])}')
 	}
-	return args[0].as_pair().car
+	return (args[0].as_pair() or { return error(err.msg()) }).car
 }
 
 fn prim_cdr(args []blip.Value) !blip.Value {
@@ -562,10 +586,13 @@ fn prim_cdr(args []blip.Value) !blip.Value {
 	if args[0].tag != .pair {
 		return error('cdr expects a pair, got ${printer.write(args[0])}')
 	}
-	return args[0].as_pair().cdr
+	return (args[0].as_pair() or { return error(err.msg()) }).cdr
 }
 
 fn prim_cons(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('cons expects at least 2 arguments, got ${args.len}')
+	}
 	return blip.cons(args[0], args[1])
 }
 
@@ -578,24 +605,38 @@ fn prim_list(args []blip.Value) !blip.Value {
 }
 
 fn prim_length(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('length expects at least 1 argument, got ${args.len}')
+	}
 	match args[0].tag {
 		.pair {
 			mut n := i64(0)
 			mut cur := args[0]
 			for cur.tag == .pair {
 				n++
-				cur = cur.as_pair().cdr
+				cur = (cur.as_pair() or { return error(err.msg()) }).cdr
 			}
 			return blip.integer(n)
 		}
-		.vector { return blip.integer(args[0].as_vector().data.len) }
-		.string { return blip.integer(args[0].as_string().len) }
-		.nil, .emptylist { return blip.integer(0) }
-		else { return error('length expects a collection, got ${printer.write(args[0])}') }
+		.vector {
+			return blip.integer((args[0].as_vector() or { return error(err.msg()) }).data.len)
+		}
+		.string {
+			return blip.integer((args[0].as_string() or { return error(err.msg()) }).len)
+		}
+		.nil, .emptylist {
+			return blip.integer(0)
+		}
+		else {
+			return error('length expects a collection, got ${printer.write(args[0])}')
+		}
 	}
 }
 
 fn prim_reverse(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('reverse expects at least 1 argument, got ${args.len}')
+	}
 	items := seq(args[0])!
 	mut out := []blip.Value{}
 	mut i := items.len - 1
@@ -607,6 +648,9 @@ fn prim_reverse(args []blip.Value) !blip.Value {
 }
 
 fn prim_append(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('append expects at least 1 argument, got ${args.len}')
+	}
 	mut out := []blip.Value{}
 	mut i := 0
 	for i + 1 < args.len {
@@ -624,6 +668,9 @@ fn prim_append(args []blip.Value) !blip.Value {
 }
 
 fn prim_list_ref(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('list-ref expects at least 2 arguments, got ${args.len}')
+	}
 	mut items := list_slice(args[0])!
 	i := need_int('list-ref', args[1])!
 	if i < 0 || i >= items.len {
@@ -643,6 +690,9 @@ fn clamp(n i64, lo i64, hi i64) i64 {
 }
 
 fn prim_take(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('take expects at least 2 arguments, got ${args.len}')
+	}
 	mut items := list_slice(args[0])!
 	n := clamp(need_int('take', args[1])!, 0, i64(items.len))
 	mut head := []blip.Value{}
@@ -655,6 +705,9 @@ fn prim_take(args []blip.Value) !blip.Value {
 }
 
 fn prim_drop(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('drop expects at least 2 arguments, got ${args.len}')
+	}
 	mut items := list_slice(args[0])!
 	n := clamp(need_int('drop', args[1])!, 0, i64(items.len))
 	return blip.list_from(items[n..])
@@ -667,6 +720,9 @@ fn tag_is(v blip.Value, t blip.Tag) blip.Value {
 }
 
 fn prim_nullp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('null? expects at least 1 argument, got ${args.len}')
+	}
 	// True for BOTH the empty list and nil. The examples assert
 	// `(null? '())` is true, and also that nil and () print differently, so the
 	// predicate has to accept both values.
@@ -674,51 +730,87 @@ fn prim_nullp(args []blip.Value) !blip.Value {
 }
 
 fn prim_nilp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('nil? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(args[0].is_empty_seq())
 }
 
 fn prim_pairp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('pair? expects at least 1 argument, got ${args.len}')
+	}
 	return tag_is(args[0], .pair)
 }
 
 fn prim_vectorp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('vector? expects at least 1 argument, got ${args.len}')
+	}
 	return tag_is(args[0], .vector)
 }
 
 fn prim_tablep(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('table? expects at least 1 argument, got ${args.len}')
+	}
 	return tag_is(args[0], .table)
 }
 
 fn prim_arrayp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('array? expects at least 1 argument, got ${args.len}')
+	}
 	return tag_is(args[0], .array)
 }
 
 fn prim_stringp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string? expects at least 1 argument, got ${args.len}')
+	}
 	return tag_is(args[0], .string)
 }
 
 fn prim_symbolp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('symbol? expects at least 1 argument, got ${args.len}')
+	}
 	return tag_is(args[0], .symbol)
 }
 
 fn prim_keywordp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('keyword? expects at least 1 argument, got ${args.len}')
+	}
 	return tag_is(args[0], .keyword)
 }
 
 fn prim_integerp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('integer? expects at least 1 argument, got ${args.len}')
+	}
 	return tag_is(args[0], .integer)
 }
 
 fn prim_floatp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('float? expects at least 1 argument, got ${args.len}')
+	}
 	return tag_is(args[0], .float)
 }
 
 fn prim_numberp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('number? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(is_number(args[0]))
 }
 
 // list? must reject cyclic lists, so it uses tortoise and hare.
 fn prim_listp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('list? expects at least 1 argument, got ${args.len}')
+	}
 	if args[0].is_empty_seq() {
 		return blip.boolean(true)
 	}
@@ -727,40 +819,62 @@ fn prim_listp(args []blip.Value) !blip.Value {
 	}
 	mut slow := args[0]
 	mut fast := args[0]
-	for fast.tag == .pair && fast.as_pair().cdr.tag == .pair {
-		fast = fast.as_pair().cdr.as_pair().car
+	for fast.tag == .pair {
+		fast_p := fast.as_pair() or { return error(err.msg()) }
+		if fast_p.cdr.tag != .pair {
+			break
+		}
+		fast = (fast_p.cdr.as_pair() or { return error(err.msg()) }).car
 		if fast.tag == .nil {
 			return blip.boolean(true)
 		}
-		slow = slow.as_pair().cdr
+		slow = (slow.as_pair() or { return error(err.msg()) }).cdr
 		if value_eq(fast, slow) {
 			return blip.boolean(false)
 		}
 	}
-	return blip.boolean(fast.as_pair().cdr.tag == .nil)
+	return blip.boolean((fast.as_pair() or { return error(err.msg()) }).cdr.tag == .nil)
 }
 
 fn prim_zero(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('zero? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(compare(args[0], blip.integer(0))! == 0)
 }
 
 fn prim_even(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('even? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(need_int('even?', args[0])! % 2 == 0)
 }
 
 fn prim_odd(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('odd? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(need_int('odd?', args[0])! % 2 != 0)
 }
 
 fn prim_positive(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('positive? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(compare(args[0], blip.integer(0))! > 0)
 }
 
 fn prim_negative(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('negative? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(compare(args[0], blip.integer(0))! < 0)
 }
 
 fn prim_min(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('min expects at least 1 argument, got ${args.len}')
+	}
 	mut best := args[0]
 	mut i := 1
 	for i < args.len {
@@ -773,6 +887,9 @@ fn prim_min(args []blip.Value) !blip.Value {
 }
 
 fn prim_max(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('max expects at least 1 argument, got ${args.len}')
+	}
 	mut best := args[0]
 	mut i := 1
 	for i < args.len {
@@ -785,8 +902,11 @@ fn prim_max(args []blip.Value) !blip.Value {
 }
 
 fn prim_abs(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('abs expects at least 1 argument, got ${args.len}')
+	}
 	if args[0].tag == .float {
-		f := args[0].as_float()
+		f := args[0].as_float() or { return error(err.msg()) }
 		return blip.float(if f < 0.0 { -f } else { f })
 	}
 	n := need_int('abs', args[0])!
@@ -808,7 +928,7 @@ fn prim_vector_ref(args []blip.Value) !blip.Value {
 		return error('vector-ref expects 2 arguments, got ${args.len}')
 	}
 	i := need_int('vector-ref', args[1])!
-	data := args[0].as_vector().data
+	data := (args[0].as_vector() or { return error(err.msg()) }).data
 	if i < 0 || i >= data.len {
 		return error('vector-ref: index ${i} out of range (length ${data.len})')
 	}
@@ -822,7 +942,7 @@ fn prim_vector_length(args []blip.Value) !blip.Value {
 	if args[0].tag != .vector && args[0].tag != .array {
 		return error('vector-length expects a vector, got ${printer.write(args[0])}')
 	}
-	return blip.integer(args[0].as_vector().data.len)
+	return blip.integer((args[0].as_vector() or { return error(err.msg()) }).data.len)
 }
 
 fn prim_get(args []blip.Value) !blip.Value {
@@ -833,7 +953,7 @@ fn prim_get(args []blip.Value) !blip.Value {
 		return args[2]
 	}
 	if args[0].tag == .table || args[0].tag == .buffer {
-		return args[0].as_table().get(need_str('get', args[1])!)
+		return (args[0].as_table() or { return error(err.msg()) }).get(need_str('get', args[1])!)
 	}
 	// A list or vector is addressed by position. `frequencies` returns a list of
 	// (key count) pairs and the examples read the count with `(get e 1)`, which
@@ -842,9 +962,7 @@ fn prim_get(args []blip.Value) !blip.Value {
 	if args[0].tag == .pair || args[0].tag == .emptylist || args[0].tag == .vector
 		|| args[0].tag == .array {
 		idx := need_int('get', args[1])!
-		items := seq(args[0]) or {
-			return error('get: ${err.msg()}')
-		}
+		items := seq(args[0]) or { return error('get: ${err.msg()}') }
 		if idx < 0 || idx >= items.len {
 			return blip.nil_value()
 		}
@@ -860,7 +978,8 @@ fn prim_has_key(args []blip.Value) !blip.Value {
 	if args[0].tag != .table && args[0].tag != .buffer {
 		return error('has-key? expects a table, got ${printer.write(args[0])}')
 	}
-	return blip.boolean(args[0].as_table().has(need_str('has-key?', args[1])!))
+	return blip.boolean((args[0].as_table() or { return error(err.msg()) }).has(need_str('has-key?',
+		args[1])!))
 }
 
 fn prim_put(args []blip.Value) !blip.Value {
@@ -870,7 +989,7 @@ fn prim_put(args []blip.Value) !blip.Value {
 	if args[0].tag != .table && args[0].tag != .buffer {
 		return error('put expects a table, got ${printer.write(args[0])}')
 	}
-	mut mm := args[0].as_table().values.clone()
+	mut mm := (args[0].as_table() or { return error(err.msg()) }).values.clone()
 	mm[need_str('put', args[1])!] = args[2]
 	if args[0].tag == .buffer {
 		return blip.buffer(mm)
@@ -879,13 +998,19 @@ fn prim_put(args []blip.Value) !blip.Value {
 }
 
 fn prim_remove(args []blip.Value) !blip.Value {
-	mut mm := args[0].as_table().values.clone()
+	if args.len != 2 {
+		return error('remove expects 2 arguments, got ${args.len}')
+	}
+	mut mm := (args[0].as_table() or { return error(err.msg()) }).values.clone()
 	mm.delete(need_str('remove', args[1])!)
 	return blip.table(mm)
 }
 
 fn prim_table_keys(args []blip.Value) !blip.Value {
-	keys := args[0].as_table().keys()
+	if args.len != 1 {
+		return error('table-keys expects 1 argument, got ${args.len}')
+	}
+	keys := (args[0].as_table() or { return error(err.msg()) }).keys()
 	mut items := []blip.Value{}
 	for k in keys {
 		items << blip.keyword(k)
@@ -904,18 +1029,30 @@ fn prim_string_append(args []blip.Value) !blip.Value {
 }
 
 fn prim_string_length(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string-length expects at least 1 argument, got ${args.len}')
+	}
 	return blip.integer(need_str('string-length', args[0])!.len)
 }
 
 fn prim_string_downcase(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string-downcase expects at least 1 argument, got ${args.len}')
+	}
 	return blip.string(need_str('string-downcase', args[0])!.to_lower())
 }
 
 fn prim_string_upcase(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string-upcase expects at least 1 argument, got ${args.len}')
+	}
 	return blip.string(need_str('string-upcase', args[0])!.to_upper())
 }
 
 fn prim_string_split(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('string-split expects at least 2 arguments, got ${args.len}')
+	}
 	s := need_str('string-split', args[0])!
 	sep := need_str('string-split', args[1])!
 	mut items := []blip.Value{}
@@ -926,22 +1063,37 @@ fn prim_string_split(args []blip.Value) !blip.Value {
 }
 
 fn prim_string_trim(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string-trim expects at least 1 argument, got ${args.len}')
+	}
 	return blip.string(need_str('string-trim', args[0])!.trim_space())
 }
 
 fn prim_string_blank(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string-blank? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(need_str('string-blank?', args[0])!.trim_space() == '')
 }
 
 fn prim_string(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string expects at least 1 argument, got ${args.len}')
+	}
 	return blip.string(need_str('string', args[0])!)
 }
 
 fn prim_symbol(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('symbol expects at least 1 argument, got ${args.len}')
+	}
 	return blip.symbol(need_str('symbol', args[0])!)
 }
 
 fn prim_keyword(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('keyword expects at least 1 argument, got ${args.len}')
+	}
 	if args[0].tag == .keyword {
 		return args[0]
 	}
@@ -949,6 +1101,9 @@ fn prim_keyword(args []blip.Value) !blip.Value {
 }
 
 fn prim_string_to_number(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string->number expects at least 1 argument, got ${args.len}')
+	}
 	s := need_str('string->number', args[0])!
 	if n := strconv.atoi64(s) {
 		return blip.integer(n)
@@ -960,8 +1115,12 @@ fn prim_string_to_number(args []blip.Value) !blip.Value {
 }
 
 fn prim_number_to_string(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('number->string expects at least 1 argument, got ${args.len}')
+	}
 	if args[0].tag == .float {
-		return blip.string('${args[0].as_float()}')
+		f := args[0].as_float() or { return error(err.msg()) }
+		return blip.string('${f}')
 	}
 	return blip.string(strconv.format_int(need_int('number->string', args[0])!, 10))
 }
@@ -974,21 +1133,30 @@ fn prim_number_to_string(args []blip.Value) !blip.Value {
 // implementations. What lives here is the machinery they all need.
 
 fn prim_structp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('struct? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(args[0].tag == .struct_)
 }
 
 fn prim_struct_name(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('struct-name expects at least 1 argument, got ${args.len}')
+	}
 	if args[0].tag != .struct_ {
 		return error('struct-name: ${printer.write(args[0])} is not a struct')
 	}
-	return blip.symbol(args[0].as_struct().name)
+	return blip.symbol((args[0].as_struct() or { return error(err.msg()) }).name)
 }
 
 fn prim_struct_ref(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('struct-ref expects at least 2 arguments, got ${args.len}')
+	}
 	if args[0].tag != .struct_ {
 		return error('struct-ref: ${printer.write(args[0])} is not a struct')
 	}
-	s := args[0].as_struct()
+	s := args[0].as_struct() or { return error(err.msg()) }
 	k := need_str('struct-ref', args[1])!
 	if !s.has(k) {
 		return error('struct-ref: ${s.name} has no field ${k}')
@@ -1000,6 +1168,9 @@ fn prim_struct_ref(args []blip.Value) !blip.Value {
 // Brainfuck needs both: `.` prints the cell as a character, `,` reads a character
 // and stores its value.
 fn prim_integer_to_rune(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('integer->rune expects at least 1 argument, got ${args.len}')
+	}
 	n := need_int('integer->rune', args[0])!
 	if n < 0 || n > 0x10FFFF {
 		return error('integer->rune: ${n} is not a code point')
@@ -1012,6 +1183,9 @@ fn prim_integer_to_rune(args []blip.Value) !blip.Value {
 // to materialize a character the reader cannot write, and a parser that
 // punted on them would not parse JSON.
 fn prim_code_to_string(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('code->string expects at least 1 argument, got ${args.len}')
+	}
 	n := need_int('code->string', args[0])!
 	if n < 0 || n > 0x10FFFF {
 		return error('code->string: ${n} is not a code point')
@@ -1022,6 +1196,9 @@ fn prim_code_to_string(args []blip.Value) !blip.Value {
 // string->rune converts a one-character string to a rune. Brainfuck's `,`
 // command reads a character and needs to convert it to a byte value.
 fn prim_string_to_rune(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string->rune expects at least 1 argument, got ${args.len}')
+	}
 	s := need_str('string->rune', args[0])!
 	if s.len != 1 {
 		return error('string->rune: expected a one-character string, got "${s}"')
@@ -1030,9 +1207,12 @@ fn prim_string_to_rune(args []blip.Value) !blip.Value {
 }
 
 fn prim_rune_to_integer(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('rune->integer expects at least 1 argument, got ${args.len}')
+	}
 	v := args[0]
 	if v.tag == .rune {
-		return blip.integer(v.as_int())
+		return blip.integer(v.as_int() or { return error(err.msg()) })
 	}
 	if v.tag == .integer {
 		return v
@@ -1041,10 +1221,13 @@ fn prim_rune_to_integer(args []blip.Value) !blip.Value {
 }
 
 fn prim_struct_set(args []blip.Value) !blip.Value {
+	if args.len < 3 {
+		return error('struct-set! expects at least 3 arguments, got ${args.len}')
+	}
 	if args[0].tag != .struct_ {
 		return error('struct-set!: ${printer.write(args[0])} is not a struct')
 	}
-	s := args[0].as_struct()
+	s := args[0].as_struct() or { return error(err.msg()) }
 	k := need_str('struct-set!', args[1])!
 	if !s.has(k) {
 		return error('struct-set!: ${s.name} has no field ${k}')
@@ -1060,10 +1243,13 @@ fn prim_struct_set(args []blip.Value) !blip.Value {
 // case: a `#:mutable` struct's generated mutator calls this instead, because
 // its caller discards the return value and only an in-place write is visible.
 fn prim_struct_mutate(args []blip.Value) !blip.Value {
+	if args.len < 3 {
+		return error('__struct-mutate! expects at least 3 arguments, got ${args.len}')
+	}
 	if args[0].tag != .struct_ {
 		return error('__struct-mutate!: ${printer.write(args[0])} is not a struct')
 	}
-	s := args[0].as_struct()
+	s := args[0].as_struct() or { return error(err.msg()) }
 	k := need_str('__struct-mutate!', args[1])!
 	if !s.has(k) {
 		return error('__struct-mutate!: ${s.name} has no field ${k}')
@@ -1082,7 +1268,7 @@ fn prim_make_struct(args []blip.Value) !blip.Value {
 	mut fields := []string{}
 	fv := args[1]
 	if fv.tag == .vector {
-		d := fv.as_vector().data
+		d := (fv.as_vector() or { return error(err.msg()) }).data
 		mut i := 0
 		for i < d.len {
 			fields << need_str('__make-struct', d[i])!
@@ -1112,18 +1298,24 @@ fn prim_make_struct(args []blip.Value) !blip.Value {
 
 fn show(a blip.Value, quote_strings bool) string {
 	if a.tag == .string && !quote_strings {
-		return a.as_string()
+		return a.as_string() or { panic('unreachable: show checked .string') }
 	}
 	return printer.write(a)
 }
 
 fn prim_str(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('str expects at least 1 argument, got ${args.len}')
+	}
 	return blip.string(show(args[0], true))
 }
 
 // ------------------------------------------------------- more sequences
 
 fn prim_last(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('last expects at least 1 argument, got ${args.len}')
+	}
 	items := seq(args[0])!
 	if items.len == 0 {
 		return blip.nil_value()
@@ -1132,6 +1324,9 @@ fn prim_last(args []blip.Value) !blip.Value {
 }
 
 fn prim_not_eq(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('not= expects at least 2 arguments, got ${args.len}')
+	}
 	return blip.boolean(!value_eq(args[0], args[1]))
 }
 
@@ -1164,15 +1359,19 @@ fn prim_make_vector(args []blip.Value) !blip.Value {
 }
 
 fn prim_eqp(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('eq? expects at least 2 arguments, got ${args.len}')
+	}
 	return blip.boolean(value_eq(args[0], args[1]))
 }
 
 // in? is `(= x coll)` for a collection, and it belongs here rather than in the
 // examples' own code because the examples use it.
 fn prim_in(args []blip.Value) !blip.Value {
-	items := seq(args[1]) or {
-		return error('in?: ${err.msg()}')
+	if args.len < 2 {
+		return error('in? expects at least 2 arguments, got ${args.len}')
 	}
+	items := seq(args[1]) or { return error('in?: ${err.msg()}') }
 	mut i := 0
 	for i < items.len {
 		if value_eq(args[0], items[i]) {
@@ -1198,6 +1397,9 @@ fn prim_concat(args []blip.Value) !blip.Value {
 // The alternative -- exclusive, as in Python -- makes `(range 0 10)` produce nine
 // values and every off-by-one in the examples becomes a mystery.
 fn prim_range(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('range expects at least 1 argument, got ${args.len}')
+	}
 	mut from := i64(0)
 	mut to := i64(0)
 	if args.len == 1 {
@@ -1216,10 +1418,16 @@ fn prim_range(args []blip.Value) !blip.Value {
 }
 
 fn prim_count(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('count expects at least 1 argument, got ${args.len}')
+	}
 	return blip.integer(seq(args[0])!.len)
 }
 
 fn prim_sort(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('sort expects at least 1 argument, got ${args.len}')
+	}
 	items := seq(args[0])!
 	mut ordered := items.clone()
 	// Insertion sort rather than a general one: these lists are small, and a
@@ -1270,6 +1478,9 @@ pub fn sort_by_keyed(items []blip.Value, keys []blip.Value) !blip.Value {
 // count and a has-key? for the membership, and the examples read it with `car` and
 // `(get e 1)`.
 fn prim_frequencies(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('frequencies expects at least 1 argument, got ${args.len}')
+	}
 	items := seq(args[0])!
 	mut counts := map[string]blip.Value{}
 	// The first value seen for a key, so the emitted pair carries the ORIGINAL
@@ -1284,13 +1495,17 @@ fn prim_frequencies(args []blip.Value) !blip.Value {
 		// ("\"the\"" 1). Anything that is not a string still needs printing to
 		// be comparable at all.
 		v := items[i]
-		key := if v.tag == .string { v.as_string() } else { printer.write(v) }
+		key := if v.tag == .string {
+			v.as_string() or { return error(err.msg()) }
+		} else {
+			printer.write(v)
+		}
 		if key !in counts {
 			order << key
 			counts[key] = blip.integer(0)
 			first[key] = v
 		}
-		old := counts[key].as_int()
+		old := counts[key].as_int() or { return error(err.msg()) }
 		counts[key] = blip.integer(old + 1)
 		i++
 	}
@@ -1304,13 +1519,16 @@ fn prim_frequencies(args []blip.Value) !blip.Value {
 // ------------------------------------------------------------- vectors
 
 fn as_vector_value(v blip.Value, name string) !&blip.Vector {
-	if !(v.tag in [.vector, .array]) {
+	if v.tag !in [.vector, .array] {
 		return error('${name} expects a vector or array, got ${printer.write(v)}')
 	}
-	return v.as_vector()
+	return v.as_vector() or { return error(err.msg()) }
 }
 
 fn prim_vector_rev(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('vector-rev expects at least 1 argument, got ${args.len}')
+	}
 	data := as_vector_value(args[0], 'vector-rev')!.data
 	mut out := []blip.Value{}
 	mut i := data.len - 1
@@ -1333,10 +1551,16 @@ fn prim_vector_append(args []blip.Value) !blip.Value {
 }
 
 fn prim_vector_emptyp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('vector-empty? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(as_vector_value(args[0], 'vector-empty?')!.data.len == 0)
 }
 
 fn prim_vector_containsp(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('vector-contains? expects at least 2 arguments, got ${args.len}')
+	}
 	data := as_vector_value(args[0], 'vector-contains?')!.data
 	mut i := 0
 	for i < data.len {
@@ -1355,6 +1579,9 @@ fn prim_vector_containsp(args []blip.Value) !blip.Value {
 // only if the slice has spare capacity. `<<` grows it in place when it does, so
 // the mutation primitives always go through `<<` first.
 fn prim_array_set(args []blip.Value) !blip.Value {
+	if args.len < 3 {
+		return error('array-set! expects at least 3 arguments, got ${args.len}')
+	}
 	vec := as_vector_value(args[0], 'array-set!')!
 	i := need_int('array-set!', args[1])!
 	if i < 0 || i >= vec.data.len {
@@ -1369,20 +1596,32 @@ fn prim_array_ref(args []blip.Value) !blip.Value {
 }
 
 fn prim_array_length(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('array-length expects at least 1 argument, got ${args.len}')
+	}
 	return blip.integer(as_vector_value(args[0], 'array-length')!.data.len)
 }
 
 fn prim_array_emptyp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('array-empty? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(as_vector_value(args[0], 'array-empty?')!.data.len == 0)
 }
 
 fn prim_array_push(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('array-push! expects at least 2 arguments, got ${args.len}')
+	}
 	vec := as_vector_value(args[0], 'array-push!')!
 	vec.push(args[1])
 	return args[0]
 }
 
 fn prim_array_pop(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('array-pop! expects at least 1 argument, got ${args.len}')
+	}
 	vec := as_vector_value(args[0], 'array-pop!')!
 	if vec.data.len == 0 {
 		return error('array-pop!: the array is empty')
@@ -1393,29 +1632,38 @@ fn prim_array_pop(args []blip.Value) !blip.Value {
 // --------------------------------------------------------------- buffers
 
 fn prim_put_bang(args []blip.Value) !blip.Value {
+	if args.len < 3 {
+		return error('put! expects at least 3 arguments, got ${args.len}')
+	}
 	if args[0].tag != .buffer {
 		return error('put! expects a buffer, got ${printer.write(args[0])}')
 	}
-	args[0].as_table().set_at(need_str('put!', args[1])!, args[2])
+	(args[0].as_table() or { return error(err.msg()) }).set_at(need_str('put!', args[1])!, args[2])
 	// A mutation returns nothing. Returning the buffer invites `(define b2
 	// (put! b ...))`, which looks like it copies and is not.
 	return blip.nil_value()
 }
 
 fn prim_dissoc_bang(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('dissoc! expects at least 2 arguments, got ${args.len}')
+	}
 	if args[0].tag != .buffer {
 		return error('dissoc! expects a buffer, got ${printer.write(args[0])}')
 	}
-	args[0].as_table().delete_at(need_str('dissoc!', args[1])!)
+	(args[0].as_table() or { return error(err.msg()) }).delete_at(need_str('dissoc!', args[1])!)
 	return args[0]
 }
 
 // ---------------------------------------------------------------- strings
 
 fn prim_string_index_of(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('string-index-of expects at least 2 arguments, got ${args.len}')
+	}
 	hay := need_str('string-index-of', args[0])!
 	if args[1].tag == .rune {
-		needle := rune_bytes(args[1].as_int())
+		needle := rune_bytes(args[1].as_int() or { return error(err.msg()) })
 		i := hay.index(needle) or { return blip.integer(-1) }
 		return blip.integer(i64(i))
 	}
@@ -1431,21 +1679,33 @@ fn rune_bytes(cp i64) string {
 }
 
 fn prim_string_not_blank(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string-not-blank? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(need_str('string-not-blank?', args[0])!.trim_space() != '')
 }
 
 fn prim_string_containsp(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('string-contains? expects at least 2 arguments, got ${args.len}')
+	}
 	hay := need_str('string-contains?', args[0])!
 	needle := need_str('string-contains?', args[1])!
 	return blip.boolean(hay.contains(needle))
 }
 
 fn prim_string_start_withp(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('string-starts-with? expects at least 2 arguments, got ${args.len}')
+	}
 	return blip.boolean(need_str('string-start-with?', args[0])!
 		.starts_with(need_str('string-start-with?', args[1])!))
 }
 
 fn prim_string_join(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string-join expects at least 1 argument, got ${args.len}')
+	}
 	items := seq(args[0])!
 	mut sep := ''
 	if args.len > 1 {
@@ -1464,10 +1724,17 @@ fn prim_string_join(args []blip.Value) !blip.Value {
 }
 
 fn prim_string_repeat(args []blip.Value) !blip.Value {
-	return blip.string(need_str('string-repeat', args[0])!.repeat(int(need_int('string-repeat', args[1])!)))
+	if args.len < 2 {
+		return error('string-repeat expects at least 2 arguments, got ${args.len}')
+	}
+	return blip.string(need_str('string-repeat', args[0])!.repeat(int(need_int('string-repeat',
+		args[1])!)))
 }
 
 fn prim_string_slice(args []blip.Value) !blip.Value {
+	if args.len < 3 {
+		return error('string-slice expects at least 3 arguments, got ${args.len}')
+	}
 	s := need_str('string-slice', args[0])!
 	start := need_int('string-slice', args[1])!
 	end := need_int('string-slice', args[2])!
@@ -1477,36 +1744,57 @@ fn prim_string_slice(args []blip.Value) !blip.Value {
 }
 
 fn prim_string_replace(args []blip.Value) !blip.Value {
+	if args.len < 3 {
+		return error('string-replace expects at least 3 arguments, got ${args.len}')
+	}
 	s := need_str('string-replace', args[0])!
-	return blip.string(s.replace(need_str('string-replace', args[1])!,
-		need_str('string-replace', args[2])!))
+	return blip.string(s.replace(need_str('string-replace', args[1])!, need_str('string-replace',
+		args[2])!))
 }
 
 fn prim_string_to_symbol(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string->symbol expects at least 1 argument, got ${args.len}')
+	}
 	return blip.symbol(need_str('string->symbol', args[0])!)
 }
 
 fn prim_string_to_keyword(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('string->keyword expects at least 1 argument, got ${args.len}')
+	}
 	return blip.keyword(need_str('string->keyword', args[0])!)
 }
 
 // ------------------------------------------------------------- predicates
 
 fn prim_booleanp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('boolean? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(args[0].tag == .boolean)
 }
 
 fn prim_runep(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('rune? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(args[0].tag == .rune)
 }
 
 fn prim_fntionp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('function? expects at least 1 argument, got ${args.len}')
+	}
 	return blip.boolean(args[0].tag in [.closure, .primitive])
 }
 
 // ------------------------------------------------------------- arithmetic
 
 fn prim_modulo(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('modulo expects at least 2 arguments, got ${args.len}')
+	}
 	b := need_int('modulo', args[1])!
 	if b == 0 {
 		return error('modulo by zero')
@@ -1522,6 +1810,9 @@ fn prim_modulo(args []blip.Value) !blip.Value {
 }
 
 fn prim_quotient(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('quotient expects at least 2 arguments, got ${args.len}')
+	}
 	b := need_int('quotient', args[1])!
 	if b == 0 {
 		return error('quotient by zero')
@@ -1535,6 +1826,9 @@ fn prim_quotient(args []blip.Value) !blip.Value {
 }
 
 fn prim_remainder(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('remainder expects at least 2 arguments, got ${args.len}')
+	}
 	b := need_int('remainder', args[1])!
 	if b == 0 {
 		return error('remainder by zero')
@@ -1543,6 +1837,9 @@ fn prim_remainder(args []blip.Value) !blip.Value {
 }
 
 fn prim_gcd(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('gcd expects at least 2 arguments, got ${args.len}')
+	}
 	mut a := need_int('gcd', args[0])!
 	if a < 0 {
 		a = -a
@@ -1560,6 +1857,9 @@ fn prim_gcd(args []blip.Value) !blip.Value {
 }
 
 fn prim_expt(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('expt expects at least 2 arguments, got ${args.len}')
+	}
 	if args[0].tag == .float || args[1].tag == .float {
 		return blip.float(math.pow(as_f64(args[0])!, as_f64(args[1])!))
 	}
@@ -1580,6 +1880,9 @@ fn prim_expt(args []blip.Value) !blip.Value {
 }
 
 fn prim_sqrt(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('sqrt expects at least 1 argument, got ${args.len}')
+	}
 	a := args[0]
 	if a.tag == .float {
 		f := as_f64(a)!
@@ -1607,15 +1910,23 @@ fn prim_sqrt(args []blip.Value) !blip.Value {
 }
 
 fn prim_inc(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('inc expects at least 1 argument, got ${args.len}')
+	}
 	if args[0].tag == .float {
-		return blip.float(args[0].as_float() + 1.0)
+		f := args[0].as_float() or { return error(err.msg()) }
+		return blip.float(f + 1.0)
 	}
 	return blip.integer(need_int('inc', args[0])! + 1)
 }
 
 fn prim_dec(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('dec expects at least 1 argument, got ${args.len}')
+	}
 	if args[0].tag == .float {
-		return blip.float(args[0].as_float() - 1.0)
+		f := args[0].as_float() or { return error(err.msg()) }
+		return blip.float(f - 1.0)
 	}
 	return blip.integer(need_int('dec', args[0])! - 1)
 }

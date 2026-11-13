@@ -1,8 +1,8 @@
 module main
 
 import veb
-import vlib.blip.machine
-import vlib.blip.host
+import blip.machine
+import blip.host
 
 struct App {
 	veb.StaticHandler
@@ -48,14 +48,14 @@ pub fn (mut app App) api_run(mut ctx Context) veb.Result {
 	m.src_text = code
 	m.run_str(code) or {
 		return ctx.json(RunResponse{
-			output: h.lines().join('\n'),
-			error:  err.msg(),
-			ran:    false,
+			output: h.lines().join('\n')
+			error:  err.msg()
+			ran:    false
 		})
 	}
 	return ctx.json(RunResponse{
-		output: h.lines().join('\n'),
-		ran:    true,
+		output: h.lines().join('\n')
+		ran:    true
 	})
 }
 

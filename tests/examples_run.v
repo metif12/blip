@@ -17,9 +17,9 @@ module main
 // suite is that each example stands alone.
 
 import os
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.machine
+import blip
+import blip.host
+import blip.machine
 
 struct Suite {
 mut:

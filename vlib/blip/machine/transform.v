@@ -5,11 +5,11 @@ $if !wasm32 {
 }
 
 import strconv
-import vlib.blip
-import vlib.blip.host
-import vlib.blip.prims
-import vlib.blip.printer
-import vlib.blip.reader
+import blip
+import blip.host
+import blip.prims
+import blip.printer
+import blip.reader
 
 fn (mut m Machine) transform_match_star(kids []blip.NodeId) blip.NodeId {
 	subjects := m.arena.kids(kids[1])
@@ -107,6 +107,9 @@ fn (mut m Machine) transform_let_assert(kids []blip.NodeId) !blip.NodeId {
 // the first version did, and `(list-ref r 2)` on a one-element result is what
 // that produced.
 pub fn (mut m Machine) transform_let(kids []blip.NodeId) !blip.NodeId {
+	if kids.len < 2 {
+		return error('let needs a binding group and a body: (let ([a 1]) body...)')
+	}
 	// `(let assert PATTERN VALUE body...)` is `let` with the word `assert` in the
 	// binding slot. It is read here rather than as its own head symbol so that
 	// `(let assert ...)` needs no reader change and so that a program can use
@@ -647,7 +650,7 @@ pub fn (mut m Machine) transform_dotimes(kids []blip.NodeId) !blip.NodeId {
 // `[...]` is a VECTOR here and the documentation and examples write it that way.
 // Checking only for `.list` silently passed the whole vector through as a
 // parameter name, which surfaced as "lambda parameters must be symbols".
-fn (mut m Machine) is_binding_form(b blip.NodeId) bool {
+fn (m &Machine) is_binding_form(b blip.NodeId) bool {
 	tag := m.arena.node(b).tag
 	return tag == .list || tag == .vector
 }

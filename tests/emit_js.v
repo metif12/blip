@@ -1,9 +1,9 @@
 module main
 
 import os
-import vlib.blip.emit
-import vlib.blip.host
-import vlib.blip.machine
+import blip.emit
+import blip.host
+import blip.machine
 
 // The JS backend gate.
 //
