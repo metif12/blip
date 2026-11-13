@@ -27,3 +27,27 @@
   (use (write-file "site_out/getting-started.html"
           (render-page "Getting started — blip" read-file))
     (print "wrote site_out/getting-started.html")))
+
+;; tour
+(use (read-file "site/content/tour.md")
+  (use (write-file "site_out/tour.html"
+          (render-page "The tour — blip" read-file))
+    (print "wrote site_out/tour.html")))
+
+;; cli
+(use (read-file "site/content/cli.md")
+  (use (write-file "site_out/cli.html"
+          (render-page "CLI reference — blip" read-file))
+    (print "wrote site_out/cli.html")))
+
+;; embedding
+(use (read-file "site/content/embedding.md")
+  (use (write-file "site_out/embedding.html"
+          (render-page "Embedding — blip" read-file))
+    (print "wrote site_out/embedding.html")))
+
+;; status
+(use (read-file "site/content/status.md")
+  (use (write-file "site_out/status.html"
+          (render-page "Status — blip" read-file))
+    (print "wrote site_out/status.html")))

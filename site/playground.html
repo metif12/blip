@@ -28,7 +28,6 @@
   }
   .wrap { max-width: 60rem; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
   h1 { font-size: 1.8rem; letter-spacing: -0.02em; margin: 0 0 0.25rem; }
-  h1 .k { color: var(--accent); }
   .tag { color: var(--dim); font-size: 1rem; margin: 0 0 2rem; }
   .editor {
     background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
@@ -53,13 +52,20 @@
   .output .error { color: var(--accent2); }
   .output .success { color: var(--accent); }
   .status { color: var(--dim); font-size: 0.8rem; margin-top: 0.5rem; }
+  .topnav { margin: 0 0 1.5rem; font-size: 0.9rem; }
+  .topnav a { color: var(--accent); text-decoration: none; }
+  .topnav a:hover { text-decoration: underline; }
+  .note { color: var(--dim); font-size: 0.85rem; margin: 0 0 1rem; }
 </style>
 </head>
 <body>
 <div class="wrap">
 
-  <h1><span class="k">v</span>lip playground</h1>
+  <p class="topnav"><a href="/index.html">&larr; blip home</a></p>
+
+  <h1>blip playground</h1>
   <p class="tag">A small Lisp dialect implemented in V. Try it in your browser.</p>
+  <p class="note">Run needs a local backend: <code>v run server.v</code>, then open this page from <code>localhost:8080</code>. On the static site the button has nothing to talk to.</p>
 
   <textarea class="editor" id="code" spellcheck="false">(define (fib n)
   (if (< n 2)

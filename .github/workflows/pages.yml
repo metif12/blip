@@ -59,18 +59,19 @@ jobs:
 
       - name: Check the output is complete
         run: |
-          test -s site_out/index.html
-          test -s site_out/about.html
-          test -s site_out/getting-started.html
+          for p in index about getting-started tour cli embedding status; do
+            test -s site_out/$p.html || { echo "::error::missing site_out/$p.html"; exit 1; }
+          done
           pages=$(find site_out -name '*.html' | wc -l)
           echo "generated $pages pages"
-          test "$pages" -ge 3
+          test "$pages" -ge 7
 
       - name: Assemble site
         run: |
           cp -r site/assets site_out/assets
           cp README.md site_out/README.md 2>/dev/null || true
           cp site/install.sh site/install.ps1 site_out/ 2>/dev/null || true
+          cp site/playground.html site_out/playground.html
           chmod +x site_out/install.sh 2>/dev/null || true
           test -f site_out/index.html
 

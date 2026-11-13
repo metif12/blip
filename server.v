@@ -25,6 +25,11 @@ fn main() {
 	mut app := &App{}
 	app.static_mime_types['.ps1'] = 'text/plain'
 	app.static_mime_types['.sh'] = 'text/plain'
+	// site/ also holds blip sources and Markdown: without these the static
+	// scan aborts on the first unknown extension and nothing after it
+	// (including playground.html) is served.
+	app.static_mime_types['.lip'] = 'text/plain'
+	app.static_mime_types['.md'] = 'text/plain'
 	app.handle_static('site', true) or { eprintln('static: ${err.msg()}') }
 	veb.run[App, Context](mut app, 8080)
 }
