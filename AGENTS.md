@@ -72,3 +72,13 @@ in `CONTRIBUTING.md`, the plan in `docs/010-roadmap.md`, history in
   Gates report with `ok  `/`PASS`/`macros_gate:` lines; only a literal
   `FAIL` line (CI greps `^FAIL` from the joined output) means a check
   failed.
+- V attributes attach to the next DECLARATION, skipping comments: inserting
+  a function between `@[direct_array_access; inline]` and its function
+  silently moves the attribute (the old function loses bounds-check
+  elimination). This cost the comment benchmark 2.6x with identical loop
+  code. Keep each attribute directly above its function.
+- V 0.5.2 enforces a mut receiver at cross-module call sites ONLY when the
+  callee body visibly mutates (`visible_mutation.v`): an immutable `&Arena`
+  argument compiled until `read_source` grew an `ensure_cap`, then broke
+  three `macro_embed.v` call sites. A function that mutates must declare
+  `mut` even while it happens to compile without it.

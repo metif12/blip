@@ -66,6 +66,9 @@ fn main() {
 	comments := repeat('; a comment line to skip over\n', 100000) + '(ok 1)\n'
 	bench_one('comment   ', comments, iters)
 
+	longstr := '(' + repeat('"' + 'x'.repeat(10000) + '" ', 100) + ')'
+	bench_one('longstr   ', longstr, iters)
+
 	quoted := repeat('\'(a b (c d) 1 2.5 "s" :k)', 50000)
 	bench_one('quoted    ', quoted, iters)
 

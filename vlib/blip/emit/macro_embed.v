@@ -116,7 +116,11 @@ fn expand_value(mut m machine.Machine, v blip.Value) !blip.Value {
 
 // expand_form expands one reader form. Returns the original id unchanged
 // when nothing needed expanding, so ordinary programs produce no churn.
-fn expand_form(mut m machine.Machine, a &reader.Arena, id reader.NodeId) !reader.NodeId {
+// The arena is `mut` because expansion appends re-read forms to it --
+// V 0.5.2 enforces a mut receiver at cross-module call sites only when the
+// callee visibly mutates, so an immutable `a` here compiled until
+// read_source grew its ensure_cap reservation, then broke three call sites.
+fn expand_form(mut m machine.Machine, mut a reader.Arena, id reader.NodeId) !reader.NodeId {
 	d := a.node(id)
 	if d.tag != .list {
 		return id
@@ -166,7 +170,7 @@ fn expand_form(mut m machine.Machine, a &reader.Arena, id reader.NodeId) !reader
 	mut changed := false
 	for i := 0; i < kids.len; i++ {
 		k := kids[i]
-		nid := expand_form(mut m, a, k)!
+		nid := expand_form(mut m, mut a, k)!
 		if nid != k {
 			changed = true
 		}

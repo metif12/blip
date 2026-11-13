@@ -350,6 +350,34 @@ fn (mut r Reader) is_delimiter(c u8) bool {
 	return is_delim_byte(c)
 }
 
+// read_string_memchr finds a long string's terminator with bounded libc
+// scans, or returns none when the scalar slow path should take over: an
+// escape first, a newline inside, or no terminator at all. `start` is the
+// string content; `from` is where the scalar prefix stopped, so nothing is
+// ever scanned twice. Reader state is untouched on the none path, so the
+// slow path re-walks from a clean slate and reports positions exactly as
+// before. Every scan stays inside the file.
+@[direct_array_access; inline]
+fn (mut r Reader) read_string_memchr(start int, from int) ?NodeId {
+	n := r.src.len - from
+	base := unsafe { r.src.str + from }
+	qp := unsafe { C.memchr(base, int(dquote), usize(n)) }
+	if isnil(qp) {
+		return none
+	}
+	qi := from + int(usize(qp) - usize(base))
+	bp := unsafe { C.memchr(base, int(backslash_bs), usize(qi - from)) }
+	if !isnil(bp) {
+		return none
+	}
+	np := unsafe { C.memchr(base, int(nl), usize(qi - from)) }
+	if !isnil(np) {
+		return none
+	}
+	r.off = qi + 1
+	return r.arena.str_leaf(.str, r.src[start..qi])
+}
+
 @[direct_array_access; inline]
 fn (mut r Reader) skip_ws() {
 	// Raw index loop, not peek()/next() per byte: each of those is a call
@@ -368,6 +396,12 @@ fn (mut r Reader) skip_ws() {
 			continue
 		}
 		if c == semi {
+			// Scalar loop, deliberately: short comments dominate real
+			// sources, and this loop runs with direct_array_access (no
+			// bounds checks) and inline -- both load-bearing here. A
+			// function inserted between the attribute above and skip_ws
+			// silently inherits it (attributes skip comments), which once
+			// cost this case 2.6x; keep the attribute on THIS function.
 			for r.off < r.src.len && r.src[r.off] != nl {
 				r.off++
 			}
@@ -584,17 +618,18 @@ fn (mut r Reader) read_collection(tag DatumTag, close u8) ?NodeId {
 @[direct_array_access; inline]
 fn (mut r Reader) read_string() ?NodeId {
 	start := r.off + 1 // past the opening quote
-	// Fast scan for the closing quote: most strings have no escapes, and
-	// for those the interior is used verbatim -- no buffer, no copy. The
-	// slow path below only runs when a backslash actually appears.
-	//
-	// Line counting stays with whoever walks: the fast scan counts (its
-	// count stands on success), and on the escape fallback the saved
-	// position is restored so the slow walk counts the same lines once.
+	// Scalar prefix, capped: covers every short string fully, with no
+	// function-call overhead at all. Only a string that runs past the cap
+	// without terminating takes the memchr path below, so short strings
+	// never pay for a C call they do not need.
 	sline := r.line
 	sline_at := r.line_at
 	mut i := start
-	for i < r.src.len {
+	mut stop := start + 256
+	if stop > r.src.len {
+		stop = r.src.len
+	}
+	for i < stop {
 		c := r.src[i]
 		if c == dquote {
 			r.off = i + 1
@@ -609,10 +644,25 @@ fn (mut r Reader) read_string() ?NodeId {
 		}
 		i++
 	}
-	// Slow path: escapes, or a truncated tail. off resumes after the
-	// opening quote; the loop below re-walks the plain prefix, which is
-	// bounded by the string length and only paid for when escapes exist.
-	// Positions are restored first so lines are counted exactly once.
+	if i < r.src.len && r.src[i] == backslash_bs {
+		return r.read_string_slow(start, sline, sline_at)
+	}
+	if i >= r.src.len {
+		// Ran off the end inside the cap: truncated, no memchr needed.
+		return r.read_string_slow(start, sline, sline_at)
+	}
+	// Long string, no terminator or escape in the prefix: libc memchr
+	// (SIMD inside) for the rest, bounded so it cannot outrun the file.
+	if id := r.read_string_memchr(start, i) {
+		return id
+	}
+	return r.read_string_slow(start, sline, sline_at)
+}
+
+// read_string_slow handles escapes and truncated tails. off resumes after
+// the opening quote; positions are restored first so lines are counted
+// exactly once no matter how much the fast paths already walked.
+fn (mut r Reader) read_string_slow(start int, sline int, sline_at int) ?NodeId {
 	r.off = start
 	r.line = sline
 	r.line_at = sline_at

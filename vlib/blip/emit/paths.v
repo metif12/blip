@@ -3,7 +3,6 @@ module emit
 $if !wasm32 {
 	import os
 }
-
 import blip
 import blip.host
 import blip.machine
@@ -103,12 +102,10 @@ fn compile_with_base(src string, base string) !Result {
 	for id in res.forms {
 		if is_defmacro_form(res.arena, id) {
 			txt := form_text(src, res.arena, id)
-			mach.run_str(txt) or {
-				return error('macro registration failed: ${err.msg()}')
-			}
+			mach.run_str(txt) or { return error('macro registration failed: ${err.msg()}') }
 			continue
 		}
-		nid := expand_form(mut mach, res.arena, id) or {
+		nid := expand_form(mut mach, mut res.arena, id) or {
 			return error('macro expansion failed: ${err.msg()}')
 		}
 		expanded_forms << nid
