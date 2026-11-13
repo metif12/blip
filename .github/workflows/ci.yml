@@ -181,6 +181,7 @@ jobs:
           v -cc gcc -o macros_gate tests/macros_gate.v
           v -cc gcc -o fibers tests/fibers.v
           v -cc gcc -o veb_bridge tests/veb_bridge.v
+          v -cc gcc -o embed_api tests/embed_api.v
 
       # These runners print results and do not set an exit code yet, so the
       # output is checked rather than the status. That is listed as a known gap
@@ -207,6 +208,7 @@ jobs:
           ./macros_gate    | tee -a out.txt
           ./fibers         | tee -a out.txt
           ./veb_bridge     | tee -a out.txt
+          ./embed_api      | tee -a out.txt
           if grep -qE '^FAIL|panic' out.txt; then
             echo "::error::a check failed or the machine panicked"
             exit 1

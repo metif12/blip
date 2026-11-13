@@ -55,10 +55,14 @@ pub mut:
 	globals blip.EnvId
 	envs    blip.EnvArena
 	prims   map[string]blip.PrimFn
-	ctl     Ctl = .eval_form
-	form    blip.NodeId
-	env     blip.EnvId
-	val     blip.Value
+	// ctx_prims are machine-aware extensions registered by the embedder. A pure
+	// PrimFn sees only its args; a CtxPrimFn also sees the machine, so it can
+	// read the host, the current env, or limits. Checked before prims.
+	ctx_prims map[string]CtxPrimFn
+	ctl       Ctl = .eval_form
+	form      blip.NodeId
+	env       blip.EnvId
+	val       blip.Value
 	// val2 holds the value a `try` is going to return while its #:finally runs.
 	// One slot, not a stack: `#:finally` runs once and its own body does not
 	// touch val2.
@@ -125,6 +129,7 @@ pub fn new_machine_with(a &reader.Arena, h host.Host) &Machine {
 			globals:      blip.no_env
 			env:          blip.no_env
 			prims:        prims.table()
+			ctx_prims:    map[string]CtxPrimFn{}
 			host:         h
 			veb_handlers: map[string]blip.Value{}
 		}
@@ -540,7 +545,7 @@ fn (mut m Machine) eval_symbol(name string) ! {
 	if name.contains('.') {
 		return m.eval_field_access(name)
 	}
-	if name in m.prims || machine_builtin(name) {
+	if name in m.prims || name in m.ctx_prims || machine_builtin(name) {
 		m.val = blip.new_prim(name)
 		m.ret()
 		return
@@ -749,7 +754,7 @@ fn (mut m Machine) sort_by(args []blip.Value) ! {
 // wrong here: the caller is in the middle of call_primitive and would be
 // overwritten. So this saves the control state, applies, drives to completion,
 // and puts the state back. That is why eval_one had to save and restore too.
-fn (mut m Machine) call_value(f blip.Value, args []blip.Value) !blip.Value {
+pub fn (mut m Machine) call_value(f blip.Value, args []blip.Value) !blip.Value {
 	saved_k := m.kstack
 	saved_ctl := m.ctl
 	saved_form := m.form
@@ -1832,6 +1837,14 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 		}
 		else {}
 	}
+	if g := m.ctx_prims[name] {
+		res := g(mut m, args) or {
+			return error('${name}: ${err.msg()}')
+		}
+		m.val = res
+		m.ret()
+		return
+	}
 	f := m.prims[name] or {
 		return error('unknown primitive: ${name}')
 	}
@@ -2266,7 +2279,7 @@ fn (mut m Machine) eval_defined(kids []blip.NodeId) ! {
 		m.ret()
 		return
 	}
-	m.val = blip.boolean(name in m.prims || machine_builtin(name))
+	m.val = blip.boolean(name in m.prims || name in m.ctx_prims || machine_builtin(name))
 	m.ret()
 }
 
