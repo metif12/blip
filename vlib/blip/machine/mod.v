@@ -1366,13 +1366,7 @@ fn (mut m Machine) call_closure(c &blip.Closure, args []blip.Value) ! {
 		if args.len != c.arity {
 			return error('${c.name}: expected ${c.arity} argument${plural(c.arity)}, got ${args.len}')
 		}
-		frame := m.envs.new_env(c.env)
-		mut i := 0
-		for i < c.params.len {
-			m.envs.define(frame, c.params[i], args[i])
-			i++
-		}
-		m.env = frame
+		m.env = m.envs.new_frame(c.env, c.params, args)
 		// TAIL CALL: no continuation pushed. The body runs with whatever remains,
 		// so recursion in tail position does not grow the stack.
 		m.goto(c.body)
@@ -1393,28 +1387,19 @@ fn (mut m Machine) call_closure(c &blip.Closure, args []blip.Value) ! {
 		if use_args.len < c.arity {
 			return error('${c.name}: expected at least ${c.arity} argument${plural(c.arity)}, got ${use_args.len}')
 		}
-		frame := m.envs.new_env(c.env)
-		mut i := 0
-		for i < c.arity {
-			m.envs.define(frame, c.params[i], use_args[i])
-			i++
-		}
-		m.envs.define(frame, c.rest_name,
-			blip.list_from(use_args[c.arity..]).with_tree_origin(m.form_origin()))
-		m.env = frame
+		rest_val := blip.list_from(use_args[c.arity..]).with_tree_origin(m.form_origin())
+		mut names := c.params.clone()
+		names << c.rest_name
+		mut vals := use_args[..c.arity].clone()
+		vals << rest_val
+		m.env = m.envs.new_frame(c.env, names, vals)
 		m.goto(c.body)
 		return
 	}
 	if use_args.len != c.arity {
 		return error('${c.name}: expected ${c.arity} argument${plural(c.arity)}, got ${use_args.len}')
 	}
-	frame := m.envs.new_env(c.env)
-	mut i := 0
-	for i < c.params.len {
-		m.envs.define(frame, c.params[i], use_args[i])
-		i++
-	}
-	m.env = frame
+	m.env = m.envs.new_frame(c.env, c.params, use_args)
 	// TAIL CALL: no continuation pushed. The body runs with whatever remains,
 	// so recursion in tail position does not grow the stack.
 	m.goto(c.body)

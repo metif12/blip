@@ -646,6 +646,11 @@ pub mut:
 	// set are O(1) in the frame size instead of a linear scan. Kept in sync
 	// with names/vals by define and set; never mutated by readers.
 	index map[string]int
+	// linear marks call frames: 1-3 params where a map allocation + N hashed
+	// inserts per call costs more than a linear scan per lookup. Lookup,
+	// define and set branch on this and never touch index for such frames,
+	// so behavior is identical with no map involved at all.
+	linear bool
 }
 
 pub struct EnvArena {
@@ -668,6 +673,25 @@ pub fn (mut ea EnvArena) new_env(parent EnvId) EnvId {
 	return EnvId(ea.frames.len - 1)
 }
 
+// new_frame builds a call frame in one shot: names/vals cloned pre-sized, no
+// map allocated, version bumped once. Call frames are marked linear (see Env):
+// 1-3 params where hashing costs more than scanning. Behavior is identical to
+// new_env + N defines: same names, same values, and the version is only ever
+// compared for equality by the lookup cache, so one bump invalidates exactly
+// like N bumps. The slices are cloned so the frame never aliases the
+// closure's params or the caller's args.
+pub fn (mut ea EnvArena) new_frame(parent EnvId, names []string, vals []Value) EnvId {
+	ea.version++
+	ea.frames << Env{
+		parent: parent
+		names:  names.clone()
+		vals:   vals.clone()
+		index:  map[string]int{}
+		linear: true
+	}
+	return EnvId(ea.frames.len - 1)
+}
+
 pub fn (ea &EnvArena) get(id EnvId) &Env {
 	if id == no_env {
 		return unsafe { nil }
@@ -678,6 +702,18 @@ pub fn (ea &EnvArena) get(id EnvId) &Env {
 pub fn (mut ea EnvArena) define(id EnvId, name string, val Value) {
 	mut frame := ea.get(id)
 	ea.version++
+	if frame.linear {
+		// Call frames stay map-free: scan, update in place or append.
+		for i := 0; i < frame.names.len; i++ {
+			if frame.names[i] == name {
+				frame.vals[i] = val
+				return
+			}
+		}
+		frame.names << name
+		frame.vals << val
+		return
+	}
 	if name in frame.index {
 		idx := frame.index[name]
 		frame.vals[idx] = val
@@ -692,7 +728,13 @@ pub fn (mut ea EnvArena) lookup(id EnvId, name string) ?Value {
 	mut cur := id
 	for cur != no_env {
 		frame := ea.get(cur)
-		if name in frame.index {
+		if frame.linear {
+			for i := frame.names.len - 1; i >= 0; i-- {
+				if frame.names[i] == name {
+					return frame.vals[i]
+				}
+			}
+		} else if name in frame.index {
 			idx := frame.index[name]
 			return frame.vals[idx]
 		}
@@ -707,7 +749,15 @@ pub fn (mut ea EnvArena) set(id EnvId, name string, val Value) bool {
 	mut cur := id
 	for cur != no_env {
 		mut frame := ea.get(cur)
-		if name in frame.index {
+		if frame.linear {
+			for i := 0; i < frame.names.len; i++ {
+				if frame.names[i] == name {
+					frame.vals[i] = val
+					ea.version++
+					return true
+				}
+			}
+		} else if name in frame.index {
 			idx := frame.index[name]
 			frame.vals[idx] = val
 			ea.version++
