@@ -229,10 +229,11 @@ fn cmp_text(a string, b string) int {
 // compare orders numbers and strings. Anything else is an error rather than a
 // silent false, because a silent false here becomes a mystery much later.
 pub fn compare(a blip.Value, b blip.Value) !int {
+	// Direct .i access: as_int on an .integer always succeeds with .i, so
+	// this computes the same cmp_i64 with no error-union unwrapping. Rune
+	// operands never reach here (tag check), falling through below as before.
 	if a.tag == .integer && b.tag == .integer {
-		return cmp_i64(a.as_int() or { return error(err.msg()) }, b.as_int() or {
-			return error(err.msg())
-		})
+		return cmp_i64(a.i, b.i)
 	}
 	if a.tag == .float || b.tag == .float {
 		if !is_number(a) || !is_number(b) {
