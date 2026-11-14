@@ -251,6 +251,29 @@ pub fn compare(a blip.Value, b blip.Value) !int {
 // ------------------------------------------------------------- arithmetic
 
 fn prim_add(args []blip.Value) !blip.Value {
+	// Fast path: N integer args sum via direct .i access, no error-union
+	// unwrapping per operand. Any non-integer falls back below, which
+	// produces the original errors.
+	if args.len >= 1 {
+		mut all_int := true
+		mut i := 0
+		for i < args.len {
+			if args[i].tag != .integer {
+				all_int = false
+				break
+			}
+			i++
+		}
+		if all_int {
+			mut sum := i64(0)
+			mut j := 0
+			for j < args.len {
+				sum += args[j].i
+				j++
+			}
+			return blip.integer(sum)
+		}
+	}
 	if any_float(args) {
 		mut f := 0.0
 		for a in args {
@@ -268,6 +291,29 @@ fn prim_add(args []blip.Value) !blip.Value {
 fn prim_sub(args []blip.Value) !blip.Value {
 	if args.len == 0 {
 		return error('- expects at least 1 argument')
+	}
+	// Fast path: all-integer subtraction via direct .i access. Falls back
+	// below for any float/non-number, preserving original errors.
+	mut all_int := true
+	mut k := 0
+	for k < args.len {
+		if args[k].tag != .integer {
+			all_int = false
+			break
+		}
+		k++
+	}
+	if all_int {
+		if args.len == 1 {
+			return blip.integer(-args[0].i)
+		}
+		mut acc := args[0].i
+		mut i := 1
+		for i < args.len {
+			acc -= args[i].i
+			i++
+		}
+		return blip.integer(acc)
 	}
 	if args.len == 1 {
 		return blip.integer(-need_int('-', args[0])!)
@@ -287,6 +333,28 @@ fn prim_sub(args []blip.Value) !blip.Value {
 }
 
 fn prim_mul(args []blip.Value) !blip.Value {
+	// Fast path: all-integer product via direct .i access. Falls back below
+	// for any float/non-number, preserving original errors.
+	if args.len >= 1 {
+		mut all_int := true
+		mut i := 0
+		for i < args.len {
+			if args[i].tag != .integer {
+				all_int = false
+				break
+			}
+			i++
+		}
+		if all_int {
+			mut acc := i64(1)
+			mut j := 0
+			for j < args.len {
+				acc *= args[j].i
+				j++
+			}
+			return blip.integer(acc)
+		}
+	}
 	if any_float(args) {
 		mut f := 1.0
 		for a in args {
@@ -504,8 +572,9 @@ fn list_slice(v blip.Value) ![]blip.Value {
 		if guard > 50_000_000 {
 			return error('list is cyclic')
 		}
-		out << (cur.as_pair() or { return error(err.msg()) }).car
-		cur = (cur.as_pair() or { return error(err.msg()) }).cdr
+		p := cur.as_pair() or { return error(err.msg()) }
+		out << p.car
+		cur = p.cdr
 		guard++
 	}
 	return out

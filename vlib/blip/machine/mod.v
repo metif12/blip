@@ -488,14 +488,35 @@ fn (mut m Machine) step_eval() ! {
 			return
 		}
 		.list {
-			kids := m.arena.kids(id)
-			if kids.len == 0 {
+			// Fast path: most forms are applications, which need only kids[0].
+			// A copying kids() per application allocates a short-lived slice
+			// on every call (10k tail calls = 10k slices for GC). Peek with a
+			// zero-copy view first; only special/field forms pay for the copy.
+			// Safe: no arena append happens between the view and its last use.
+			view := m.arena.kids_view(id)
+			if view.len == 0 {
 				// `()` is the empty list, not nil: a form has to produce the
 				// value it reads as, and the examples assert `(list) ;=> ()`.
 				m.val = blip.empty_list()
 				m.ret()
 				return
 			}
+			head := m.arena.node(view[0])
+			mut is_app := true
+			if head.tag == .sym {
+				if special_form(head.value) || head.value.contains('.') {
+					is_app = false
+				}
+			}
+			if is_app {
+				mut nf := m.kont(.app_fn)
+				nf.rest = id
+				nf.env = m.env
+				m.push(nf)
+				m.goto(view[0])
+				return
+			}
+			kids := m.arena.kids(id)
 			return m.eval_list(id, kids)
 		}
 		.table, .vector, .array {
@@ -1338,6 +1359,25 @@ fn (mut m Machine) lookup_key(key string, coll blip.Value) !blip.Value {
 }
 
 fn (mut m Machine) call_closure(c &blip.Closure, args []blip.Value) ! {
+	// Fast path: fixed-arity closures never mutate the argument slice, so the
+	// clone is pure overhead (one array + N fat-Value copies per call). Only
+	// labelled/rest calls need an owned slice.
+	if c.opt_from < 0 && !c.rest {
+		if args.len != c.arity {
+			return error('${c.name}: expected ${c.arity} argument${plural(c.arity)}, got ${args.len}')
+		}
+		frame := m.envs.new_env(c.env)
+		mut i := 0
+		for i < c.params.len {
+			m.envs.define(frame, c.params[i], args[i])
+			i++
+		}
+		m.env = frame
+		// TAIL CALL: no continuation pushed. The body runs with whatever remains,
+		// so recursion in tail position does not grow the stack.
+		m.goto(c.body)
+		return
+	}
 	mut use_args := args.clone()
 	if c.opt_from >= 0 {
 		// The caller's scope is the environment the APPLICATION form was written in.
@@ -1854,11 +1894,11 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 		return
 	}
 	f := m.prims[name] or { return error('unknown primitive: ${name}') }
-	mut call_args := []blip.Value{}
-	for a in args {
-		call_args << a
-	}
-	res := f(call_args) or { return error('${name}: ${err.msg()}') }
+	// Prims never mutate their argument slice (verified: no `args[i] =` or
+	// `args <<` in vlib/blip/prims), and the caller's slice is discarded after
+	// apply, so the copy is pure overhead (one array + N fat-Value copies per
+	// prim call: every +, -, =, <, car, cdr, cons).
+	res := f(args) or { return error('${name}: ${err.msg()}') }
 	m.val = res
 	m.ret()
 }

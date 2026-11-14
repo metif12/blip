@@ -164,6 +164,9 @@ pub fn (mut a Arena) open(tag DatumTag) NodeId {
 // nested node appended meanwhile, is what makes (start, count) a valid range.
 pub fn (mut a Arena) finish(id NodeId, items []NodeId) {
 	start := i32(a.children.len)
+	// Reserve the run up front: without this every element pays a bounds/cap
+	// check, and large flat lists grow the backing array repeatedly.
+	a.children.ensure_cap(a.children.len + items.len)
 	for it in items {
 		a.children << it
 	}
