@@ -266,6 +266,18 @@ fn (mut e Emitter) remember(id reader.NodeId) {
 	sig := e.node(kids[1])
 	if sig.tag == .sym {
 		e.top[sig.value] = true
+		return
+	}
+	// A function definition binds its head name: `(def (f x) ...)` makes `f`
+	// a name calls resolve to. Recording only value defines meant every
+	// function call routed through prim_names, so a program definition of a
+	// runtime-named function (a std combinator, or any shadowing) called the
+	// runtime instead -- while the machine called the definition.
+	if sig.tag == .list {
+		inner := e.kids(kids[1])
+		if inner.len > 0 && e.node(inner[0]).tag == .sym {
+			e.top[e.node(inner[0]).value] = true
+		}
 	}
 }
 
@@ -631,6 +643,32 @@ fn (mut e Emitter) named_function(name string, params []reader.NodeId, body []re
 			}
 			kwargs << 'const ${e.mangle_name(bind.value)} = (__blip_kw && __blip_kw[${json_str(d.value)}] !== undefined) ? __blip_kw[${json_str(d.value)}] : ${js_default};'
 			param_names << bind.value
+			pi++
+			continue
+		}
+		if d.tag == .sym && d.value == '.' {
+			// A rest parameter, `(f a . r)`: the dot must introduce the LAST
+			// parameter, exactly the machine's rule (parse_params). JavaScript
+			// spells it `...r`, and a bare array reads as a blip list, so the
+			// body sees the same value on both engines. Anything else dotted
+			// is refused rather than miscompiled: the old code emitted the dot
+			// as a parameter name, which is not valid JavaScript.
+			if pi + 2 != params.len {
+				e.refuse('dotted rest parameter')
+				return
+			}
+			rest := e.node(params[pi + 1])
+			if rest.tag != .sym {
+				e.refuse('dotted rest parameter')
+				return
+			}
+			if kwargs.len > 0 {
+				e.refuse('rest parameter with keywords')
+				return
+			}
+			ps << '...${e.mangle_name(rest.value)}'
+			param_names << rest.value
+			arg++
 			pi++
 			continue
 		}

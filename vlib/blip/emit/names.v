@@ -10,6 +10,14 @@ import blip.machine
 import blip.reader
 
 fn (mut e Emitter) callable(name string) string {
+	// A program definition shadows the runtime, exactly like the machine's
+	// environment shadows a primitive: `remember` collected every top-level
+	// `def`, so a std combinator (or any user function sharing a runtime
+	// name) calls the definition on both engines. Without this the machine
+	// ran the user's code and the emitter ran the runtime helper.
+	if name in e.top {
+		return e.mangle_name(name)
+	}
 	if name in prim_names {
 		return 'blip.${mangle(name)}'
 	}
@@ -393,8 +401,15 @@ fn (mut e Emitter) symbol(s string) string {
 	// BEFORE the prim_names routing: `rest`, `first`, `last`, `count`, `string`,
 	// `symbol`, `vector` and `zero` are all primitives AND all ordinary names for
 	// someone to bind.
+	// A top-level definition shadows one too, for the same reason and in the
+	// same order the machine resolves it: environment (here: enclosing
+	// construct), then program definitions, then the runtime. `symbol` is the
+	// value-position half of this rule; `callable` is the call-position half.
 	if js := e.local_js(s) {
 		return js
+	}
+	if s in e.top {
+		return e.mangle_name(s)
 	}
 	if s in prim_names {
 		return 'blip.${mangle(s)}'

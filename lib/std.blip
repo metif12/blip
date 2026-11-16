@@ -26,6 +26,63 @@
   (assert (err? e) "err-message needs an (err ...) value")
   (get e 1))
 
+;; The Result combinators are ordinary blip. The machine keeps only
+;; construction and observation (`ok`, `err`, `ok?`, `err?`, `ok-value`,
+;; `err-value`); everything that maps over a Result is defined here, so both
+;; engines run the same code. A non-Result passes through `map-result` and
+;; `flatten-result` untouched, exactly as the machine builtins did: only an
+;; `(ok _)` is mapped, only an `(err _)` is an error.
+
+;; map-result turns (ok v) into (ok (f v)) and passes anything else through
+;; untouched -- including an (err _) from f itself, which is returned as is
+;; rather than wrapped.
+(def (map-result r f)
+  (if (ok? r)
+      (let ([v (f (ok-value r))])
+        (if (err? v) v (ok v)))
+      r))
+
+;; unwrap-or takes the value out, or the fallback when there is none. The
+;; parameter is not named `default`: that is a reserved word in JavaScript,
+;; and the emitter compiles this file too.
+(def (unwrap-or r fallback)
+  (if (ok? r) (ok-value r) fallback))
+
+;; flatten-result peels one level: (ok (ok 1)) is (ok 1), and so is
+;; (ok (err 'inner))'s inner. Anything else is already flat.
+(def (flatten-result r)
+  (if (ok? r)
+      (let ([inner (ok-value r)])
+        (if (ok? inner) inner (if (err? inner) inner r)))
+      r))
+
+;; all-results collects every value into a vector, or returns the first
+;; error. The walk is quadratic in the number of results -- vector-append
+;; copies -- which is the price of building a vector without `apply`, and
+;; `apply` does not splice under node the way the machine splices.
+(def (all-results . rs)
+  (all-results-from rs (vector)))
+
+;; all-results-from is the carrying half of all-results, kept under its own
+;; name so the name a program writes stays the name that reads well.
+(def (all-results-from rs acc)
+  (if (null? rs)
+      (ok acc)
+      (let ([first (car rs)])
+        (if (ok? first)
+            (all-results-from (cdr rs) (vector-append acc (vector (ok-value first))))
+            first))))
+
+;; lazy-unwrap runs the thunk only on err: the default is computed nowhere
+;; else, because in a Lisp every argument is evaluated eagerly.
+(def (lazy-unwrap r thunk)
+  (if (ok? r) (ok-value r) (thunk)))
+
+;; lazy-map-result maps over an (ok _) and passes an (err _) straight
+;; through, like map-result. The name states the intent at the call site.
+(def (lazy-map-result r f)
+  (map-result r f))
+
 ;; ---------------------------------------------------------------- parsing
 
 ;; parse-in reads "key: value" and returns (ok key value). It is the smallest

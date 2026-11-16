@@ -144,3 +144,61 @@
 (print (map car report))          ;=> ("the" "end" "quick")
 
 (print "pipelines ok")
+
+;; =====================================================================
+;; result pipelines: every branch asserted
+;; =====================================================================
+;; The combinators are ordinary std definitions (lib/std.blip), so this
+;; section runs the same code on the machine and under node. Each branch
+;; is asserted: ok, err, and miss-falls-through.
+
+(def (half-if-even n)
+  (if (even? n) (ok (/ n 2)) (err 'odd)))
+
+;; `use` binds the ok value and skips the body on err:
+(def (describe n)
+  (use (half-if-even n)
+    (string-append "half is " (number->string half-if-even))))
+
+(describe 8)                     ;=> "half is 4"
+(describe 7)                     ;=> (err odd)
+
+;; map-result over both outcomes; an (err _) from f passes through:
+(map-result (half-if-even 8) (fn [x] (* x 10)))     ;=> (ok 40)
+(map-result (half-if-even 7) (fn [x] (* x 10)))     ;=> (err odd)
+(map-result (half-if-even 8) (fn [x] (err 'nope)))  ;=> (err nope)
+
+(unwrap-or (half-if-even 8) 0)   ;=> 4
+(unwrap-or (half-if-even 7) 0)   ;=> 0
+
+(flatten-result (ok (ok 1)))       ;=> (ok 1)
+(flatten-result (ok (err 'inner))) ;=> (err inner)
+(flatten-result (ok 1))           ;=> (ok 1)
+(flatten-result (err 'outer))     ;=> (err outer)
+
+(all-results (ok 1) (ok 2))       ;=> (ok [1 2])
+(all-results (ok 1) (err 'e))     ;=> (err e)
+(all-results)                     ;=> (ok [])
+
+(lazy-unwrap (ok 1) (fn [] 0))                  ;=> 1
+(lazy-unwrap (err 'e) (fn [] 0))                ;=> 0
+(lazy-map-result (ok 2) (fn [x] (* x 10)))      ;=> (ok 20)
+(lazy-map-result (err 'e) (fn [x] (/ x 0)))     ;=> (err e)
+
+;; the err branch matches, and a miss falls through:
+;; the err branch names the reason, and a miss falls through. Result
+;; constructors cannot discriminate in patterns -- a bare symbol binds --
+;; so the err test reads the predicate, and the miss test uses a shape no
+;; subject can fake: a list pattern never matches a non-list.
+;; a miss falls through. The catch-all binds rather than matches -- a bare
+;; symbol always binds -- so the first clause carries the literal that
+;; misses, exactly like 03_match's `[(5 _) ...]`. (Patterns cannot
+;; discriminate (ok _) from (err _): there is no literal-symbol match, so
+;; the err branch above reads the predicate, not a pattern.)
+(assert (equal? (match* (list (half-if-even 8) 99)
+                  [((ok 100) _) 'worked]
+                  [(_ miss) miss])
+                99)
+  "a match* miss falls through to the next clause")
+
+(print "results ok")

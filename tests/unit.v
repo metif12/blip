@@ -2,6 +2,7 @@ module main
 
 import os
 import blip
+import blip.emit
 import blip.host
 import blip.lsp
 import blip.machine
@@ -833,6 +834,61 @@ fn (mut s Suite) modular_core() {
 // The layout half of self-management is pinned here with a temp BLIP_HOME;
 // the download-and-exec half runs through the CLI in tests/project.v,
 // which builds a second versioned binary and drives the shims for real.
+// ---- the Result combinators are ordinary std, not machine magic ----------
+//
+// D1 moves map-result/unwrap-or/flatten-result/all-results/lazy-unwrap/
+// lazy-map-result into lib/std.blip. Two pins prove the move is real and not
+// a shadowing nobody exercises: the machine resolves `map-result` to the
+// std closure (its source location names std.blip, where a primitive has
+// none), and the emitter emits the std definition and routes calls to it
+// instead of the runtime helper. Rest parameters compile to `...r` (a bare
+// array reads as a blip list on both engines) and misplaced dots refuse.
+fn (mut s Suite) result_combinators_are_ordinary() {
+	h := host.new_capture()
+	mut m := machine.new_standalone(h)
+	// source names the file being evaluated, the way load() sets it: the
+	// closure origins below point at it, which is the whole pin.
+	m.source = 'lib/std.blip'
+	std_src := os.read_file('lib/std.blip') or { '' }
+	m.run_str(std_src) or {
+		s.record('std loads for combinator pins', false, err.msg())
+		return
+	}
+	loc := m.run_str('(source-location map-result)') or { blip.nil_value() }
+	mut fname := ''
+	if loc.tag == .table {
+		if t := loc.as_table() {
+			fname = t.get('file').as_string() or { '' }
+		}
+	}
+	s.record('map-result resolves to the std closure', fname == 'lib/std.blip', fname)
+	// A redefinition wins, which is what makes the std version live rather
+	// than decorative: calls resolve through the environment, not the table.
+	m.run_str('(def (map-result r f) (quote shadowed))') or {}
+	shadowed := m.run_str('(map-result (ok 1) (fn [x] x))') or { blip.nil_value() }
+	s.record('a redefinition shadows the std combinator', printer.write(shadowed) == 'shadowed',
+		printer.write(shadowed))
+	js := emit.compile_program('(map-result (ok 1) (fn [x] x))') or {
+		s.record('emitter compiles map-result', false, err.msg())
+		return
+	}
+	s.record('emitter emits the std definition', js.js.contains('function map_result'),
+		'std def present')
+	s.record('emitter routes calls to the definition', js.js.contains('map_result(')
+		&& !js.js.contains('blip.map_result'), 'bare call, no runtime helper')
+	rest := emit.compile_program('(def (f a . r) r) (f 1 2 3)') or {
+		s.record('emitter compiles rest params', false, err.msg())
+		return
+	}
+	s.record('emitter spreads rest params', rest.js.contains('...r'), '...r emitted')
+	bad := emit.compile_program('(def (f a . r b) r) (f 1 2 3)') or {
+		s.record('emitter refuses a misplaced dot', false, err.msg())
+		return
+	}
+	s.record('emitter refuses a misplaced dot', bad.blocked.join(',').contains('rest'),
+		bad.blocked.str())
+}
+
 fn (mut s Suite) toolchain_pins() {
 	old_home := os.getenv('BLIP_HOME')
 	th := os.join_path(os.vtmp_dir(), 'blip_tc_pins')
@@ -958,6 +1014,7 @@ fn main() {
 	s.modular_core()
 	s.pkg_logic()
 	s.toolchain_pins()
+	s.result_combinators_are_ordinary()
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')

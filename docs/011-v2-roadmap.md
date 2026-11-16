@@ -156,6 +156,16 @@ Order (one PR each, each with an example + asserts, never `;=>`-only):
 
 1. `result`: `map-result`/`unwrap-or`/`flatten`/`all-results`/`lazy_*`
    (names already promised by the tour; move them from examples into std).
+   — **done**: the six combinators are ordinary `lib/std.blip`
+   definitions; the machine keeps only construction and observation
+   (`ok`, `err`, `ok?`, `err?`, `ok-value`, `err-value`), and the emitter
+   prefers program definitions over runtime helpers (with a `remember`
+   pre-pass extended to function names), so both engines run the same
+   code. Rest parameters compile to `...r` (a bare array reads as a blip
+   list); misplaced dots and rest-with-keywords refuse instead of
+   miscompiling. Gate: `05_pipelines` result section asserts ok/err/miss
+   on both engines, `unit` pins the std source-location, the emitter
+   routing, and the rest rules.
 2. `seq`: `map`/`filter`/`fold`/`keep`/`zip`/`enumerate`/`partition`.
 3. `string`: `split`/`trim`/`join`/`starts-with?`/`ends-with?`/`pad`.
 4. `table`: `get-in`/`merge`/`select-keys`/`keys`/`vals`.
