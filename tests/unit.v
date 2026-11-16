@@ -5,6 +5,7 @@ import blip
 import blip.host
 import blip.lsp
 import blip.machine
+import blip.manifest
 import blip.migrate
 import blip.prims
 import blip.printer
@@ -584,6 +585,60 @@ fn (mut s Suite) lsp_api() {
 	os.rm('tmp/lsp_out.txt') or {}
 }
 
+// ---- the blip.mod manifest (roadmap Tracks E/G) --------------------------
+//
+// manifest.parse is the shape gate for the file E2, G1, and G5 share: it
+// parses to exactly the Manifest struct or it fails. Feature names and
+// version strings are validated by their own tracks, not here -- what this
+// pins is that the SHAPE is exact (unknown stanzas, duplicates, and wrong
+// shapes all error) and that capabilities default ON when absent.
+fn (mut s Suite) manifest() {
+	m := manifest.parse('(module myapp)\n(blip 2)') or {
+		s.record('manifest minimal parses', false, err.msg())
+		return
+	}
+	s.record('manifest minimal parses', m.name == 'myapp' && m.blip_version == 2, m.name)
+	s.record('manifest features default on', m.feature('fibers') && m.feature('anything'),
+		'absent means on')
+	s.record('manifest deps default empty', m.deps.len == 0, 'no deps')
+	s.record('manifest workspace default empty', m.workspace.len == 0, 'no members')
+	full := manifest.parse('(module shop)\n(blip 2)\n(features (fibers #f) (network #t))\n(deps (acme/db "1.2.3") (acme/log ">=0.9"))\n(workspace (members shop web))') or {
+		s.record('manifest full parses', false, err.msg())
+		return
+	}
+	s.record('manifest full parses', full.name == 'shop', full.name)
+	s.record('manifest feature off reads off', !full.feature('fibers'), 'fibers #f')
+	s.record('manifest feature on reads on', full.feature('network'), 'network #t')
+	s.record('manifest absent still defaults on', full.feature('threads'), 'threads absent')
+	s.record('manifest deps read in order', full.deps.len == 2 && full.deps[0].name == 'acme/db'
+		&& full.deps[0].req == '1.2.3' && full.deps[1].req == '>=0.9', '${full.deps.len} deps')
+	s.record('manifest workspace reads members', full.workspace == ['shop', 'web'],
+		full.workspace.str())
+	for c in [
+		'(blip 2)',
+		'(module myapp)',
+		'(module myapp)\n(blip 1)',
+		'(module myapp)\n(blip 2)\n(blip 2)',
+		'(module myapp)\n(module other)\n(blip 2)',
+		'(module myapp)\n(blip 2)\n(features fibers)',
+		'(module myapp)\n(blip 2)\n(features (fibers))',
+		'(module myapp)\n(blip 2)\n(features (fibers #f) (fibers #t))',
+		'(module myapp)\n(blip 2)\n(deps acme/db)',
+		'(module myapp)\n(blip 2)\n(deps (acme/db))',
+		'(module myapp)\n(blip 2)\n(workspace a b)',
+		'(module myapp)\n(blip 2)\n(workspace (paths a b))',
+		'(module myapp)\n(blip 2)\n(version 3)',
+		'(module myapp)\n(blip 2',
+		'(module 7)\n(blip 2)',
+	] {
+		manifest.parse(c) or {
+			s.record('manifest rejects shape', true, 'rejected: ${err.msg()}')
+			continue
+		}
+		s.record('manifest rejects shape', false, 'accepted: ${c}')
+	}
+}
+
 // ---- the stock toolchain, synced everywhere -------------------------------
 //
 // install_pins is the gate for the toolchain decision. blip builds against
@@ -665,6 +720,7 @@ fn main() {
 	s.repl_api()
 	s.error_format()
 	s.lsp_api()
+	s.manifest()
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')
