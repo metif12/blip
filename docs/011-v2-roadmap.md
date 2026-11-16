@@ -201,6 +201,110 @@ For v2:
   (alias recipe), unless a gate proves separate semantics are needed.
   Nested `;=>` stays opt-in before any default flip.
 
+## Track E — embedder surface (agreed)
+
+Track B1 covers *running* blip embedded. This track covers *seeing into
+and reshaping* it: reading the AST and inner data, switching features off,
+and composing the implementation from modules. All three share one
+`blip.mod` manifest format, specced once (below) and implemented separately.
+
+### The manifest (specced once, E2/G1/G5 share it)
+
+`blip.mod` is blip data, parsed with the ordinary reader. v1 stanzas:
+
+```blip
+(module myapp)              ; required: the module name
+(blip 2)                    ; required: the manifest/toolchain version
+(features (fibers #f))      ; optional: capability switches, default on
+(deps (owner/repo "1.2.3")) ; optional: version requirements (G1)
+(workspace (members a b))   ; optional: local members (G5)
+```
+
+Rules: unknown stanzas are errors (a manifest must be exact; typos must
+fail, not silently pass). `features` names are validated when the
+capability exists (E2); version strings are validated on resolution (G1).
+`blip.manifest` parses and validates; nothing evaluates the manifest.
+
+### E1. AST and inner data are readable and rewritable by embedders
+
+The pieces exist (`reader.read_all` + arenas, `value_to_datum`, the
+span-anchored rewrites in `blip.migrate`) but there is no declared API
+boundary: embedders reach into internals that A3 core-shrink may move.
+E1 declares it — what is stable `pub` vs internal — and freezes the
+reader/arena/datum surface. v2 scope is pre-eval read/rewrite (parse,
+inspect, rewrite, evaluate); live machine-state mutation (envs,
+continuations) is a follow-up, not a promise. Gate: a fixture that uses
+only the public API to parse, inspect, and rewrite a form before
+evaluation, plus an `api_coverage` rule that fails when a new `pub`
+item has no stability note.
+
+### E2. Features configurable via `blip.mod`
+
+`restrict_to` already lets embedders drop prim groups; E2 extends that
+mechanism to named capabilities instead of inventing a second one. v2
+scope is the mechanism plus two switches (fibers once B4 lands, and
+FS/network prims); the full switch list grows with the capabilities.
+Using a disabled feature is a clean error, and `blip check`
+understands the manifest. Precedence: manifest < embedder code (an
+embedder's explicit `restrict_to` wins over the file). Gate: a fixture
+manifest with a capability off, asserting the clean error on use and a
+`check` diagnostic naming the manifest line.
+
+### E3. Modular core
+
+Concrete definition or it is un-gateable: prim groups registered per
+module behind the existing `Host`-style seams, so a minimal core (no
+IO/FFI) builds and passes a subset gate. No new plugin ABI in v2; the
+gate is the subset run, not a diagram.
+
+## Track F — release packaging (agreed, incremental)
+
+`release.yml` today ships a linux tarball, a windows zip, the site, and
+the C-library dist. v2 adds formats one at a time, each gated the same
+way: CI produces the artifact AND a smoke step runs it (`blip version`
+minimum, plus the `clib_smoke` marker where a library ships). v2
+must-haves are the current set plus DEB and MSI; RPM, Snap, Flatpak,
+AppImage, DMG, and the rest follow as their gates clear, each in its
+own change. Signing/notarization (DMG, MSI) is called out now because
+it is the known blocker, not because v2 promises it.
+
+## Track G — packages, tools, workspaces (agreed, registry later)
+
+Grows the `blip pkg` seed (`install`/`list`/`remove` + `blip.lock` +
+`blip_modules/`) into real package and tool management. Git-addressed
+packages suffice for v2; a central registry/index is a follow-up.
+
+1. **G1 version resolution.** `blip.mod` declares requirements, `pkg
+   update` resolves and re-pins `blip.lock` deterministically. Gate: a
+   fixture with two conflicting requirements resolving to one pin.
+2. **G2 verified installs.** Checksums in the lockfile, verified on
+   install; a tampered package fails loudly. Gate: a tampered-package
+   fixture failing install with a checksum error.
+3. **G3 tool installs.** `blip install <package>` puts a runnable on
+   PATH (today `pkg` only yields importable libraries). Gate: install a
+   fixture tool, run it from PATH in CI.
+4. **G4 toolchain self-management.** blip installs and manages itself:
+   version switching and virtualenv-style isolation via `blip pkg`
+   (per-project pins, shims resolving to the pinned version). Needs a
+   layout decision (where versions live, how shims resolve); can start
+   against the current release layout and grow with Track F. Gate: two
+   blip versions side by side, per-project pin, `blip version`
+   reporting the right one in each directory.
+5. **G5 monorepo / workspace / collaboration.** Multi-package repos with
+   one lockfile (`workspace` stanza), path overrides for local
+   development, reproducible clean-room `pkg install` for teammates.
+   Gate: a fixture workspace (two local members + one remote pin)
+   reproducing from scratch.
+6. **G6 project lifecycle.** Review/extend `blip new`, add `blip init`
+   for scaffolding inside an existing directory. Gate: both produce a
+   project whose `run`/`test` pass immediately.
+7. **G7 introspection.** `blip env` (go-style: paths, versions,
+   toolchain, active workspace) and `blip pkg why <package>` (who
+   depends on it). Gate: golden-output fixtures.
+
+Deliberately out of v2: a `scripts` stanza (`.blip` files already run;
+it would duplicate them).
+
 ## Order of work (agreed)
 
 1. Track C continuously (no version gate).
@@ -211,6 +315,13 @@ For v2:
    tooling, fibers, PEG-as-data), each behind a flag until green, plus
    exhaustiveness / numeric tower / modules-as-data to the extent their
    gates clear.
+5. Track E boundary first (E1 public-API line, then the shared manifest
+   spec), because A3, E2, G1, and G5 all touch or depend on it; then E2
+   mechanism + G1/G2/G5 (collaboration core); G3/G6/G7 are small and
+   independent in any order; E3 subset gate when the seams exist.
+6. Track G4 once Track F artifacts are mature enough to install from
+   (starts against the current release layout).
+7. Track F formats incrementally throughout, DEB and MSI first.
 
 ## Open questions (not promises)
 
@@ -219,3 +330,6 @@ For v2:
 - `(p.x := 5)` field syntax: macro or core?
 - `Value` width (`int` vs `i64`) on 32-bit targets and tower promotion.
 - `Program` IR peak memory with per-stage arenas (unmeasured).
+- E2 switch list: which capabilities get flags beyond fibers and FS/network?
+- G4 layout: where do installed blip versions live, how do shims resolve?
+- E1 live mutation (envs, continuations): in a later version, not v2.
