@@ -132,7 +132,7 @@
 ;; value has to land in the FIRST slot, and `->>` puts it in the last.
 (define (top-words text n)
   (-> (->> (string-split text " ")
-           (keep string-not-blank?)
+           (filter string-not-blank?)
            (map string-downcase)
            (frequencies)
            (sort-by (fn (e) (- (get e 1)))))

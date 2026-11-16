@@ -32,7 +32,7 @@
       (let header (header-row lines)
         (map (fn [line]
                (row->table header (split-line line)))
-             (rest lines))))))
+             (cdr lines))))))
 
 ;; ---------------------------------------------------------------- demo
 (let sample "name,age,city\nalice,30,paris\nbob,25,\n"

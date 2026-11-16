@@ -1773,6 +1773,20 @@ fn (mut e Emitter) application(id reader.NodeId, kids []reader.NodeId) string {
 			e.refuse(head.value)
 			return 'null'
 		}
+		// Removed prims (v2 roadmap A2): refuse with the migration, not as
+		// an unknown call. `keep` duplicated `filter`; `first`/`rest`
+		// duplicated `car`/`cdr`.
+		if head.value == 'first' || head.value == 'rest' || head.value == 'keep' {
+			removed := if head.value == 'first' {
+				'`first` was removed in v2; use `car`'
+			} else if head.value == 'rest' {
+				'`rest` was removed in v2; use `cdr`'
+			} else {
+				'`keep` was removed in v2; use `filter`'
+			}
+			e.refuse(removed)
+			return 'null'
+		}
 	}
 	callee := if head.tag == .sym { e.callable(head.value) } else { e.value(kids[0]) }
 	// An argument's value is CONSUMED by the call, so it is never in tail

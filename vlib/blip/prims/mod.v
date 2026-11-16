@@ -86,8 +86,12 @@ pub fn table() map[string]blip.PrimFn {
 	p['list-ref'] = prim_list_ref
 	p['take'] = prim_take
 	p['drop'] = prim_drop
-	p['first'] = prim_car
-	p['rest'] = prim_cdr
+	p['first'] = fn (args []blip.Value) !blip.Value {
+		return error('`first` was removed in v2; use `car`')
+	}
+	p['rest'] = fn (args []blip.Value) !blip.Value {
+		return error('`rest` was removed in v2; use `cdr`')
+	}
 	p['last'] = prim_last
 	p['not='] = prim_not_eq
 	p['eq?'] = prim_eqp

@@ -16,7 +16,7 @@
                   (not (string-blank? (list-ref lines 1))))
              (err 'missing-blank-line)]
             [else
-             (let bad (filter (fn [l] (not (line-ok? l))) (rest (rest lines)))
+             (let bad (filter (fn [l] (not (line-ok? l))) (cdr (cdr lines)))
                (if (= (length bad) 0)
                  (ok nil)
                  (err 'line-too-long)))]))))

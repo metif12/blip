@@ -1781,8 +1781,13 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 		// interpreter from there. That is the price of keeping prims and the
 		// machine independent, and it is paid in one place rather than by giving
 		// prims a machine reference.
-		'map', 'filter', 'reject', 'keep', 'for-each', 'vector-map' {
+		'map', 'filter', 'reject', 'for-each', 'vector-map' {
 			return m.hof(name, args)
+		}
+		'keep' {
+			// Removed in v2 (roadmap A2): `keep` duplicated `filter`.
+			// Recipe if you miss it: (define keep filter).
+			return error('`keep` was removed in v2; use `filter`')
 		}
 		'fold', 'reduce' {
 			return m.fold(name, args)
