@@ -26,11 +26,11 @@ fn check(label string, src string, want string) {
 
 fn main() {
 	check('loop-never', '(loop i 0 #f 7)', 'nil')
-	check('loop-sum', '(define s 0)(loop i 0 (< i 5) (set! s (+ s i))) s', '10')
-	check('loop-outer-set', '(define s 0)(loop i 0 (< i 5) (set! s (+ s i))) s', '10')
-	check('loop-big', '(define s 0)(loop i 0 (< i 20000) (set! s (+ s i))) s', '199990000')
-	check('dotimes', '(define s 0)(dotimes i 5 (set! s (+ s i))) s', '10')
+	check('loop-sum', '(def s 0)(loop i 0 (< i 5) (set! s (+ s i))) s', '10')
+	check('loop-outer-set', '(def s 0)(loop i 0 (< i 5) (set! s (+ s i))) s', '10')
+	check('loop-big', '(def s 0)(loop i 0 (< i 20000) (set! s (+ s i))) s', '199990000')
+	check('dotimes', '(def s 0)(dotimes i 5 (set! s (+ s i))) s', '10')
 	check('letrec', '(letrec ([e (fn [n] (if (= n 0) #t (o (- n 1))))] [o (fn [n] (if (= n 0) #f (e (- n 1))))]) (e 10))', '#t')
 	check('letrec-shadow', '(letrec ([x 1]) (let ([x 2]) x))', '2')
-	check('letrec-no-leak', '(define x 9)(letrec ([x 1]) x)', '1')
+	check('letrec-no-leak', '(def x 9)(letrec ([x 1]) x)', '1')
 }

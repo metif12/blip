@@ -132,7 +132,7 @@ fn main() {
 	// resolved in the enclosing scope. With a global `a` present the old code
 	// silently read THAT value instead of failing, which is worse.
 	s.check('let* does not read the global',
-		'(define a 99) (let* ([a 1] [b (+ a 1)]) (+ a b))', '3')
+		'(def a 99) (let* ([a 1] [b (+ a 1)]) (+ a b))', '3')
 	s.check('let* body sees every binding',
 		'(let* ([a 1] [b 2] [c 3]) (+ a b c))', '6')
 
@@ -162,28 +162,28 @@ fn main() {
 	// letrec, which defined the names globally as a side effect.
 	s.check('let does not leak', '(let ([leaky 1]) leaky) 1', '1')
 	s.check('a let binding shadows rather than overwrites a global',
-		'(define g1 0) (let ([g1 1]) g1) g1', '0')
+		'(def g1 0) (let ([g1 1]) g1) g1', '0')
 	s.check_err('let binding is gone', '(let ([leaky 1]) leaky) leaky', 'unbound identifier: leaky')
 	s.check_err('let* binding is gone', '(let* ([leaky 1]) leaky) leaky', 'unbound identifier: leaky')
 	s.check_err('letrec binding is gone', '(letrec ([leaky 1]) leaky) leaky', 'unbound identifier: leaky')
 	// The global `g1` defined above must still be 0, not 1.
-	s.check('let did not overwrite a global', '(define g1 0) (let ([g1 1]) g1) g1', '0')
+	s.check('let did not overwrite a global', '(def g1 0) (let ([g1 1]) g1) g1', '0')
 
 	// ---- shadowing ----------------------------------------------------
-	s.check('shadow inside let', '(define x 1) (let ([x 2]) x) x', '1')
-	s.check('shadow inside let*', '(define x 1) (let* ([x 2]) x) x', '1')
+	s.check('shadow inside let', '(def x 1) (let ([x 2]) x) x', '1')
+	s.check('shadow inside let*', '(def x 1) (let* ([x 2]) x) x', '1')
 	s.check('shadow is restored after a call',
-		'(define x 1) (define (f) 99) (let ([x 2]) (f)) x', '1')
+		'(def x 1) (def (f) 99) (let ([x 2]) (f)) x', '1')
 	s.check('inner let shadows outer let',
 		'(let ([a 1]) (let ([a 2]) (let ([a 3]) a)) a)', '1')
 	s.check('closure captures lexically, not dynamically',
-		'(define x 1) (define (f) x) (let ([x 2]) (f))', '1')
+		'(def x 1) (def (f) x) (let ([x 2]) (f))', '1')
 	// A closure created inside a let keeps that let alive.
 	s.check('closure keeps its captured binding',
-		'(define (mk) (let ([n 41]) (fn [] (+ n 1)))) (define g (mk)) (g)', '42')
+		'(def (mk) (let ([n 41]) (fn [] (+ n 1)))) (def g (mk)) (g)', '42')
 	// A parameter shadows a global, and the global is untouched.
 	s.check('parameter shadows a global',
-		'(define car 5) (define (f car) car) (+ (f 1) car)', '6')
+		'(def car 5) (def (f car) car) (+ (f 1) car)', '6')
 	// A binding can shadow a primitive name; the primitive is still reachable
 	// outside it.
 	s.check('let shadows a primitive', '(let ([car 5]) car) (car (list 7 8))', '7')
@@ -192,29 +192,29 @@ fn main() {
 	// every tail-call test is blind to and which silently corrupts sibling
 	// arguments when broken.
 	s.check('sibling arguments keep their own scope',
-		'(define (f a) 0) (let ([a 1] [b 2]) (+ (f a) b))', '2')
+		'(def (f a) 0) (let ([a 1] [b 2]) (+ (f a) b))', '2')
 	s.check('sibling arguments in a begin keep their own scope',
-		'(define (g x) 0) (+ (let ([y 1]) (g y)) (let ([y 5]) y))', '5')
+		'(def (g x) 0) (+ (let ([y 1]) (g y)) (let ([y 5]) y))', '5')
 
 	// ---- rest parameters -----------------------------------------------
-	s.check('rest collects', '(define (f a . r) r) (f 1 2 3)', '(2 3)')
-	s.check('rest may be empty', '(define (f a . r) r) (f 1)', '()')
-	s.check('rest alone', '(define (f . r) r) (f 1 2 3)', '(1 2 3)')
+	s.check('rest collects', '(def (f a . r) r) (f 1 2 3)', '(2 3)')
+	s.check('rest may be empty', '(def (f a . r) r) (f 1)', '()')
+	s.check('rest alone', '(def (f . r) r) (f 1 2 3)', '(1 2 3)')
 	s.check('rest in a lambda', '((fn [a . r] r) 1 2 3)', '(2 3)')
 	s.check('rest in a let-bound lambda', '(let ([f (fn (a . r) (list a r))]) (f 1 2 3))', '(1 (2 3))')
 	// `λ` was removed in v2 with `lambda` (roadmap A2): same form, same
 	// implementation, and the canonical spelling is `fn`.
 	s.check_err('λ removed', '((λ [x] (* x x)) 7)', 'removed in v2')
 	// The rest list is a real list, so it composes with the rest of the library.
-	s.check('rest is a list', '(define (f . r) (cdr r)) (f 1 2 3)', '(2 3)')
+	s.check('rest is a list', '(def (f . r) (cdr r)) (f 1 2 3)', '(2 3)')
 	// `rest` is an ordinary name unless a dot introduces it. A magic-name
 	// implementation makes this function silently variadic.
-	s.check('rest as a plain name', '(define (g rest) rest) (g 7)', '7')
-	s.check_err('rest as a plain name is still fixed-arity', '(define (g rest) rest) (g 7 8)', 'expected 1 argument')
-	s.check_err('too few arguments for a rest function', '(define (f a b . r) r) (f 1)', 'expected at least 2')
-	s.check_err('duplicate parameter', '(define (f a a) a)', 'named twice')
-	s.check_err('dot must be last', '(define (f a . b c) b)', 'last parameter')
-	s.check_err('non-symbol parameter', '(define (f 1) f)', 'not a name')
+	s.check('rest as a plain name', '(def (g rest) rest) (g 7)', '7')
+	s.check_err('rest as a plain name is still fixed-arity', '(def (g rest) rest) (g 7 8)', 'expected 1 argument')
+	s.check_err('too few arguments for a rest function', '(def (f a b . r) r) (f 1)', 'expected at least 2')
+	s.check_err('duplicate parameter', '(def (f a a) a)', 'named twice')
+	s.check_err('dot must be last', '(def (f a . b c) b)', 'last parameter')
+	s.check_err('non-symbol parameter', '(def (f 1) f)', 'not a name')
 
 	// ---- defined? ------------------------------------------------------
 	// `(defined? name)` asks whether the machine would RESOLVE name where the
@@ -223,19 +223,19 @@ fn main() {
 	// what turns "is this defined?" into "unbound identifier: name", and a
 	// primitive never sees the machine's environment to look it up.
 	s.check('defined? of an unbound name', '(defined? no-such-name)', '#f')
-	s.check('defined? of a global', '(define d1 1) (defined? d1)', '#t')
-	s.check('defined? of a function', '(define (d2) 1) (defined? d2)', '#t')
+	s.check('defined? of a global', '(def d1 1) (defined? d1)', '#t')
+	s.check('defined? of a function', '(def (d2) 1) (defined? d2)', '#t')
 	s.check('defined? of a primitive', '(defined? car)', '#t')
-	s.check('defined? accepts the reader-tagged quote', "(define d3 1) (defined? 'd3)", '#t')
-	s.check('defined? accepts (quote name)', '(define d3b 1) (defined? (quote d3b))', '#t')
+	s.check('defined? accepts the reader-tagged quote', "(def d3 1) (defined? 'd3)", '#t')
+	s.check('defined? accepts (quote name)', '(def d3b 1) (defined? (quote d3b))', '#t')
 	s.check('defined? inside let sees the binding', '(let ([d4 1]) (defined? d4))', '#t')
 	// The second form is the one that does the asserting: the let frame is gone,
 	// so the same question at the top level answers #f.
 	s.check('defined? is scope-sensitive', '(let ([d5 1]) (defined? d5)) (defined? d5)', '#f')
 	s.check('defined? sees a let binding that shadows a global',
-		'(define d6 1) (let ([d6 2]) (defined? d6))', '#t')
+		'(def d6 1) (let ([d6 2]) (defined? d6))', '#t')
 	s.check('defined? of a let-bound parameter sits inside the function',
-		'(define (f d7) (defined? d7)) (f 9)', '#t')
+		'(def (f d7) (defined? d7)) (f 9)', '#t')
 	s.check_err('defined? without a name', '(defined?)', 'one name')
 	s.check_err('defined? of a non-symbol', '(defined? 1)', 'symbol name')
 
@@ -243,16 +243,16 @@ fn main() {
 	// Every binding form has to leave the closing form in tail position, or the
 	// loop below stops being a loop. kont=0 is asserted by `check`.
 	s.check('loop in a let body',
-		'(define (cd n acc) (if (= n 0) acc (let ([m (- n 1)]) (cd m (+ acc 1)))))
+		'(def (cd n acc) (if (= n 0) acc (let ([m (- n 1)]) (cd m (+ acc 1)))))
 		 (cd 100000 0)', '100000')
 	s.check('loop in a let* body',
-		'(define (cd n acc) (if (= n 0) acc (let* ([m (- n 1)]) (cd m (+ acc 1)))))
+		'(def (cd n acc) (if (= n 0) acc (let* ([m (- n 1)]) (cd m (+ acc 1)))))
 		 (cd 50000 0)', '50000')
 	s.check('loop in a letrec body',
-		'(define (cd n acc) (if (= n 0) acc (letrec ([m (- n 1)]) (cd m (+ acc 1)))))
+		'(def (cd n acc) (if (= n 0) acc (letrec ([m (- n 1)]) (cd m (+ acc 1)))))
 		 (cd 50000 0)', '50000')
 	s.check('loop with a rest function',
-		'(define (cd n . r) (if (= n 0) (car r) (cd (- n 1) (+ (car r) 1))))
+		'(def (cd n . r) (if (= n 0) (car r) (cd (- n 1) (+ (car r) 1))))
 		 (cd 100000 0)', '100000')
 
 	// ---- other binding-form failures are errors, not panics -------------
@@ -278,9 +278,9 @@ fn main() {
 		'(let iter ((xs (list 1 2 3)) (out (list))) (if (null? xs) (reverse out) (iter (cdr xs) (cons (* 2 (car xs)) out))))',
 		'(2 4 6)')
 	s.check('named let inits see the outer scope, not each other',
-		'(define i 10) (let lp ((i 0) (j i)) j)', '10')
+		'(def i 10) (let lp ((i 0) (j i)) j)', '10')
 	s.check('named let inits do not see the loop name',
-		'(define (lp x) 99) (let lp ((n (lp 0))) n)', '99')
+		'(def (lp x) 99) (let lp ((n (lp 0))) n)', '99')
 	s.check('named let is a tail call', '(let lp ((i 0)) (if (= i 100000) (quote done) (lp (+ i 1))))',
 		'done')
 	s.check('shorthand let still binds one value', '(let x (+ 1 2) (* x 2))', '6')

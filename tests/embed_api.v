@@ -72,7 +72,7 @@ fn main() {
 	} else {
 		s.ok('embed define+lookup', '7')
 	}
-	e.eval('(define (quad x) (* 4 x))') or {
+	e.eval('(def (quad x) (* 4 x))') or {
 		s.fail('embed setup quad', err.msg())
 		return
 	}
@@ -269,7 +269,7 @@ fn main() {
 	// Config constructors: file + none + reload.
 	{
 		h3 := host.new_capture()
-		h3.give_file('pre.lip', '(define preloaded 99)')
+		h3.give_file('pre.lip', '(def preloaded 99)')
 		mut cfge := embed.new_with_config(h3, embed.Config{
 			prelude: .none
 		}) or {
@@ -306,7 +306,7 @@ fn main() {
 	}
 	{
 		h4 := host.new_capture()
-		h4.give_file('lib/std.lip', '(define std-marker 1)')
+		h4.give_file('lib/std.lip', '(def std-marker 1)')
 		mut file_e := embed.new_with_config(h4, embed.Config{
 			prelude:      .file
 			prelude_path: 'lib/std.lip'

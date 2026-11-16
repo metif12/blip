@@ -17,12 +17,12 @@ fn main() {
 	mut m := machine.new_standalone(h)
 
 	// The machine API takes whole-source strings: defines in source one.
-	m.run_str('(define x 42)') or {
+	m.run_str('(def x 42)') or {
 		println('FAIL run first source: ${err.msg()}')
 		exit(1)
 	}
 	// ...and one defined BETWEEN sources, as an interactive session would.
-	m.run_str('(define between "defined after source one")') or {
+	m.run_str('(def between "defined after source one")') or {
 		println('FAIL define between sources: ${err.msg()}')
 		exit(1)
 	}

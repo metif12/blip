@@ -16,9 +16,9 @@
 (require (only-in "lib/text.blip" greeting DEFAULT-GREETING))
 (require "lib/text.blip")            ; whole module, unprefixed
 
-(define DEFAULT-GREETING "Hello")
+(def DEFAULT-GREETING "Hello")
 
-(define (greeting name)
+(def (greeting name)
   (format "~a, ~a." DEFAULT-GREETING name))
 
 ;; --- resolution is file-relative ---

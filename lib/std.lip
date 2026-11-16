@@ -17,12 +17,12 @@
 
 ;; ---------------------------------------------------------------- results
 
-(define (identity x) x)
+(def (identity x) x)
 
 ;; err-message reads the message out of an `(err msg)` value. `raise` builds one
 ;; and `try`'s #:catch matches against it, so this is how a handler reads what
 ;; went wrong.
-(define (err-message e)
+(def (err-message e)
   (assert (err? e) "err-message needs an (err ...) value")
   (get e 1))
 
@@ -30,7 +30,7 @@
 
 ;; parse-in reads "key: value" and returns (ok key value). It is the smallest
 ;; honest demonstration of a multi-value Result, which is what `use` exists for.
-(define (parse-in text)
+(def (parse-in text)
   ;; `assert`, not `let assert`. `let assert [PATTERN VALUE] body` matches a
   ;; PATTERN against a VALUE, and `(string? text)` binds `text` from the subject
   ;; rather than testing the parameter -- so it never tests anything and the body
@@ -45,13 +45,13 @@
 
 ;; lookup-sym finds a name in a small table of symbols. `nil` means absent, which
 ;; is what match* wants to tell apart from a found-and-wrong value.
-(define (lookup-sym name)
+(def (lookup-sym name)
   (cond [(equal? name 'alpha) (ok 'alpha)]
         [(equal? name 'beta) (ok 'beta)]
         [else nil]))
 
 ;; validate says whether a looked-up symbol is usable.
-(define (validate name)
+(def (validate name)
   (cond [(equal? name 'alpha) (ok nil)]
         [(equal? name 'beta) (err 'unknown-symbol)]
         [else (err 'unknown-symbol)]))
@@ -61,24 +61,24 @@
 ;; A connection is a table, so a test can build one by hand and a program can
 ;; inspect one. A struct would be better once modules can hide constructors; a
 ;; table is honest about how little this is.
-(define (connect target)
+(def (connect target)
   (cond [(string-not-blank? target) (ok {:host target :session nil})]
         [else (err 'bad-target)]))
 
-(define (authenticate conn :user [user "anonymous"] :pass [pass ""])
+(def (authenticate conn :user [user "anonymous"] :pass [pass ""])
   (cond [(equal? user "anonymous") (err 'no-credentials)]
         [(not (equal? pass "s3cret")) (err 'bad-password)]
         [else (ok conn)]))
 
-(define (open-transaction conn)
+(def (open-transaction conn)
   (cond [(nil? (get conn :session)) (err 'not-authenticated)]
         [else (ok conn)]))
 
-(define (execute conn sql)
+(def (execute conn sql)
   (cond [(nil? (get conn :session)) (err 'not-authenticated)]
         [else (ok sql)]))
 
-(define (commit conn)
+(def (commit conn)
   (cond [(nil? (get conn :session)) (err 'not-authenticated)]
         [else (ok 'committed)]))
 
@@ -89,12 +89,12 @@
 ;; is an iteration over src's indexes -- which is all this wrapper is, walking
 ;; the indexes with a tail call rather than a `loop` form, because the prelude is
 ;; also compiled by the JS emitter and a `loop` there is refused by name.
-(define (array-append! dst src)
+(def (array-append! dst src)
   (array-append!-from dst src 0))
 
 ;; The index-carrying half of `array-append!`, kept under its own name so the
 ;; name a program writes stays the name that reads well at the call site.
-(define (array-append!-from dst src i)
+(def (array-append!-from dst src i)
   (cond [(= i (array-length src)) dst]
         [else (array-push! dst (array-ref src i))
               (array-append!-from dst src (+ i 1))]))

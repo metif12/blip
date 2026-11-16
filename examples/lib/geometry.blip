@@ -7,9 +7,9 @@
 
 (struct Point (x y))
 
-(define (distance a b)
+(def (distance a b)
   (sqrt (+ (* (- (point-x a) (point-x b)) (- (point-x a) (point-x b)))
          (* (- (point-y a) (point-y b)) (- (point-y a) (point-y b))))))
 
-(define (area r)
+(def (area r)
   (* 3.14159265358979 r r))

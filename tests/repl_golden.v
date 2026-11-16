@@ -86,7 +86,7 @@ fn main() {
 // ---- in-process checks -------------------------------------------------
 
 fn (mut s Suite) definitions_persist_between_lines() bool {
-	lines := ['(define x 41)', '(define (f) (+ x 1))', '(f)']
+	lines := ['(def x 41)', '(def (f) (+ x 1))', '(f)']
 	h := host.new_capture()
 	mut r := repl.new(h)
 	r.run_lines(lines)
@@ -96,7 +96,7 @@ fn (mut s Suite) definitions_persist_between_lines() bool {
 }
 
 fn (mut s Suite) an_unfinished_form_is_not_an_error() bool {
-	lines := ['(define (sq x)', '  (* x x))', '(sq 7)']
+	lines := ['(def (sq x)', '  (* x x))', '(sq 7)']
 	h := host.new_capture()
 	mut r := repl.new(h)
 	r.run_lines(lines)
@@ -122,7 +122,7 @@ fn (mut s Suite) an_unfinished_string_is_not_an_error() bool {
 fn (mut s Suite) a_bad_form_does_not_end_the_session() bool {
 	h := host.new_capture()
 	mut r := repl.new(h)
-	r.run_lines(['(car 1)', '(define fine 1)', 'fine'])
+	r.run_lines(['(car 1)', '(def fine 1)', 'fine'])
 	got := h.lines().join('|')
 	want := 'error: car: car expects a pair, got 1|fine|1'
 	return s.passed('a bad form does not end the session', got == want,
@@ -136,7 +136,7 @@ fn (mut s Suite) a_read_error_does_not_end_the_session() bool {
 	// session must report it rather than sit waiting for a bracket that is never
 	// coming -- which is why is_open() uses a depth scan and not the reader's
 	// `incomplete` diagnostic.
-	r.run_lines([')', '(define fine 2)', 'fine'])
+	r.run_lines([')', '(def fine 2)', 'fine'])
 	got := h.lines().join('|')
 	ok := got.ends_with('|fine|2')
 	return s.passed('a read error does not end the session', ok,
@@ -146,8 +146,8 @@ fn (mut s Suite) a_read_error_does_not_end_the_session() bool {
 fn (mut s Suite) load_and_reload_use_the_running_machine() bool {
 	h := host.new_capture()
 	mut r := repl.new(h)
-	h.give_file('lib.vl', '(define from-file 10)\n(define (twice n) (* 2 n))')
-	r.run_lines(['(define before 1)', ',l lib.vl', '(twice from-file)', 'before', ',r'])
+	h.give_file('lib.vl', '(def from-file 10)\n(def (twice n) (* 2 n))')
+	r.run_lines(['(def before 1)', ',l lib.vl', '(twice from-file)', 'before', ',r'])
 	got := h.lines().join('|')
 	want := 'before|loaded lib.vl|20|1|loaded lib.vl'
 	return s.passed('load and reload use the running machine', got == want,
@@ -175,7 +175,7 @@ fn (mut s Suite) quit_stops_reading() bool {
 fn (mut s Suite) the_prompt_shows_the_depth() bool {
 	cases := [
 		['(+ 1 2)', 'blip:1> '],
-		['(define (f x)', 'blip:2> '],
+		['(def (f x)', 'blip:2> '],
 		['(+ 1', 'blip:2> '],
 		['(print "a string', 'blip:2> '],
 		['"a string', 'blip"> '],
@@ -213,7 +213,7 @@ fn (mut s Suite) golden_stdin_to_stdout() bool {
 	// recovery, a failed load, and a quit. `,l no-such-file.vl` is here to prove
 	// that a FAILED load does not end the session either.
 	input := [
-		'(define (greet name)',
+		'(def (greet name)',
 		'  (format "hello, ~a" name))',
 		'(greet "world")',
 		'(car 1)',

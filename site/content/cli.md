@@ -8,7 +8,7 @@ Everything the `blip` command does, on one page. Run `blip help &lt;command&gt;`
 
 ```
 $ blip
-blip:1> (define (double x) (* x 2))
+blip:1> (def (double x) (* x 2))
 blip:1> (double 21)
 42
 ```

@@ -119,13 +119,13 @@
 (let ([(list h t) '(1 2)]) (+ h t))     ;=> 3
 (let ([{:kind k} {:kind :dog}]) k)      ;=> :dog
 
-(define (dist (struct Point x: px y: py))
+(def (dist (struct Point x: px y: py))
   (sqrt (+ (* px px) (* py py))))
 
 (dist (Point 3 4))                      ;=> 5
 
 ;; --- match on results, which is the everyday case ---
-(define (safe-div a b)
+(def (safe-div a b)
   (if (= b 0)
       (err 'divide-by-zero)
       (ok (/ a b))))

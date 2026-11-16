@@ -60,6 +60,7 @@ usage:
   blip lint [file]          check a commit message (default COMMIT_EDITMSG)
   blip vet [file]           same as lint, the linter hook
   blip lsp                  serve the language server over stdio
+  blip migrate [--check] <file|dir>  rewrite v1 spellings to v2 (`def`, `fn`, `begin`...)
   blip new <name>           scaffold a project
   blip pkg install <repo>   install a package from GitHub
   blip pkg list             list installed packages
@@ -107,7 +108,7 @@ mismatch is reported with the line, the value and the expectation. Only
 top-level forms are checked: a ;=> nested inside a body is documentation,
 not a test.
 
-  (define (double x) (* 2 x))
+  (def (double x) (* 2 x))
   (double 21)   ;=> 42
 
 Exit status is 0 when every expectation held and 1 when any did not, so this
@@ -117,7 +118,7 @@ works as a test gate from CI. Files without expectations are merely run.')
 			println('blip check <file.lip> ... -- report mismatches without running
 
 The static checker for erased annotations (M10). Functions defined with
-annotated `define` -- (define (add (x int) (y int)) int ...) -- have their
+annotated `def` -- (def (add (x int) (y int)) int ...) -- have their
 call sites judged: wrong arity and literal arguments of the wrong type are
 reported as file:line:col: message, one per mismatch. So is a body whose
 known type contradicts a declared return, and a ->/c outside
@@ -169,6 +170,16 @@ taken, and every later run sees it.
 Once installed, a package is reachable with (import <repo>), which loads its
 blip.lip entry point into the running machine -- the same thing use does for a
 file, with the path resolved through blip_modules/ instead of by hand.')
+		}
+		'migrate' {
+			println('blip migrate [--check] <file|dir> -- rewrite v1 spellings to v2
+
+Rewrites (define ...) to (def ...), (lambda (p) ...) to (fn [p] ...),
+(do ...) to (begin ...), first/rest to car/cdr, keep to filter, (case ...)
+to (match ...), and (when ...) to (if ...). Quote is untouched, quasiquote
+is left with a warning, define/contract is kept with a warning.
+
+With --check nothing is written; exit 1 when anything would change.')
 		}
 		'version' {
 			println('blip version -- print the version
@@ -703,7 +714,7 @@ fn main_blip(name string) string {
 ; Run it with:  blip run main.blip
 ; Check it with: blip test main.blip
 
-(define (greet who)
+(def (greet who)
   (string-append "hello, " who "!"))
 
 ; print writes the line and returns nil -- but `blip test` compares what the

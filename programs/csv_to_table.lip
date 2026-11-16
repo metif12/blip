@@ -4,19 +4,19 @@
 ;; a vector of tables, one per row, with the header row as keys. Nothing
 ;; aborts: a short row, a blank line or a missing file is a value.
 
-(define (split-line line)
+(def (split-line line)
   (string-split line ","))
 
-(define (trim-cell s) (string-trim s))
+(def (trim-cell s) (string-trim s))
 
-(define (csv-rows text)
+(def (csv-rows text)
   (filter (fn [l] (not (string-blank? l)))
           (string-split text "\n")))
 
-(define (header-row lines)
+(def (header-row lines)
   (map trim-cell (split-line (list-ref lines 0))))
 
-(define (row->table header cells)
+(def (row->table header cells)
   (fold (fn [acc i]
           (put acc (list-ref header i)
                (if (< i (length cells))
@@ -25,7 +25,7 @@
         {}
         (range 0 (- (length header) 1))))
 
-(define (csv->table text)
+(def (csv->table text)
   (let lines (csv-rows text)
     (if (= (length lines) 0)
       (vector)

@@ -94,7 +94,7 @@
 (struct Circle (r))
 (struct Rect (w h))
 
-(define (area shape)
+(def (area shape)
   (match shape
     [(struct Circle r: r) (* 3.14 r r)]
     [(struct Rect w: w h: h) (* w h)]
@@ -123,7 +123,7 @@
 ;; Every function in a library should state what it promises, and the promise
 ;; should run. This is why the doc for a function is a test.
 
-(define (mean xs)
+(def (mean xs)
   ;; mean of a non-empty list of numbers
   (assert (not= (length xs) 0) "mean of an empty list")
   (/ (fold + 0 xs) (length xs)))

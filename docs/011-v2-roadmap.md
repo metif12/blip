@@ -65,7 +65,7 @@ spelling only.
 | Removed | Canonical | Alias recipe location |
 |---|---|---|
 | `lambda`, `λ` | `fn` | tour appendix "from Racket/Scheme?" |
-| `define` | `def` | same appendix; `define/contract` becomes `def/contract` (`defc` rejected: contract must read as definition) |
+| `define` | `def` | tour appendix "from Racket/Scheme?" (`define/contract` kept for now; becomes `def/contract` later, `defc` rejected: contract must read as definition) — **done**: machine errors, `check` reports, emitter refuses, struct codegen emits `def`, corpus+tests+tour use `def`, `tail_calls`/`contracts`/`emit_js` pin the removal (prim alias recipes verified working; special forms cannot be aliased back) |
 | `first` / `rest` | `car` / `cdr` | same appendix |
 | `.lip` / `.vl` loader | `.blip` only | loader errors with a migration line instead of a warning |
 | `do` | `begin` | same appendix (macro expansions emit `begin`) — **done**: machine errors, `check` reports, emitter refuses, `05_pipelines`/tour/`blip_in_y_min` emit `begin` |

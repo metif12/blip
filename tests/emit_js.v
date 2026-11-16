@@ -161,16 +161,16 @@ fn (mut s Suite) check_example(name string) {
 fn main() {
 	mut s := Suite{}
 
-	s.check('a define and a call', '(define (double x) (* 2 x))
+	s.check('a define and a call', '(def (double x) (* 2 x))
 (print (double 21))')
 
-	s.check('a named function and if', '(define (fact n)
+	s.check('a named function and if', '(def (fact n)
   (if (< n 2) n (* n (fact (- n 1)))))
 (print (fact 5))')
 
 	s.check('let binds and unbinds', '(print (let ([a 1] [b 2]) (+ a b)))')
 
-	s.check('let keeps its bindings local', '(define x 1)
+	s.check('let keeps its bindings local', '(def x 1)
 (print (let ([x 9]) x))
 (print x)')
 
@@ -205,10 +205,16 @@ fn main() {
 	// `defined?` compiles to a `typeof` probe, so both engines can answer the
 	// same question and the comparison is on the printed "#t"/"#f".
 	s.check('defined? of an unbound name', '(print (defined? no-such-name))')
-	s.check('defined? of a defined global', '(define d1 1)(print (defined? d1))')
-	s.check('defined? of the quoted spelling', "(define d2 2)(print (defined? 'd2))")
+	s.check('defined? of a defined global', '(def d1 1)(print (defined? d1))')
+	s.check('defined? of the quoted spelling', "(def d2 2)(print (defined? 'd2))")
 	s.check('defined? of a primitive', '(print (defined? car))')
 	s.check('defined? inside a let sees the binding', '(print (let ([y 2]) (defined? y)))')
+
+	// `define` is gone in v2 (roadmap A2): the emitter refuses it by name
+	// rather than emitting a `def`.
+	ref_def := emit.compile('(define x 1)') or { emit.Result{} }
+	s.record('define is refused by name, not mis-emitted', ref_def.blocked.len > 0,
+		'blocked: ${ref_def.blocked}')
 
 	s.check('quote is a literal', '(print (quote (1 2 3)))')
 

@@ -38,7 +38,7 @@
 ;; Positional underneath, so this is pure sugar -- but it is the best fix for
 ;; argument-order readability, and it survives reordering.
 
-(define (connect #:host [h "localhost"] #:port [p 8080] #:timeout [t 30])
+(def (connect #:host [h "localhost"] #:port [p 8080] #:timeout [t 30])
   (format "~a:~a/~as" h p t))
 
 (connect)                                    ;=> "localhost:8080/30s"
@@ -51,13 +51,13 @@
 
 (struct Point (x y))
 (Point 1 2)                  ;=> (Point 1 2)
-(define p (Point 1 2))       ; bound BEFORE it is read: the next three lines used
+(def p (Point 1 2))       ; bound BEFORE it is read: the next three lines used
 (p.x)                        ; field read: 1
 (point? (Point 1 2))         ;=> #t
 (point-x (Point 1 2))        ;; => accessor: 1
 
 ;; immutable structs: updating returns a new value, leaving the original alone
-(define q p.y := 99)         ; q is (Point 1 99), p is still (Point 1 2)
+(def q p.y := 99)         ; q is (Point 1 99), p is still (Point 1 2)
 
 ;; #:mutable for the rare in-place case
 (struct Counter (n) #:mutable)
@@ -78,7 +78,7 @@
 
 (struct PositiveInt (n) #:opaque)
 
-(define (positive-int n)
+(def (positive-int n)
   (if (> n 0)
       (ok (PositiveInt n))
       (err 'not-positive)))
@@ -130,7 +130,7 @@
 ;; Word frequency, top three. No macros. No nesting. No closures-per-element.
 ;; `take` takes (coll n), so it is threaded with `->` rather than `->>`: the
 ;; value has to land in the FIRST slot, and `->>` puts it in the last.
-(define (top-words text n)
+(def (top-words text n)
   (-> (->> (string-split text " ")
            (filter string-not-blank?)
            (map string-downcase)
@@ -138,7 +138,7 @@
            (sort-by (fn (e) (- (get e 1)))))
       (take n)))
 
-(define report
+(def report
   (top-words "the quick brown fox jumps over the lazy dog the end the end" 3))
 
 (print (map car report))          ;=> ("the" "end" "quick")

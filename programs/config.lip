@@ -6,7 +6,7 @@
 ;; are all values, and `use` is how they stop the work without stopping the
 ;; program.
 
-(define (parse-line line)
+(def (parse-line line)
   ;; (ok key value) or (err reason). `parse-in` from std.lip does the split;
   ;; an empty line is not an error, it is just nothing.
   (if (string-blank? line)
@@ -14,7 +14,7 @@
     (use (parse-in line)
       (ok r1 r2))))
 
-(define (read-config path)
+(def (read-config path)
   ;; Read the file, then fold each line into a table. A read failure stops
   ;; the whole thing: there is no config to fold.
   (let res (read-file path)
@@ -37,7 +37,7 @@
 ;; instead of falling through -- exactly the Ruby-brain trap the binding
 ;; suite now gates on. TEMP and TMP are Windows conventions, /tmp the POSIX
 ;; default, so unset-ness has to be tested with `nil?`.
-(define (tmp-dir)
+(def (tmp-dir)
   (if (nil? (env "TEMP"))
     (if (nil? (env "TMP")) "/tmp" (env "TMP"))
     (env "TEMP")))

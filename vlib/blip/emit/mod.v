@@ -260,7 +260,7 @@ fn (mut e Emitter) remember(id reader.NodeId) {
 	if head.tag != .sym {
 		return
 	}
-	if head.value != 'define' && head.value != 'def' && head.value != 'define/contract' {
+	if head.value != 'def' && head.value != 'define/contract' {
 		return
 	}
 	sig := e.node(kids[1])
@@ -339,8 +339,12 @@ fn (mut e Emitter) special(name string, id reader.NodeId, kids []reader.NodeId) 
 		e.require_form(kids)
 		return true
 	}
-	if name == 'define' || name == 'def' {
+	if name == 'def' {
 		e.emit_define(kids)
+		return true
+	}
+	if name == 'define' {
+		e.refuse('`define` was removed in v2; use `def`')
 		return true
 	}
 	if name == 'define/contract' {
@@ -536,17 +540,17 @@ const unsupported_forms = ['loop', 'dotimes', 'struct', 'as->', 'cond->', 'impor
 
 fn (mut e Emitter) emit_define(kids []reader.NodeId) {
 	if kids.len < 3 {
-		e.refuse('define')
+		e.refuse('def')
 		return
 	}
 	sig := e.node(kids[1])
 	if sig.tag == .list {
 		inner := e.kids(kids[1])
 		if inner.len == 0 || e.node(inner[0]).tag != .sym {
-			e.refuse('define')
+			e.refuse('def')
 			return
 		}
-		// (define (name p1 p2 ...) body...). The signature's head is the name;
+		// (def (name p1 p2 ...) body...). The signature's head is the name;
 		// everything after it is parameters. A known type name in first body
 		// position with more forms after it is the erased return annotation
 		// (same rule as the machine); it is skipped, not emitted.
@@ -558,14 +562,14 @@ fn (mut e Emitter) emit_define(kids []reader.NodeId) {
 		return
 	}
 	if sig.tag == .sym {
-		// `let`, not `const`. `(define s 0)` followed by `(set! s ...)` is
+		// `let`, not `const`. `(def s 0)` followed by `(set! s ...)` is
 		// ordinary blip, and JavaScript throws on an assignment to a `const`.
 		// The mangling matches every other use of the name, so a definition and a
 		// `set!` cannot disagree.
 		e.emit('var ${e.mangle_name(sig.value)} = ${e.value(kids[2])};')
 		return
 	}
-	e.refuse('define')
+	e.refuse('def')
 }
 
 // named_function emits a JS function from a name, a parameter node list and a
@@ -575,7 +579,7 @@ fn (mut e Emitter) named_function(name string, params []reader.NodeId, body []re
 	mut ps := []string{}
 	mut param_names := []string{}
 	// A parameter that is a PATTERN destructures on entry rather than being
-	// refused: `(define (dist (struct Point x: px y: py)) ...)`. The JavaScript
+	// refused: `(def (dist (struct Point x: px y: py)) ...)`. The JavaScript
 	// parameters stay plain, and the destructuring is emitted as a statement at
 	// the top of the body -- which is safe here because a function body is a
 	// statement position.

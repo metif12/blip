@@ -1786,7 +1786,7 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 		}
 		'keep' {
 			// Removed in v2 (roadmap A2): `keep` duplicated `filter`.
-			// Recipe if you miss it: (define keep filter).
+			// Recipe if you miss it: (def keep filter).
 			return error('`keep` was removed in v2; use `filter`')
 		}
 		'fold', 'reduce' {
@@ -1963,7 +1963,10 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 			return
 		}
 		'define' {
-			return m.eval_define(kids)
+			// Removed in v2 (roadmap A2): `define` was `def` under a
+			// longer name. Recipe: (define (f x) body) becomes (def (f x) body),
+			// (define v expr) becomes (def v expr). Run `blip migrate` to rewrite.
+			return error('`define` was removed in v2; use `def`')
 		}
 		'define/contract' {
 			return m.eval_define_contract(kids)
@@ -2144,8 +2147,9 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 		}
 		'do' {
 			// Removed in v2 (roadmap A2): `do` was `begin` under another
-			// name. Macros and programs emit `begin` now. Recipe if you
-			// miss it: (defmacro do body `(begin ,@body)).
+			// name. Macros and programs emit `begin` now. A user macro
+			// cannot bring it back (special forms win over macros), so
+			// the recipe is `blip migrate`, not an alias.
 			return error('`do` was removed in v2; use `begin`')
 		}
 		'match' {
@@ -2349,9 +2353,9 @@ fn (mut m Machine) eval_define(kids []blip.NodeId) ! {
 		// kids[2..] -- not sig[1..], which is the parameter list.
 		//
 		// A known type name in first body position with more forms after it
-		// is the erased return annotation: `(define (add (x int)) int ...)`.
+		// is the erased return annotation: `(def (add (x int)) int ...)`.
 		// A bare symbol there with nothing after it is still the body --
-		// `(define (id x) x)` -- and an unknown name is still a body form,
+		// `(def (id x) x)` -- and an unknown name is still a body form,
 		// so an ordinary first form is never misread as a type.
 		mut body_at := 2
 		if kids.len > 3 && m.arena.node(kids[2]).tag == .sym
@@ -3137,12 +3141,12 @@ fn (mut m Machine) eval_struct(kids []blip.NodeId) ! {
 	// expanded here rather than in `__make-struct` because a struct of two fields
 	// called with one argument is otherwise an arity error reported about a
 	// primitive the user never wrote.
-	src += '(define (${name} ${params.join(' ')}) (__make-struct (quote ${name}) (quote [${quoted_fields.join(' ')}]) ${params.join(' ')}))\n'
-	src += '(define ${low}? (fn [v] (and (struct? v) (= (struct-name v) (quote ${name})))))\n'
+	src += '(def (${name} ${params.join(' ')}) (__make-struct (quote ${name}) (quote [${quoted_fields.join(' ')}]) ${params.join(' ')}))\n'
+	src += '(def ${low}? (fn [v] (and (struct? v) (= (struct-name v) (quote ${name})))))\n'
 	for f in fields {
-		src += '(define ${low}-${f} (fn [v] (struct-ref v (quote ${f}))))\n'
+		src += '(def ${low}-${f} (fn [v] (struct-ref v (quote ${f}))))\n'
 		if mutable {
-			src += '(define set-${low}-${f}! (fn [v x] (__struct-mutate! v (quote ${f}) x)))\n'
+			src += '(def set-${low}-${f}! (fn [v x] (__struct-mutate! v (quote ${f}) x)))\n'
 		}
 	}
 	if opaque {
@@ -3150,7 +3154,7 @@ fn (mut m Machine) eval_struct(kids []blip.NodeId) ! {
 		// constructor is the only way in. The predicate and the accessors stay
 		// public: they cannot make a value that does not exist.
 		src =
-			'(define ${name}__ctor (fn [${params.join(' ')}] (__make-struct (quote ${name}) (quote [${quoted_fields.join(' ')}]) ${params.join(' ')})))\n' +
+			'(def ${name}__ctor (fn [${params.join(' ')}] (__make-struct (quote ${name}) (quote [${quoted_fields.join(' ')}]) ${params.join(' ')})))\n' +
 			src
 	}
 	m.eval_generated(src) or {

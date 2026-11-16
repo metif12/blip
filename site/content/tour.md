@@ -36,12 +36,12 @@ Only `#f` is false. Everything else — `0`, `""`, the empty list — counts as 
 
 ## Definitions and functions
 
-`define` is the whole ceremony. There is no `defn`, no `function` keyword.
+`def` is the whole ceremony. There is no `defn`, no `function` keyword.
 
 ```
-(define x 10)
-(define (add a b) (+ a b))
-(define (greet name) (format "Hello, ~a." name))
+(def x 10)
+(def (add a b) (+ a b))
+(def (greet name) (format "Hello, ~a." name))
 ```
 
 `fn` makes an anonymous function; `map`, `filter`, and `fold` take them the way you expect.
@@ -63,7 +63,7 @@ Arithmetic and comparison are variadic, and `=` compares by value, not identity.
 Tail calls reuse the frame, so recursion is a loop. A million deep returns.
 
 ```
-(define (count-down n acc)
+(def (count-down n acc)
   (if (= n 0)
       acc
       (count-down (- n 1) (+ acc 1))))
@@ -165,7 +165,7 @@ Three threading forms cover three habits. `->>` puts the value last, `->` puts i
 Labelled arguments are positional underneath — pure sugar, and one of the most effective fixes for argument-order readability, since it survives reordering where an assoc-based convention does not.
 
 ```
-(define (connect #:host [h "localhost"] #:port [p 8080]) (format "~a:~a" h p))
+(def (connect #:host [h "localhost"] #:port [p 8080]) (format "~a:~a" h p))
 (connect)                       ;=> "localhost:8080"
 (connect #:port 9000)           ;=> "localhost:9000"
 ```
@@ -230,9 +230,9 @@ Structs bundle fields with a constructor, predicate, and accessors. Plain struct
 
 ```
 (struct Point (x y))
-(define p (Point 1 2))
+(def p (Point 1 2))
 (p.x)                        ;=> 1
-(define q p.y := 99)         ; q is (Point 1 99), p unchanged
+(def q p.y := 99)         ; q is (Point 1 99), p unchanged
 ```
 
 `#:opaque` hides the constructor: the type name is public, the only way in is a smart constructor that returns a Result, so the invariant cannot be broken.
@@ -240,7 +240,7 @@ Structs bundle fields with a constructor, predicate, and accessors. Plain struct
 ```
 (struct PositiveInt (n) #:opaque)
 
-(define (positive-int n)
+(def (positive-int n)
   (if (> n 0)
       (ok (PositiveInt n))
       (err 'not-positive)))
@@ -278,10 +278,27 @@ Everything above uses no macros at all. When a case genuinely needs one, `defmac
 (halve 8)   ;=> 4
 (halve 7)   ;=> contract violation
 
-(define (add (x int) (y int)) int (+ x y))
+(def (add (x int) (y int)) int (+ x y))
 ```
 
 Unknown names are never errors: unannotated functions, the prelude, and macros unify with everything. A clean `check` is not a proof, but a reported mismatch names a real bug — without evaluating anything, so checking hostile code is safe.
+
+## Appendix: from Racket/Scheme?
+
+v2 keeps one spelling per idea. Removed primitives come back with one
+line in your own file — the core does not carry these aliases:
+
+```
+(def keep filter)
+(def first car)
+(def rest cdr)
+```
+
+Removed special forms (`define`, `lambda`, `do`, `when`, `case`) cannot
+be aliased back: special forms win over macros, so a `defmacro` with the
+old name never runs. Write the canonical spelling (`def`, `fn`, `begin`,
+`if`, `match`), or let `blip migrate` rewrite the file for you:
+`blip migrate <file|dir>`.
 
 ---
 

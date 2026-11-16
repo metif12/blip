@@ -4,11 +4,11 @@
 (struct BinOp (op left right))
 (struct Unary (op expr))
 
-(define (make-num n) (Num n))
-(define (make-bin op l r) (BinOp op l r))
-(define (make-neg e) (Unary 'neg e))
+(def (make-num n) (Num n))
+(def (make-bin op l r) (BinOp op l r))
+(def (make-neg e) (Unary 'neg e))
 
-(define (eval-ast e)
+(def (eval-ast e)
   (match e
     [(struct Num n: n) n]
     [(struct Unary op: op expr: x) (if (= op 'neg) (- 0 (eval-ast x)) (err 'bad-op))]
@@ -20,14 +20,14 @@
            [else (err 'bad-op)])]
     [else (err 'bad-ast)]))
 
-(define (is-digit? c)
+(def (is-digit? c)
   (let code (rune->integer (string->rune c))
     (and (>= code 48) (<= code 57))))
 
-(define (tokenize s)
+(def (tokenize s)
   (tokenize-at s 0 (vector)))
 
-(define (tokenize-at s i acc)
+(def (tokenize-at s i acc)
   (if (>= i (string-length s))
     (array-push! acc (list 'eof nil))
     (let c (string-slice s i (+ i 1))
@@ -42,19 +42,19 @@
         [(= c ")") (tokenize-at s (+ i 1) (array-push! acc (list 'rparen nil)))]
         [else (err 'bad-char)]))))
 
-(define (scan-number s i)
+(def (scan-number s i)
   (if (or (>= i (string-length s))
           (not (is-digit? (string-slice s i (+ i 1)))))
     i
-    (scan-number s (+ i 1))))(define (tok-kind t) (list-ref t 0))
-(define (tok-val t) (list-ref t 1))
+    (scan-number s (+ i 1))))(def (tok-kind t) (list-ref t 0))
+(def (tok-val t) (list-ref t 1))
 
-(define (prec op)
+(def (prec op)
   (cond [(or (= op "+") (= op "-")) 1]
         [(or (= op "*") (= op "/")) 2]
         [else 0]))
 
-(define (parse s)
+(def (parse s)
   (let toks (tokenize s)
     (if (err? toks)
       toks
@@ -67,12 +67,12 @@
                 (err 'trailing-garbage)
                 (ok ast)))))))))
 
-(define (parse-expr toks pos min-prec)
+(def (parse-expr toks pos min-prec)
   (let r (parse-prefix toks pos)
     (if (err? r) r
       (parse-expr-loop toks (list-ref r 1) (list-ref r 2) min-prec))))
 
-(define (parse-prefix toks pos)
+(def (parse-prefix toks pos)
   (if (>= pos (length toks))
     (err 'unexpected-eof)
     (let t (get toks pos)
@@ -93,7 +93,7 @@
              (if (err? r) r
                (ok (make-neg (list-ref r 1)) (list-ref r 2))))
            (err 'unexpected-op))]
-        [else (err 'unexpected-token)]))))(define (parse-expr-loop toks lhs pos min-prec)
+        [else (err 'unexpected-token)]))))(def (parse-expr-loop toks lhs pos min-prec)
   (if (or (>= pos (length toks))
           (not= (tok-kind (get toks pos)) 'op))
     (ok lhs pos)
@@ -107,7 +107,7 @@
                 (let p2 (list-ref r 2)
                   (parse-expr-loop toks (make-bin op lhs rhs) p2 min-prec))))))))))
 
-(define (eval-expr s)
+(def (eval-expr s)
   (let res (parse s)
     (if (err? res)
       res

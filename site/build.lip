@@ -5,7 +5,7 @@
 
 (require "../programs/markdown.lip")
 
-(define (render-page title md-text)
+(def (render-page title md-text)
   (use (read-file "site/layout.html")
     (string-replace (string-replace read-file "{{title}}" title) "{{body}}"
       (md-render (string-split md-text "\n")))))

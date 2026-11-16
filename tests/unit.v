@@ -485,7 +485,7 @@ fn (mut s Suite) repl_api() {
 	h.give_file('lib/std.lip', '')
 	mut m := machine.new_standalone(h)
 	mut r := repl.new_with_machine(m, h)
-	r.run_lines(['(define (q) 1)', '(q)'])
+	r.run_lines(['(def (q) 1)', '(q)'])
 	s.record('run_lines evaluated both lines', h.lines().len >= 2, 'the host saw output')
 
 	mut r2 := repl.new(h)

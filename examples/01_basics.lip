@@ -49,14 +49,14 @@
 (>= 3 2 1)        ;=> #t
 
 ;; --- definitions ---
-(define x 10)
-(define (add a b) (+ a b))
-(define (greet name) (format "Hello, ~a." name))
+(def x 10)
+(def (add a b) (+ a b))
+(def (greet name) (format "Hello, ~a." name))
 
 ;; define is the whole ceremony. There is no defn, no fn=, no function keyword.
 
 ;; --- recursion ---
-(define (fact n)
+(def (fact n)
   (if (<= n 1)
       1
       (* n (fact (- n 1)))))
@@ -65,7 +65,7 @@
 
 ;; --- tail calls: this must not overflow, ever ---
 ;; A proper tail call reuses the frame. 1,000,000 deep is fine.
-(define (count-down n acc)
+(def (count-down n acc)
   (if (= n 0)
       acc
       (count-down (- n 1) (+ acc 1))))
@@ -75,7 +75,7 @@
 ;; Tail position is not only the last argument of `if`. `cond` is nested `if`s and
 ;; `when` is one `if`, so a call in tail position inside either is still a tail
 ;; call, at any depth.
-(define (via-cond n)
+(def (via-cond n)
   (cond [(> n 0) (via-cond (- n 1))]
         [else 'done]))
 
@@ -90,17 +90,17 @@
 ;; 120 ms / 332 ms / 991 ms / 4047 ms. Doubling the depth quadruples the time,
 ;; so 100000 here is roughly forty minutes. That is the whole reason the number
 ;; below is 2000 and not 100000.
-(define (not-tail n)
+(def (not-tail n)
   (if (> n 0) (begin (not-tail (- n 1))))
   'done)
 
 (not-tail 2000)    ;=> done
 
 ;; --- mutual tail recursion ---
-(define (ping n)
+(def (ping n)
   (if (= n 0) 'pong (pong (- n 1))))
 
-(define (pong n)
+(def (pong n)
   (if (= n 0) 'ping (ping (- n 1))))
 
 (ping 100000)     ;=> pong    (mutual, not just self)

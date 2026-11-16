@@ -115,42 +115,43 @@ fn main() {
 		'(define/contract (countdown n) (->/c integer?) (if (= n 0) 0 (countdown (- n 1)))) (countdown 5000)',
 		'0')
 	// Annotations erase: the machine never sees them.
-	s.run_ok('annotation runs', '(define (add (x int) (y int)) int (+ x y)) (add 1 2)', '3')
-	s.run_ok('annotation lies at runtime', '(define (f (x int)) string x) (f 5)', '5')
+	s.run_ok('annotation runs', '(def (add (x int) (y int)) int (+ x y)) (add 1 2)', '3')
+	s.run_ok('annotation lies at runtime', '(def (f (x int)) string x) (f 5)', '5')
 	s.run_ok('contract with annotations',
 		'(define/contract (h (x int)) (->/c even?) (/ x 2)) (h 8)', '4')
 
 	// `blip check`: the clean file is silent.
-	s.check_ok('check clean', '(define (add (x int) (y int)) int (+ x y)) (add 1 2)')
+	s.check_ok('check clean', '(def (add (x int) (y int)) int (+ x y)) (add 1 2)')
 	s.check_ok('check unknown is silent', '(nosuchfn 1 2 "x") (map f xs)')
-	s.check_ok('check unannotated is silent', '(define (f a b) (+ a b)) (f 1 2)')
-	// `def` is checked exactly like `define`: same signatures, same arity,
-	// same erased types. Only `define/contract` stays `define`-only.
+	s.check_ok('check unannotated is silent', '(def (f a b) (+ a b)) (f 1 2)')
+	// `def` carries the annotated signatures (same erased types as before);
+	// only `define/contract` keeps its `define`-prefixed spelling.
 	s.check_ok('check def clean', '(def (add (x int) (y int)) int (+ x y)) (add 1 2)')
 	s.check_fails('check def arg type', '(def (add (x int) (y int)) int (+ x y)) (add 1 "s")',
 		'expects int for y, got string')
 	// ... and the mismatches name names, positions aside (the CLI prints those).
-	s.check_fails('check arity', '(define (add (x int) (y int)) int (+ x y)) (add 1)',
+	s.check_fails('check arity', '(def (add (x int) (y int)) int (+ x y)) (add 1)',
 		'expects 2 arguments, got 1')
-	s.check_fails('check arg type', '(define (add (x int) (y int)) int (+ x y)) (add 1 "s")',
+	s.check_fails('check arg type', '(def (add (x int) (y int)) int (+ x y)) (add 1 "s")',
 		'expects int for y, got string')
-	s.check_fails('check return', '(define (bad (x int)) string x)',
+	s.check_fails('check return', '(def (bad (x int)) string x)',
 		'promises string, body gives int')
 	s.check_fails('check stray contract', '(->/c even?)', '->/c outside define/contract')
 	// A pattern shaped like a mis-aritied call is data, not a call.
 	s.check_ok('check match pattern silent',
-		'(define (add2 (a int) (b int)) int (+ a b)) (match v [(add2 x) x])')
+		'(def (add2 (a int) (b int)) int (+ a b)) (match v [(add2 x) x])')
 	// The prim table: arithmetic over numbers, comparisons to bool.
-	s.check_ok('check prim result', '(define (f) int (+ 1 2))')
+	s.check_ok('check prim result', '(def (f) int (+ 1 2))')
 	s.check_fails('check prim arg', '(+ 1 "s")', 'needs numbers')
-	s.check_fails('check prim return', '(define (g) string (+ 1 2))',
+	s.check_fails('check prim return', '(def (g) string (+ 1 2))',
 		'promises string, body gives int')
 	// Let-bound literals carry their type into the body.
-	s.check_ok('check let tracks', '(define (f) int (let ([x 5]) x))')
-	s.check_fails('check let mismatch', '(define (g) string (let ([x 5]) x))',
+	s.check_ok('check let tracks', '(def (f) int (let ([x 5]) x))')
+	s.check_fails('check let mismatch', '(def (g) string (let ([x 5]) x))',
 		'promises string, body gives int')
 	// Contracted functions contribute arity, not types.
 	s.check_ok('check contract call', '(define/contract (halve x) (->/c even?) (/ x 2)) (halve 8)')
+	s.check_fails('check define removed', '(define x 1)', 'removed in v2')
 	s.check_fails('check contract arity',
 		'(define/contract (halve x) (->/c even?) (/ x 2)) (halve 8 9)',
 		'expects 1 arguments, got 2')

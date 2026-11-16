@@ -124,7 +124,7 @@ fn (mut m Machine) collect_sig(id blip.NodeId, mut sigs map[string]CkSig) {
 		return
 	}
 	head := m.arena.node(kids[0]).value
-	if head != 'define' && head != 'def' && head != 'define/contract' {
+	if head != 'def' && head != 'define/contract' {
 		return
 	}
 	if kids.len < 3 {
@@ -312,7 +312,11 @@ fn (mut m Machine) check_form(id blip.NodeId, env map[string]string, ret string,
 			}
 			return 'any'
 		}
-		'define', 'def' {
+		'define' {
+			m.check_diag(id, '`define` was removed in v2; use `def`', mut diags)
+			return 'any'
+		}
+		'def' {
 			return m.check_define(id, args, env, sigs, mut diags)
 		}
 		'define/contract' {

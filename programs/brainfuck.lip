@@ -11,18 +11,18 @@
 ;; than a stack overflow: every recursive call is in tail position.
 
 ;; Create a zero-filled tape of `n` cells.
-(define (make-tape n)
+(def (make-tape n)
   (make-vector n 0))
 
 ;; Find the matching `]` for a `[` at position `start`.
-(define (bf-find-close program start)
+(def (bf-find-close program start)
   (bf-scan-forward program (+ start 1) 1 (string-length program)))
 
 ;; Find the matching `[` for a `]` at position `start`.
-(define (bf-find-open program start)
+(def (bf-find-open program start)
   (bf-scan-backward program (- start 1) 1))
 
-(define (bf-scan-forward program pc depth len)
+(def (bf-scan-forward program pc depth len)
   (if (>= pc len)
     (error "brainfuck: unmatched [")
     (let cmd (string-slice program pc (+ pc 1))
@@ -33,7 +33,7 @@
                (bf-scan-forward program (+ pc 1) (- depth 1) len))]
         [_ (bf-scan-forward program (+ pc 1) depth len)]))))
 
-(define (bf-scan-backward program pc depth)
+(def (bf-scan-backward program pc depth)
   (if (< pc 0)
     (error "brainfuck: unmatched ]")
     (let cmd (string-slice program pc (+ pc 1))
@@ -45,7 +45,7 @@
         [_ (bf-scan-backward program (- pc 1) depth)]))))
 
 ;; Read one character from stdin. Returns 0 on EOF.
-(define (bf-read-char)
+(def (bf-read-char)
   (let line (read-line)
     (if (string-blank? line)
       0
@@ -53,7 +53,7 @@
 
 ;; Run a Brainfuck program. `tape` is the tape, `ptr` is the pointer, `pc` is
 ;; the program counter.
-(define (bf-run tape ptr pc program)
+(def (bf-run tape ptr pc program)
   (let len (string-length program)
     (if (>= pc len)
       'done
@@ -78,7 +78,7 @@
           [_ (bf-run tape ptr (+ pc 1) program)])))))
 
 ;; Run a Brainfuck program from a string.
-(define (brainfuck program)
+(def (brainfuck program)
   (let tape (make-tape 30000)
     (bf-run tape 0 0 program)))
 

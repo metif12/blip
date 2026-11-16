@@ -248,7 +248,7 @@ subject is evaluated exactly once:
 ```
 
 Patterns also destructure in bindings and parameters -- `(let ([(list h t)
-'(1 2)]) ...)` and `(define (dist (struct Point x: px y: py)) ...)` work the
+'(1 2)]) ...)` and `(def (dist (struct Point x: px y: py)) ...)` work the
 way the `match` lines above suggest they should.
 
 ## Errors as values

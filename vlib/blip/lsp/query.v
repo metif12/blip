@@ -152,7 +152,7 @@ fn top_defines(text string) []DefineInfo {
 		if head.tag != .sym {
 			continue
 		}
-		if head.value != 'define' && head.value != 'def' {
+		if head.value != 'def' {
 			continue
 		}
 		name_node := res.arena.node(kids[1])
@@ -217,7 +217,7 @@ fn occurrences(text string, word string) []Position {
 }
 
 fn special_forms() []string {
-	return ['define', 'def', 'if', 'fn', 'let', 'let*', 'letrec', 'begin', 'quote',
+	return ['def', 'if', 'fn', 'let', 'let*', 'letrec', 'begin', 'quote',
 		'quasiquote', 'unquote', 'unquote-splice', 'set!', 'and', 'or', 'cond', 'while',
 		'match', 'define-syntax', 'syntax-rules', 'let-syntax', 'letrec-syntax']
 }
@@ -275,7 +275,7 @@ fn function_params(text string, name string) []string {
 			continue
 		}
 		head := res.arena.node(kids[0])
-		if head.tag != .sym || (head.value != 'define' && head.value != 'def') {
+		if head.tag != .sym || head.value != 'def' {
 			continue
 		}
 		target := res.arena.node(kids[1])

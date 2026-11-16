@@ -39,10 +39,10 @@ fn check(label string, src string, expected string) {
 	}
 }
 
-const fib = '(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))'
+const fib = '(def (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))'
 
 fn main() {
-	check('nested one-arg', '(define (g n) (if (< n 1) 0 (+ 1 (g (- n 1)))))(g 5)', '5')
+	check('nested one-arg', '(def (g n) (if (< n 1) 0 (+ 1 (g (- n 1)))))(g 5)', '5')
 	check('nested two-args', fib + '(fib 2)', '1')
 	check('nested three-args', fib + '(fib 3)', '2')
 	check('nested five-args', fib + '(fib 5)', '5')
@@ -51,11 +51,11 @@ fn main() {
 
 	// The two shapes that proved it was an environment bug and not an argument
 	// counting bug: same number of nested calls, different nesting.
-	check('sibling independent', '(define (a) 1)(define (b) 2)(+ (a) (b))', '3')
-	check('sibling shadowing', '(define (a n) n)(+ (a 1) (a 2))', '3')
+	check('sibling independent', '(def (a) 1)(def (b) 2)(+ (a) (b))', '3')
+	check('sibling shadowing', '(def (a n) n)(+ (a 1) (a 2))', '3')
 
 	// An argument must be evaluated in the CALLER's scope even when an earlier
 	// sibling left a frame behind.
-	check('arg in caller scope', '(define x 10)(define (f) 99)(+ x (f))', '109')
-	check('arg after shadow', '(define x 10)(define (f x) x)(let ([x 1]) (+ (f 5) x))', '6')
+	check('arg in caller scope', '(def x 10)(def (f) 99)(+ x (f))', '109')
+	check('arg after shadow', '(def x 10)(def (f x) x)(let ([x 1]) (+ (f 5) x))', '6')
 }

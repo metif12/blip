@@ -4,16 +4,16 @@
 ;; functions and string building. Nothing aborts: malformed input renders
 ;; as text.
 
-(define (md-trim s) (string-trim s))
+(def (md-trim s) (string-trim s))
 
-(define (md-blank? s) (string-blank? s))
+(def (md-blank? s) (string-blank? s))
 
-(define (md-starts-with s prefix)
+(def (md-starts-with s prefix)
   (= (string-slice s 0 (string-length prefix)) prefix))
 
 ;; ---------------------------------------------------------------- inline
 
-(define (md-inline-code s)
+(def (md-inline-code s)
   (let idx (string-index-of s "`")
     (if (< idx 0)
       s
@@ -27,7 +27,7 @@
                   (string-append "</code>"
                     (md-inline-code (string-slice rest (+ close 1) (string-length rest)))))))))))))
 
-(define (md-bold s)
+(def (md-bold s)
   (let idx (string-index-of s "**")
     (if (< idx 0)
       s
@@ -41,7 +41,7 @@
                   (string-append "</strong>"
                     (md-bold (string-slice rest (+ close 2) (string-length rest)))))))))))))
 
-(define (md-italic s)
+(def (md-italic s)
   (let idx (string-index-of s "*")
     (if (< idx 0)
       s
@@ -55,7 +55,7 @@
                   (string-append "</em>"
                     (md-italic (string-slice rest (+ close 1) (string-length rest)))))))))))))
 
-(define (md-link s)
+(def (md-link s)
   (let idx (string-index-of s "[")
     (if (< idx 0)
       s
@@ -78,19 +78,19 @@
                               (string-append "</a>"
                                 (md-link (string-slice url-part (+ url-close 1) (string-length url-part)))))))))))))))))))
 
-(define (md-inline s)
+(def (md-inline s)
   (md-link (md-italic (md-bold (md-inline-code s)))))
 
 ;; ---------------------------------------------------------------- blocks
 
-(define (md-hash-count line i)
+(def (md-hash-count line i)
   (if (>= i (string-length line))
     i
     (if (= (rune->integer (string->rune (string-slice line i (+ i 1)))) 35)
       (md-hash-count line (+ i 1))
       i)))
 
-(define (md-render-heading line)
+(def (md-render-heading line)
   (let n (md-hash-count line 0)
     (let text (md-trim (string-slice line n (string-length line)))
       (string-append (string-append "<h" (number->string n))
@@ -98,28 +98,28 @@
           (string-append (md-inline text)
             (string-append "</h" (string-append (number->string n) ">"))))))))
 
-(define (md-is-heading line)
+(def (md-is-heading line)
   (and (> (string-length line) 0)
        (= (rune->integer (string->rune (string-slice line 0 1))) 35)))
 
-(define (md-is-hr line)
+(def (md-is-hr line)
   (let t (md-trim line)
     (or (= t "---") (= t "***") (= t "___"))))
 
-(define (md-is-ul line)
+(def (md-is-ul line)
   (and (>= (string-length line) 2)
        (= (rune->integer (string->rune (string-slice line 0 1))) 45)
        (= (rune->integer (string->rune (string-slice line 1 2))) 32)))
 
-(define (md-render-ul-item line)
+(def (md-render-ul-item line)
   (string-append "<li>" (string-append (md-inline (md-trim (string-slice line 2 (string-length line)))) "</li>")))
 
-(define (md-code-fence? line)
+(def (md-code-fence? line)
   (md-starts-with (md-trim line) "```"))
 
 ;; ---------------------------------------------------------------- driver
 
-(define (md-render-line line)
+(def (md-render-line line)
   (cond
     [(md-blank? line) ""]
     [(md-is-heading line) (md-render-heading line)]
@@ -128,17 +128,17 @@
     [(md-code-fence? line) "<pre><code>"]
     [else (string-append "<p>" (string-append (md-inline line) "</p>"))]))
 
-(define (md-render lines)
+(def (md-render lines)
   (md-render-list (as-lines lines) #f))
 
 ;; Fences need state: a ``` line opens <pre><code> or closes it, and lines
 ;; inside a fence render verbatim (HTML-escaped) instead of as markdown.
 ;; `car`/`cdr` only take pairs, so the driver walks a list; `as-lines`
 ;; normalizes vectors the same way (`apply` splices any sequence).
-(define (as-lines xs)
+(def (as-lines xs)
   (if (vector? xs) (apply list xs) xs))
 
-(define (md-render-list lines in-fence)
+(def (md-render-list lines in-fence)
   (if (null? lines)
     (if in-fence "</code></pre>" "")
     (let line (car lines)

@@ -38,7 +38,7 @@ fn check(label string, src string, expected string) {
 fn main() {
 	// 1. self tail call, 250,000 deep -- see the note below on the depth
 	check('self tail call 250k', '
-		(define (cd n acc)
+		(def (cd n acc)
 		  (if (= n 0) acc (cd (- n 1) (+ acc 1))))
 		(cd 250000 0)', '250000')
 
@@ -53,26 +53,26 @@ fn main() {
 	// 2. MUTUAL tail recursion. This is what separates a real trampoline from
 	//    the cheaper hack of only special-casing self-calls.
 	check('mutual tail call 2e4', '
-		(define (ping n) (if (= n 0) (quote pong) (pong (- n 1))))
-		(define (pong n) (if (= n 0) (quote ping) (ping (- n 1))))
+		(def (ping n) (if (= n 0) (quote pong) (pong (- n 1))))
+		(def (pong n) (if (= n 0) (quote ping) (ping (- n 1))))
 		(ping 20000)', 'pong')
 
 	// 3. tail position in a derived form (cond desugars to nested ifs)
 	check('tail in cond 1e5', '
-		(define (cd n acc)
+		(def (cd n acc)
 		  (cond [(= n 0) acc]
 		        [else (cd (- n 1) (+ acc 1))]))
 		(cd 100000 0)', '100000')
 
 	// 4. tail position in a let body
 	check('tail in let', '
-		(define (cd n acc)
+		(def (cd n acc)
 		  (if (= n 0) acc (let ([m (- n 1)]) (cd m (+ acc 1)))))
 		(cd 50000 0)', '50000')
 
 	// 5. non-tail recursion still works
 	check('non-tail fib', '
-		(define (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))
+		(def (fib n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))
 		(fib 20)', '6765')
 
 	// 6. derived forms give the right answers
@@ -122,6 +122,21 @@ fn main() {
 			}
 		}
 	}
+	{
+		// `define` is gone in v2 (roadmap A2): one form, `def`.
+		// `blip migrate` rewrites it; the machine refuses with a message.
+		res_def := reader.read_all('(define x 1)')
+		mut m_def := machine.new_machine(&res_def.arena)
+		if _ := m_def.run(res_def.forms) {
+			println('FAIL define-removed: expected a removal error, ran clean')
+		} else {
+			if err.msg().contains('removed in v2') {
+				println('ok   define-removed => removed in v2')
+			} else {
+				println('FAIL define-removed: wrong error: ${err.msg()}')
+			}
+		}
+	}
 	check('loop', '(loop i 0 (< i 5) (print i)) 7', '7')
 	check('dotimes', '(dotimes i 3 (print i)) 8', '8')
 	check('and-short', '(and 1 #f 3)', '#f')
@@ -134,7 +149,7 @@ fn main() {
 	// line and it sits next to the other application tests.
 	check('keyword-call', '(:a {:a 1})', '1')
 	check('letstar', '(let* ([a 1] [b (+ a 1)]) b)', '2')
-	check('rest-param', '(define (f a . r) r) (f 1 2 3)', '(2 3)')
+	check('rest-param', '(def (f a . r) r) (f 1 2 3)', '(2 3)')
 	check('letrec', '(letrec ([e (fn [n] (if (= n 0) #t (o (- n 1))))] [o (fn [n] (if (= n 0) #f (e (- n 1))))]) (e 10))', '#t')
 
 	// 2000, not 20000. The recursive call sits inside `or`, so one pending
@@ -147,7 +162,7 @@ fn main() {
 	// does not. Reclaiming frames is a real piece of work and is listed in
 	// docs/010-roadmap.md rather than hidden by picking a flattering number.
 	check('tail-in-or', '
-		(define (find n)
+		(def (find n)
 		  (or (and (= n 3) n) (if (> n 0) (find (- n 1)) 0)))
 		(find 2000)', '3')
 
@@ -159,7 +174,7 @@ fn main() {
 	// allocation makes the collector re-mark a heap the earlier tests already
 	// grew. At the default the runner printed every result and then sat there,
 	// which is indistinguishable from a hang.
-	res := reader.read_all('(define (f n) (+ 1 (f n)))(f 10000000)')
+	res := reader.read_all('(def (f n) (+ 1 (f n)))(f 10000000)')
 	mut m := machine.new_machine(&res.arena)
 	m.max_kont = 2_000
 	m.run(res.forms) or {

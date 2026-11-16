@@ -1,14 +1,14 @@
 ;; programs/lint_commit.lip -- a commit-message linter.
 
-(define (subject-ok? s)
+(def (subject-ok? s)
   (and (not (string-blank? s))
        (<= (string-length s) 50)
        (not (= (string-slice s (- (string-length s) 1) (string-length s)) "."))))
 
-(define (line-ok? s)
+(def (line-ok? s)
   (<= (string-length s) 72))
 
-(define (lint text)
+(def (lint text)
   (let lines (string-split text "\n")
     (let subject (list-ref lines 0)
       (cond [(not (subject-ok? subject)) (err 'bad-subject)]

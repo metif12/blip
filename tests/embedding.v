@@ -86,11 +86,11 @@ fn fails(f fn () !blip.Value) bool {
 
 fn (mut s Suite) two_machines_are_independent() bool {
 	mut a, mut b, _, _ := pair()
-	a.run_str('(define x 1) (define (f) x)') or {
+	a.run_str('(def x 1) (def (f) x)') or {
 		s.fail('two machines are independent', 'a: ${err.msg()}')
 		return false
 	}
-	b.run_str('(define x 2) (define (f) (* 10 x))') or {
+	b.run_str('(def x 2) (def (f) (* 10 x))') or {
 		s.fail('two machines are independent', 'b: ${err.msg()}')
 		return false
 	}
@@ -102,7 +102,7 @@ fn (mut s Suite) two_machines_are_independent() bool {
 
 fn (mut s Suite) a_definition_does_not_cross_machines() bool {
 	mut a, mut b, _, _ := pair()
-	a.run_str('(define only-in-a 1)') or {
+	a.run_str('(def only-in-a 1)') or {
 		s.fail('a definition does not cross machines', 'setup: ${err.msg()}')
 		return false
 	}
@@ -124,11 +124,11 @@ fn (mut s Suite) a_definition_does_not_cross_machines() bool {
 
 fn (mut s Suite) run_str_accumulates() bool {
 	_, mut m, _, _ := pair()
-	m.run_str('(define a 1)') or {
+	m.run_str('(def a 1)') or {
 		s.fail('run_str accumulates', 'setup: ${err.msg()}')
 		return false
 	}
-	m.run_str('(define b (+ a 1)) (define (uses-both) (+ a b))') or {
+	m.run_str('(def b (+ a 1)) (def (uses-both) (+ a b))') or {
 		s.fail('run_str accumulates', err.msg())
 		return false
 	}
@@ -142,7 +142,7 @@ fn (mut s Suite) run_str_accumulates() bool {
 
 fn (mut s Suite) a_closure_survives_a_later_read() bool {
 	_, mut m, _, _ := pair()
-	m.run_str('(define (adder n) (fn [x] (+ x n))) (define add10 (adder 10))') or {
+	m.run_str('(def (adder n) (fn [x] (+ x n))) (def add10 (adder 10))') or {
 		s.fail('a closure survives a later read', 'setup: ${err.msg()}')
 		return false
 	}
@@ -152,7 +152,7 @@ fn (mut s Suite) a_closure_survives_a_later_read() bool {
 	mut big := ''
 	mut n := 0
 	for n < 300 {
-		big += '(define filler${n} ${n})\n'
+		big += '(def filler${n} ${n})\n'
 		n++
 	}
 	m.run_str(big) or {
@@ -170,8 +170,8 @@ fn (mut s Suite) a_closure_survives_a_later_read() bool {
 fn (mut s Suite) load_evaluates_into_the_running_machine() bool {
 	_, mut m, _, h := pair()
 	h.give_file('lib.vl',
-		'(define loaded-value 41)\n(define (loaded-fn) (+ loaded-value 1))')
-	m.run_str('(define before 1)') or {
+		'(def loaded-value 41)\n(def (loaded-fn) (+ loaded-value 1))')
+	m.run_str('(def before 1)') or {
 		s.fail('load evaluates into the running machine', 'setup: ${err.msg()}')
 		return false
 	}
@@ -194,7 +194,7 @@ fn (mut s Suite) load_evaluates_into_the_running_machine() bool {
 // read is silence, so the suite asserts the value loads AND the warning lands.
 fn (mut s Suite) vl_extension_load_warns_deprecation() bool {
 	_, mut m, _, h := pair()
-	h.give_file('lib.vl', '(define loaded-value 41)\n')
+	h.give_file('lib.vl', '(def loaded-value 41)\n')
 	m.load('lib.vl') or {
 		s.fail('a .vl load warns deprecation', err.msg())
 		return false
@@ -268,7 +268,7 @@ fn (mut s Suite) a_step_limit_is_per_machine() bool {
 
 fn (mut s Suite) a_machine_survives_a_bad_program() bool {
 	_, mut m, _, _ := pair()
-	m.run_str('(define good 7)') or {
+	m.run_str('(def good 7)') or {
 		s.fail('a machine survives a bad program', 'setup: ${err.msg()}')
 		return false
 	}

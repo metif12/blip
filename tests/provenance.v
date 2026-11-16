@@ -16,7 +16,7 @@ fn main() {
 	h := host.new_capture()
 	mut m := machine.new_standalone(h)
 	m.source = 'config.lip'
-	src := '(define a 42)\n(define b 42)\n[a b (+ a b)]'
+	src := '(def a 42)\n(def b 42)\n[a b (+ a b)]'
 	v := m.run_str(src)!
 	at(v, 'config.lip', 3, 1)
 	xs := v.as_vector() or { panic('unreachable: valid test input') }.data
@@ -28,7 +28,7 @@ fn main() {
 	loc := xs[2].source_location() or { panic('missing location') }
 	assert src[loc.start..loc.end] == '(+ a b)'
 
-	h.give_file('defaults.lip', '(define default-port 8080)\n(define (port) (+ default-port 1))\n(define (identity x) x)')
+	h.give_file('defaults.lip', '(def default-port 8080)\n(def (port) (+ default-port 1))\n(def (identity x) x)')
 	m.load('defaults.lip')!
 	at(m.run_str('default-port')!, 'defaults.lip', 1, 22)
 	at(m.run_str('(port)')!, 'defaults.lip', 2, 16)
@@ -63,13 +63,13 @@ fn main() {
 	h.give_file('broken.lip', '(undefined)')
 	m.load('broken.lip') or {}
 	assert m.source == 'config.lip'
-	m.run_str('(define (args . xs) xs)')!
+	m.run_str('(def (args . xs) xs)')!
 	at(m.run_str('(args 1 2)')!, 'config.lip', 1, 1)
 	m.run_str('(struct Point (x y))')!
 	at(m.run_str('Point')!, 'config.lip', 1, 1)
 	point := m.run_str('(Point 1 2)')!
 	at(point.as_struct() or { panic('unreachable: valid test input') }.get('y'), 'config.lip', 1, 10)
-	m.run_str('(define p (Point 1 2))')!
+	m.run_str('(def p (Point 1 2))')!
 	updated := m.run_str('(p.x := 9)')!
 	at(updated, 'config.lip', 1, 1)
 	at(updated.as_struct() or { panic('unreachable: valid test input') }.get('x'), 'config.lip', 1, 9)
@@ -82,10 +82,10 @@ fn main() {
 	}
 	m.run_str('(set! a 99)')!
 	at(m.run_str('a')!, 'config.lip', 1, 9)
-	m.run_str('(define data @[0])')!
+	m.run_str('(def data @[0])')!
 	m.run_str('(array-set! data 0 23)')!
 	at(m.run_str('(array-ref data 0)')!, 'config.lip', 1, 20)
-	m.run_str('(define (inc x) (+ x 1))')!
+	m.run_str('(def (inc x) (+ x 1))')!
 	mapped := m.run_str('(map inc [1 2])')!
 	for item in prims.seq(mapped)! { at(item, 'config.lip', 1, 17) }
 	// New primitive results include their generated elements; cycles are bounded.

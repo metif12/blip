@@ -9,7 +9,7 @@
 
 ;; A configuration is a table. Labelled arguments supply defaults, so a
 ;; minimal config file is a single call.
-(define (configure :host [host "localhost"]
+(def (configure :host [host "localhost"]
                    :port [port 8080]
                    :debug [debug #f])
   {:host host :port port :debug debug})
@@ -22,13 +22,13 @@
 (configure :host "api.example.com" :port 443 :debug #f)   ;=> {:host "api.example.com" :port 443 :debug #f}
 
 ;; Because it is code, a config can compute. Here a port derived from a name:
-(define (port-for name)
+(def (port-for name)
   (if (= name "https") 443 8080))
 (configure :host "svc" :port (port-for "https"))   ;=> {:host "svc" :port 443 :debug #f}
 
 ;; A config can also be validated before it is returned, using the same Result
 ;; combinators as any other blip program. Bad input is a value, not an abort.
-(define (checked-config :host [host ""] :port [port 0])
+(def (checked-config :host [host ""] :port [port 0])
   (cond [(string-blank? host) (err 'missing-host)]
         [(or (< port 1) (> port 65535)) (err 'bad-port)]
         [else (ok {:host host :port port})]))

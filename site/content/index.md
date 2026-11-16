@@ -4,7 +4,7 @@ A Lisp dialect implemented in V: a CEK-style machine with an explicit heap stack
 
 ```
 $ blip
-blip:1> (define (fib n)
+blip:1> (def (fib n)
 .......   (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))
 blip:1> (fib 20)
 6765
