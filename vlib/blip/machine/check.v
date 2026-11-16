@@ -268,12 +268,16 @@ fn (mut m Machine) check_form(id blip.NodeId, env map[string]string, ret string,
 			}
 			return 'any'
 		}
-		'begin', 'do' {
+		'begin' {
 			mut t := 'any'
 			for a in args {
 				t = m.check_form(a, env, ret, sigs, mut diags)
 			}
 			return t
+		}
+		'do' {
+			m.check_diag(id, '`do` was removed in v2; use `begin`', mut diags)
+			return 'any'
 		}
 		'time' {
 			if args.len == 0 {

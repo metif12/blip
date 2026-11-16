@@ -359,10 +359,14 @@ fn (mut e Emitter) special(name string, id reader.NodeId, kids []reader.NodeId) 
 		e.emit_if(kids)
 		return true
 	}
-	if name == 'begin' || name == 'do' {
+	if name == 'begin' {
 		for k in kids[1..] {
 			e.stmt(k)
 		}
+		return true
+	}
+	if name == 'do' {
+		e.refuse('`do` was removed in v2; use `begin`')
 		return true
 	}
 	if name == 'let' || name == 'let*' || name == 'letrec' {
@@ -1185,11 +1189,15 @@ fn (mut e Emitter) expression_form(name string, kids []reader.NodeId) ?string {
 	if name == 'case' && kids.len >= 2 {
 		return e.case_expr(kids)
 	}
-	if name == 'begin' || name == 'do' {
+	if name == 'begin' {
 		if kids.len <= 1 {
 			return 'null'
 		}
 		return '(${e.seq_values(kids[1..]).join(', ')})'
+	}
+	if name == 'do' {
+		e.refuse('`do` was removed in v2; use `begin`')
+		return 'null'
 	}
 	// defined? probes whether a name is bound. The compiler does NOT evaluate
 	// the name -- this is the whole point of the form -- so it compiles the name

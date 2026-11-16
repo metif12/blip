@@ -68,7 +68,7 @@ spelling only.
 | `define` | `def` | same appendix; `define/contract` becomes `def/contract` (`defc` rejected: contract must read as definition) |
 | `first` / `rest` | `car` / `cdr` | same appendix |
 | `.lip` / `.vl` loader | `.blip` only | loader errors with a migration line instead of a warning |
-| `do` | `begin` | same appendix (macro expansions emit `begin`) |
+| `do` | `begin` | same appendix (macro expansions emit `begin`) — **done**: machine errors, `check` reports, emitter refuses, `05_pipelines`/tour/`blip_in_y_min` emit `begin` |
 | `when` (bare) | `#:when` | guard appendix |
 | `case` | `match` with literals | `cond` stays (condition chains read better than `match #t`); `case` goes because literal-`match` does the same job with destructuring |
 

@@ -328,15 +328,15 @@ the cases that genuinely need them -- new syntax, not new functions.
 ```lisp
 ; define a macro: defmacro runs at compile time and returns code
 (defmacro unless-zero (value body)
-  (list 'if (list '= value 0) '(do) body))
+  (list 'if (list '= value 0) '(begin) body))
 
 ; macex1 expands one step -- the debugging window a macro language needs
 (print (macex1 (unless-zero 0 (print "never"))))
-;=> (if (= 0 0) (do) (print "never"))
+;=> (if (= 0 0) (begin) (print "never"))
 
 ; quasiquote builds code without nested list constructors
 (defmacro my-when (test . body)
-  `(if ,test (do ,@body) (do)))
+  `(if ,test (begin ,@body) (begin)))
 
 ; gensym for generated names -- the fix for accidental capture, which is
 ; the sharp edge of an unhygienic macro system

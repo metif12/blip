@@ -248,10 +248,10 @@ Everything above uses no macros at all. When a case genuinely needs one, `defmac
 
 ```
 (defmacro unless-zero (value body)
-  (list 'if (list '= value 0) '(do) body))
+  (list 'if (list '= value 0) '(begin) body))
 
 (macex1 (unless-zero 0 (print "never")))
-;=> (if (= 0 0) (do) (print "never"))
+;=> (if (= 0 0) (begin) (print "never"))
 ```
 
 ## Modules

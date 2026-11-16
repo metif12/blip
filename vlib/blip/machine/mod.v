@@ -2134,10 +2134,10 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 			return m.eval_try(kids)
 		}
 		'do' {
-			// `(do a b)` is `(begin a b)`, written so a macro can emit it. The
-			// examples' macros use it because `begin` inside a macro reads as the
-			// macro's own body.
-			m.goto(m.make_begin(kids[1..]))
+			// Removed in v2 (roadmap A2): `do` was `begin` under another
+			// name. Macros and programs emit `begin` now. Recipe if you
+			// miss it: (defmacro do body `(begin ,@body)).
+			return error('`do` was removed in v2; use `begin`')
 		}
 		'match' {
 			return m.eval_match(kids)
