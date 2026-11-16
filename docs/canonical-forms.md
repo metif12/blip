@@ -15,6 +15,23 @@ code never has to change.
 | Source file | `.blip` for new files | `.lip` works identically | the whole corpus -- examples, prelude -- is `.lip`; `.blip` is the name going forward |
 | Old modules | (rename to `.blip`) | `.vl` loads with a `m.warnings` entry | migration path, not a breakage: the file still loads |
 
+## Quiet synonyms (same meaning, no advertisement either way)
+
+Some spellings coincide without being anyone's canonical choice, usually
+because the machine never distinguished them:
+
+- `do` is `begin` (the emitter treats them identically; `do` shows up
+  mostly inside macro expansions).
+- `#:when` and `when` both introduce a guard. The reader keeps the
+  Racket-style `#:when`; the checker accepts either.
+- `last` has no alias pair: it answers the final element, `nil` on empty.
+- Error messages name the historical spelling (`define needs...`,
+  `car expects...`) even when you wrote the canonical `def`/`first`.
+  That is a wart in the messages, not a rule about the language.
+- `blip check` reads `def` exactly like `define` (signatures, arity,
+  erased types). Only `define/contract` stays `define`-only -- there is
+  no `def/contract` form.
+
 ## Deliberately *not* aliases
 
 These look interchangeable and are not. Each one is a different semantic,

@@ -4,6 +4,22 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### `blip check` understands `def`, and the docs lose their superlatives
+
+- `check_source` collects signatures from `def` exactly like `define`, and
+  `check_form` checks `def` bodies with `check_define`. Previously a
+  canonical-`def` file was invisible to the checker: no arity or type
+  diagnostics, where the same file spelled `define` reported them.
+  Gate: `tests/contracts.v` (`check def clean`, `check def arg type` --
+  the latter fails without the two one-line changes).
+- Superlative cleanup, no behavior change: `blip_in_y_min.md` and the site
+  tour no longer call labelled arguments "the best fix"; the threading
+  example answers 10 (measured), not 9; the design doc's feature table
+  carries a datedness note instead of reading as a current claim.
+- `docs/canonical-forms.md` gains the quiet synonyms (`do`/`begin`,
+  `#:when`/`when`, single-named `last`) and documents that error messages
+  still name the historical spelling.
+
 ### Docs: canonical forms, a beginner tour, and a `match*` finding
 
 - New `docs/canonical-forms.md`: one advertised spelling per idea (`fn`,

@@ -124,6 +124,11 @@ fn main() {
 	s.check_ok('check clean', '(define (add (x int) (y int)) int (+ x y)) (add 1 2)')
 	s.check_ok('check unknown is silent', '(nosuchfn 1 2 "x") (map f xs)')
 	s.check_ok('check unannotated is silent', '(define (f a b) (+ a b)) (f 1 2)')
+	// `def` is checked exactly like `define`: same signatures, same arity,
+	// same erased types. Only `define/contract` stays `define`-only.
+	s.check_ok('check def clean', '(def (add (x int) (y int)) int (+ x y)) (add 1 2)')
+	s.check_fails('check def arg type', '(def (add (x int) (y int)) int (+ x y)) (add 1 "s")',
+		'expects int for y, got string')
 	// ... and the mismatches name names, positions aside (the CLI prints those).
 	s.check_fails('check arity', '(define (add (x int) (y int)) int (+ x y)) (add 1)',
 		'expects 2 arguments, got 1')

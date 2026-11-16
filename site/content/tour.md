@@ -153,10 +153,10 @@ Three threading forms cover three habits. `->>` puts the value last, `->` puts i
 (->> [1 2 3 4 5]
      |> echo                    ; prints here, passes through
      (filter odd?)
-     (fold + 0))                 ;=> 9
+     (fold + 0))                 ;=> 10
 ```
 
-Labelled arguments are positional underneath — pure sugar, but the best fix for argument-order readability.
+Labelled arguments are positional underneath — pure sugar, and one of the most effective fixes for argument-order readability, since it survives reordering where an assoc-based convention does not.
 
 ```
 (define (connect #:host [h "localhost"] #:port [p 8080]) (format "~a:~a" h p))

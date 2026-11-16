@@ -319,9 +319,9 @@ is impossible, `raise`. Half a design serves neither.
 (connect #:timeout 5 #:host "example.com")   ; order does not matter
 ```
 
-Arguments stay positional underneath, so this is pure sugar -- but it is the
-best fix for Lisp's argument-order readability problem, and it survives
-reordering, which an `assoc`-based convention does not.
+Arguments stay positional underneath, so this is pure sugar -- but it is one of
+the most effective fixes for Lisp's argument-order readability problem, since
+it survives reordering where an `assoc`-based convention does not.
 
 ## Macros
 

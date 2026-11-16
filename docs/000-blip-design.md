@@ -868,6 +868,14 @@ case fetch(key) {
 Rows marked **bold** are the ones where the language is the reference
 implementation, and rows where blip is best are the point of the exercise.
 
+> Status note (2026-11): this table records the design intent at proposal
+> time, not verified implementation status. In particular the `match*` row
+> claims blip as a co-reference implementation, but multi-pattern `match*`
+> currently answers nil where the equivalent `match` answers (see
+> `docs/010-roadmap.md` §10 item 5); `fibers`, `PEGs`, and the numeric tower
+> are likewise designed, not shipped. Read the roadmap's gates, not this
+> table, for what runs today.
+
 ## Appendix C: what blip borrows, and from where
 
 | Idea | From | Milestone |
