@@ -9,6 +9,7 @@ module main
 // mismatches without evaluating anything.
 import blip.host
 import blip.machine
+import blip.manifest
 import blip.printer
 
 struct Suite {
@@ -88,6 +89,44 @@ fn (mut s Suite) check_fails(label string, src string, want_msg string) {
 	s.fail(label, 'no diagnostic containing ${want_msg} (${diags.len} found)')
 }
 
+// check_manifest runs `check` on src with a manifest applied first, and
+// demands a diagnostic containing want_msg -- or, when want_msg is empty,
+// demands silence. The manifest is what E2b adds: without it the checker
+// never names a capability, with `fs` off it names the blip.mod line.
+fn (mut s Suite) check_manifest(label string, manifest_src string, src string, want_msg string) {
+	h := host.new_capture()
+	mut m := machine.new_standalone(h)
+	mf := manifest.parse(manifest_src) or {
+		s.fail(label, 'manifest: ${err.msg()}')
+		return
+	}
+	m.apply_manifest(mf) or {
+		s.fail(label, 'apply: ${err.msg()}')
+		return
+	}
+	forms := m.arena.read_source(src, 'check')
+	if forms.diags.len > 0 {
+		s.fail(label, 'reader: ${forms.diags[0].msg}')
+		return
+	}
+	diags := m.check_source(forms.forms)
+	if want_msg == '' {
+		if diags.len == 0 {
+			s.ok(label, 'clean')
+		} else {
+			s.fail(label, 'unexpected: ${diags[0].msg}')
+		}
+		return
+	}
+	for d in diags {
+		if d.msg.contains(want_msg) {
+			s.ok(label, 'reported: ${want_msg}')
+			return
+		}
+	}
+	s.fail(label, 'no diagnostic containing ${want_msg} (${diags.len} found)')
+}
+
 fn main() {
 	mut s := Suite{}
 
@@ -155,6 +194,19 @@ fn main() {
 	s.check_fails('check contract arity',
 		'(define/contract (halve x) (->/c even?) (/ x 2)) (halve 8 9)',
 		'expects 1 arguments, got 2')
+	// E2b: the manifest gates `check`. With `fs` off, a `read-file` use is
+	// reported naming the blip.mod line that switched it off; with `fs`
+	// on -- or no mention at all -- the same use is silence, because the
+	// checker judges only what the manifest disables.
+	s.check_manifest('check fs off names manifest', '(module m)\n(blip 2)\n(features (fs #f))',
+		'(read-file "x")', 'blip.mod:3')
+	s.check_manifest('check fs off names the feature', '(module m)\n(blip 2)\n(features (fs #f))',
+		'(write-file "x" "y")', "feature 'fs' is off")
+	s.check_manifest('check env off names manifest', '(module m)\n(blip 2)\n(features (env #f))',
+		'(env "HOME")', 'blip.mod:3')
+	s.check_manifest('check fs on stays silent', '(module m)\n(blip 2)\n(features (fs #t))',
+		'(read-file "x")', '')
+	s.check_manifest('check absent stays silent', '(module m)\n(blip 2)', '(read-file "x")', '')
 
 	if s.fails > 0 {
 		eprintln('${s.fails} contract check(s) failed')

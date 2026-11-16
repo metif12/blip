@@ -175,6 +175,42 @@ fn (mut s Suite) spawn_cli(c CliCase, blip_bin string) {
 		'exit ${res.exit_code} (wanted ${c.want_exit}): ${snippet(res.output)}')
 }
 
+// manifest_auto_applies pins the E2b CLI half: inside a directory with a
+// blip.mod that switches `fs` off, `check` fails naming the manifest
+// line and `run` refuses the disabled prim -- without any flag, just by
+// being in the project directory. The suite's own cwd has no blip.mod,
+// so every case above runs unmanifested.
+fn (mut s Suite) manifest_auto_applies(blip_bin string) {
+	dir := os.join_path(os.temp_dir(), 'blip_e2b')
+	os.mkdir_all(dir) or {
+		s.record('manifest auto-applies setup', false, 'mkdir: ${err.msg()}')
+		return
+	}
+	os.write_file(os.join_path(dir, 'blip.mod'), '(module m)\n(blip 2)\n(features (fs #f))') or {
+		s.record('manifest auto-applies setup', false, 'write mod: ${err.msg()}')
+		return
+	}
+	os.write_file(os.join_path(dir, 'prog.blip'), '(print (read-file "x"))\n') or {
+		s.record('manifest auto-applies setup', false, 'write prog: ${err.msg()}')
+		return
+	}
+	prev := os.getwd()
+	os.chdir(dir) or {
+		s.record('manifest auto-applies setup', false, 'chdir: ${err.msg()}')
+		return
+	}
+	chk := os.execute('${blip_bin} check prog.blip')
+	run := os.execute('${blip_bin} run prog.blip')
+	os.chdir(prev) or {}
+	s.record('manifest auto-applies to check', chk.exit_code == 1
+		&& chk.output.contains('blip.mod:3'),
+		'exit ${chk.exit_code}: ${snippet(chk.output)}')
+	s.record('manifest auto-applies to run', run.exit_code == 1
+		&& run.output.contains('unbound identifier: read-file'),
+		'exit ${run.exit_code}: ${snippet(run.output)}')
+	os.rmdir_all(dir) or {}
+}
+
 fn main() {
 	mut s := Suite{}
 
@@ -194,6 +230,7 @@ fn main() {
 	for c in cli_cases {
 		s.spawn_cli(c, blip_bin)
 	}
+	s.manifest_auto_applies(blip_bin)
 	os.rm(tmp) or {}
 
 	if s.fails > 0 {

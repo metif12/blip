@@ -775,6 +775,16 @@ fn (mut s Suite) modular_core() {
 	} else {
 		s.record('capability_prims rejects fibers', true, 'fibers unknown until B4')
 	}
+	s.record('prim_capability maps read-file to fs', machine.prim_capability('read-file') or {
+		''
+	} == 'fs', 'read-file is fs')
+	s.record('prim_capability maps env to env', machine.prim_capability('env') or { '' } == 'env',
+		'env is env')
+	s.record('prim_capability leaves core alone', if _ := machine.prim_capability('+') {
+		false
+	} else {
+		true
+	}, '+ is core')
 	// E3: a core-only machine runs pure code and refuses IO cleanly.
 	h := host.new_capture()
 	mut m := machine.new_standalone_core(h)

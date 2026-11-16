@@ -542,6 +542,19 @@ fn (mut m Machine) check_define(id blip.NodeId, args []blip.NodeId, env map[stri
 // argument types where both sides are known. Unknown callees, unknown
 // arguments, and `any` on either side are silence, not errors.
 fn (mut m Machine) check_call(id blip.NodeId, head string, args []blip.NodeId, env map[string]string, ret string, sigs map[string]CkSig, mut diags []CheckDiag) string {
+	// A disabled capability is reported before anything else (roadmap E2b):
+	// the call cannot run at all -- `apply_manifest` removed the prim, so
+	// running answers `unbound identifier` -- and the diagnostic names the
+	// blip.mod line that switched it off, not the use site. Without a
+	// manifest every feature defaults on and this stays silent.
+	if feat := prim_capability(head) {
+		if !m.applied_manifest.feature(feat) {
+			line := m.applied_manifest.feature_line(feat)
+			m.check_diag(id, "${head} is disabled by blip.mod:${line} (feature '${feat}' is off)",
+				mut diags)
+			return 'any'
+		}
+	}
 	mut atypes := []string{}
 	for a in args {
 		atypes << m.check_form(a, env, ret, sigs, mut diags)

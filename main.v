@@ -8,6 +8,7 @@ import blip.emit
 import blip.host
 import blip.lsp
 import blip.machine
+import blip.manifest
 import blip.migrate
 import blip.printer
 import blip.reader
@@ -249,6 +250,35 @@ fn need_blip_ext(path string) ! {
 	}
 }
 
+// auto_manifest applies ./blip.mod when a command runs inside a project
+// directory (roadmap E2b). No manifest is the common case and stays silent.
+// A manifest that will not parse, or names an unknown feature, fails the
+// command instead of running with the wrong capabilities: the file declares
+// intent, and running past a broken declaration would be the typo that
+// silently passes which the manifest format exists to prevent.
+//
+// The prelude always loads first with full prims: std.blip is trusted
+// infrastructure, and a project switch must gate user code, not the
+// library the error messages are written in.
+fn auto_manifest(mut m machine.Machine) bool {
+	if !os.exists('blip.mod') {
+		return true
+	}
+	src := os.read_file('blip.mod') or {
+		eprintln('blip: cannot read blip.mod: ${err.msg()}')
+		return false
+	}
+	mf := manifest.parse(src) or {
+		eprintln(err.msg())
+		return false
+	}
+	m.apply_manifest(mf) or {
+		eprintln(err.msg())
+		return false
+	}
+	return true
+}
+
 fn run_files(paths []string) int {
 	$if wasm32 {
 		println('blip: run not available in wasm build')
@@ -263,6 +293,9 @@ fn run_files(paths []string) int {
 				eprintln('blip: cannot load the standard library: ${err.msg()}')
 				code = 1
 			}
+		}
+		if !auto_manifest(mut m) {
+			return 1
 		}
 		for path in paths {
 			need_blip_ext(path) or {
@@ -330,6 +363,10 @@ fn start_repl() int {
 				eprintln('blip: cannot load the standard library: ${err.msg()}')
 			}
 		}
+		// A broken manifest warns rather than refusing the session: the REPL
+		// is where a user fixes the file, and locking them out of the tool
+		// they fix it with would be the wrong strictness.
+		auto_manifest(mut r.machine)
 		return r.run()
 	}
 }
@@ -641,6 +678,10 @@ fn run_tests(paths []string) int {
 			if std != '' {
 				m.load(std) or { eprintln('blip: cannot load the standard library: ${err.msg()}') }
 			}
+			if !auto_manifest(mut m) {
+				s.fails++
+				continue
+			}
 			m.source = path
 			forms := m.arena.read_source(src, path)
 			lines := src.split('\n')
@@ -712,6 +753,10 @@ fn check_files(paths []string) int {
 			}
 			h := host.new_capture()
 			mut m := machine.new_standalone(h)
+			if !auto_manifest(mut m) {
+				fails++
+				continue
+			}
 			forms := m.arena.read_source(src, path)
 			if forms.diags.len > 0 {
 				d := forms.diags[0]

@@ -99,6 +99,20 @@ pub fn capability_prims(name string) ?[]string {
 	}
 }
 
+// prim_capability names the manifest capability gating a prim, or none
+// when the prim is core (always available). The reverse of
+// capability_prims, for `blip check` (E2b): the checker reports the use,
+// not the switch, so it needs prim -> feature.
+pub fn prim_capability(name string) ?string {
+	if name in prims.fs_prim_names() {
+		return 'fs'
+	}
+	if name in prims.env_prim_names() {
+		return 'env'
+	}
+	return none
+}
+
 // apply_manifest enforces a blip.mod's `(features ...)` stanza (roadmap E2).
 // A feature switched OFF removes its prims, so a later use fails cleanly
 // as `unbound identifier` rather than running. A feature switched ON (or

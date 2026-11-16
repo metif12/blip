@@ -248,7 +248,13 @@ Using a disabled feature is a clean error, and `blip check`
 understands the manifest. Precedence: manifest < embedder code (an
 embedder's explicit `restrict_to` wins over the file). Gate: a fixture
 manifest with a capability off, asserting the clean error on use and a
-`check` diagnostic naming the manifest line.
+`check` diagnostic naming the manifest line. — **done**: `apply_manifest`
+removes the gated prims (use fails as `unbound identifier`);
+`prim_capability` lets `check` report `read-file is disabled by
+blip.mod:<line> (feature 'fs' is off)`; the CLI auto-applies `./blip.mod`
+in `run`/`test`/`check` (after the prelude loads) and warns in `repl`.
+Pins: `contracts.v` manifest check cases, `hostile.v` CLI auto-apply
+from a project dir, `embedding.v` runtime refusals.
 
 ### E3. Modular core
 
