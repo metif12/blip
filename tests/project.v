@@ -2,6 +2,7 @@ module main
 
 import os
 import blip.pkg
+import blip.toolchain
 
 // The project-lifecycle gate (roadmap Track G: G6 new/init, G3 tool
 // installs). Everything runs in temp dirs, and the git-backed package
@@ -173,6 +174,82 @@ fn main() {
 	}
 	s.record('install_tool module', tools.len == 1 && os.exists(tools[0].sh)
 		&& os.exists(tools[0].bat), if tools.len == 1 { tools[0].name } else { 'no tools' })
+
+	// ---- G4: two toolchains side by side, per-project pins ---------------
+	// A second version is a second binary: rebuild with the fixture flag
+	// so `version` genuinely differs, then ship both as release artifacts
+	// in a local release base (no network, same seam as BLIP_PKG_MIRROR).
+	// NOTE: the build runs unquoted through cmd, so every path here must
+	// be space-free (temp dirs are); spaces fail loudly below, not weirdly.
+	repo := prev
+	if repo.contains(' ') || base.contains(' ') {
+		s.record('G4 paths spaceless', false, 'spaces would break cmd quoting')
+		return
+	}
+	src2 := os.join_path(base, 'src2')
+	os.mkdir_all(src2) or {}
+	bin_name := toolchain.binary_name()
+	os.chdir(repo) or {}
+	fx := os.execute('v -d fixture_version_2 -cc gcc -path vlib^|@vlib -o ${src2}/${bin_name} main.v')
+	os.chdir(base) or {}
+	s.record('G4 fixture binary builds', fx.exit_code == 0, snippet(fx.output))
+	art := toolchain.artifact_file()
+	rb := os.join_path(base, 'releases')
+	os.mkdir_all(os.join_path(rb, 'v0.1.0')) or {}
+	os.mkdir_all(os.join_path(rb, 'v0.2.0-fixture')) or {}
+	os.execute('tar -a -cf "${rb}/v0.1.0/${art}" -C "${blip_home}" "${bin_name}"')
+	os.execute('tar -a -cf "${rb}/v0.2.0-fixture/${art}" -C "${src2}" "${bin_name}"')
+	thome := os.join_path(base, 'thome')
+	old_blip_home := os.getenv('BLIP_HOME')
+	os.setenv('BLIP_HOME', thome, true)
+	old_rel_base := os.getenv('BLIP_RELEASE_BASE')
+	os.setenv('BLIP_RELEASE_BASE', rb, true)
+	i1 := os.execute('${blip_bin} toolchain install 0.1.0')
+	s.record('G4 install 0.1.0', i1.exit_code == 0 && os.exists(os.join_path(thome,
+		'versions/0.1.0/${bin_name}')), snippet(i1.output))
+	i2 := os.execute('${blip_bin} toolchain install 0.2.0-fixture')
+	s.record('G4 install 0.2.0-fixture', i2.exit_code == 0, snippet(i2.output))
+	s.record('G4 lib snapshots beside the binary',
+		os.exists(os.join_path(thome, 'versions/0.2.0-fixture/lib/std.blip')), 'std.blip')
+	os.chdir(base) or {}
+	os.mkdir_all('projA/sub') or {}
+	os.mkdir_all('projB') or {}
+	os.chdir('projA') or {}
+	os.execute('${blip_bin} toolchain use 0.2.0-fixture')
+	os.chdir(os.join_path(base, 'projB')) or {}
+	os.execute('${blip_bin} toolchain use 0.1.0')
+	def := os.execute('${blip_bin} toolchain default 0.1.0')
+	s.record('G4 default sets', def.exit_code == 0, snippet(def.output))
+	lst := os.execute('${blip_bin} toolchain list')
+	s.record('G4 list shows both', lst.output.contains('0.1.0') && lst.output.contains('0.2.0-fixture'),
+		snippet(lst.output))
+	shim := os.execute('${blip_bin} toolchain shim')
+	s.record('G4 shim installs', shim.exit_code == 0, snippet(shim.output))
+	os.setenv('PATH', os.join_path(thome, 'bin') + os.path_delimiter + os.getenv('PATH'), true)
+	os.chdir(os.join_path(base, 'projA')) or {}
+	va := os.execute('blip version')
+	s.record('G4 pin selects A', va.exit_code == 0 && va.output.contains('0.2.0-fixture'),
+		snippet(va.output))
+	os.chdir('sub') or {}
+	vsub := os.execute('blip version')
+	s.record('G4 pin applies in subdirs', vsub.exit_code == 0
+		&& vsub.output.contains('0.2.0-fixture'), snippet(vsub.output))
+	os.chdir(os.join_path(base, 'projB')) or {}
+	vb := os.execute('blip version')
+	s.record('G4 pin selects B', vb.exit_code == 0 && vb.output.contains('blip 0.1.0'),
+		snippet(vb.output))
+	os.setenv('BLIP_VERSION', '0.1.0', true)
+	os.chdir(os.join_path(base, 'projA')) or {}
+	ve := os.execute('blip version')
+	s.record('G4 env wins over pin', ve.exit_code == 0 && ve.output.contains('blip 0.1.0'),
+		snippet(ve.output))
+	os.setenv('BLIP_VERSION', '', true)
+	os.chdir(os.join_path(base, 'projB')) or {}
+	rm := os.execute('${blip_bin} toolchain remove 0.2.0-fixture')
+	s.record('G4 remove drops a version', rm.exit_code == 0
+		&& !os.is_dir(os.join_path(thome, 'versions/0.2.0-fixture')), snippet(rm.output))
+	os.setenv('BLIP_HOME', old_blip_home, true)
+	os.setenv('BLIP_RELEASE_BASE', old_rel_base, true)
 	os.chdir(prev) or {}
 	os.setenv('BLIP_PKG_MIRROR', old_mirror, true)
 	os.rmdir_all(base) or {}

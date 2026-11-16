@@ -320,7 +320,14 @@ packages suffice for v2; a central registry/index is a follow-up.
    layout decision (where versions live, how shims resolve); can start
    against the current release layout and grow with Track F. Gate: two
    blip versions side by side, per-project pin, `blip version`
-   reporting the right one in each directory.
+   reporting the right one in each directory. — **done**: versions in
+   `<home>/versions/<version>/` (`$BLIP_HOME` or `~/.blip`),
+   `toolchain install` unpacks the release artifact (or `$BLIP_RELEASE_BASE`
+   for fixtures/mirrors) plus a lib/programs snapshot, `use` writes the
+   upward-searched `.blip-version` pin, `default`/`list`/`shim`/`remove`
+   round it out with `$BLIP_VERSION` overriding everything;
+   `tests/project.v` pins two versions side by side with each `blip version`
+   reporting its directory's pin (including subdirs), env-over-pin, and remove.
 5. **G5 monorepo / workspace / collaboration.** Multi-package repos with
    one lockfile (`workspace` stanza), path overrides for local
    development, reproducible clean-room `pkg install` for teammates.
@@ -375,5 +382,7 @@ it would duplicate them).
 - `Value` width (`int` vs `i64`) on 32-bit targets and tower promotion.
 - `Program` IR peak memory with per-stage arenas (unmeasured).
 - E2 switch list: which capabilities get flags beyond fibers and FS/network?
-- G4 layout: where do installed blip versions live, how do shims resolve?
+- G4 layout (decided): versions in `<home>/versions/<version>/`
+  (`$BLIP_HOME` or `~/.blip`); shims resolve `$BLIP_VERSION`, then the
+  nearest `.blip-version` walking up, then the `default` file.
 - E1 live mutation (envs, continuations): in a later version, not v2.

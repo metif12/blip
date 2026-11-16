@@ -60,6 +60,12 @@ no stanza, a root `tool.blip` is the default. **`blip env`** prints project
 facts go-style, one `key value` per line. **`blip pkg why &lt;name&gt;`**
 reports who depends on a package and what each requester asked for.
 
+**`blip toolchain`** manages blip itself: versions live in `&lt;home&gt;/versions/&lt;version&gt;/`
+(home is `$BLIP_HOME` when set, else `~/.blip`), `blip toolchain install &lt;version&gt;`
+fetches and unpacks a release, `use` pins a directory (`.blip-version`, upward-searching),
+`default` sets the fallback, `shim` installs `bin/` shims so one PATH resolves every
+project to its version, and `remove` deletes one.
+
 **`blip pkg`** manages packages, which are git repositories of `.blip` files:
 
 ```

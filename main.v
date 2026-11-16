@@ -14,6 +14,7 @@ import blip.pkg
 import blip.printer
 import blip.reader
 import blip.repl
+import blip.toolchain
 import strings
 
 // blip: a Lisp dialect implemented in V.
@@ -33,8 +34,9 @@ import strings
 //   blip lsp                  serve the language server over stdio
 //   blip new <name>           scaffold a project
 //   blip init [name]          scaffold inside the current directory
-//   blip install <repo>       install a package's tools onto PATH
+//   blip install <repo>       install package tools onto PATH
 //   blip env                  print project facts (versions, paths)
+//   blip toolchain <sub>      manage blip itself (install, use, default)
 //   blip pkg <sub>            install, list and remove packages
 //   blip version | help       about, and about a command
 //
@@ -42,7 +44,14 @@ import strings
 // anything else, so the default costs nothing and is the thing a person wants
 // most often once the language is installed.
 
-const version = '0.1.0'
+// version is the blip version `blip version` reports. The fixture build
+// (`v -d fixture_version_2`) recompiles with a second version so two
+// toolchains can sit side by side in the G4 gate.
+$if fixture_version_2 {
+	const version = '0.2.0-fixture'
+} $else {
+	const version = '0.1.0'
+}
 
 fn exit_code(code int) {
 	exit(code)
@@ -70,6 +79,7 @@ usage:
   blip init [name]          scaffold inside the current directory
   blip install <repo>       install package tools onto PATH
   blip env                  print project facts (versions, paths)
+  blip toolchain <sub>      manage blip itself (install, use, default)
   blip pkg install [repo]      install the lock, or a package from GitHub
   blip pkg update               re-resolve ./blip.mod to fresh pins
   blip pkg verify               check the tree against the lock
@@ -192,6 +202,26 @@ One `key value` per line, in stable order: the blip version, the project
 directory, the manifest (or none), the module, the lock, the modules and
 bin directories, the package mirror, and the workspace members. Nothing
 is evaluated; this is safe anywhere, project or not.')
+		}
+		'toolchain' {
+			println('blip toolchain -- manage blip itself
+
+Versions live in <home>/versions/<version>/ (home is $BLIP_HOME when set,
+else ~/.blip); <home>/bin/blip is a shim that resolves the version per
+directory and execs it.
+
+  blip toolchain install <version>  fetch and unpack a release
+  blip toolchain list               installed versions
+  blip toolchain use <version>      pin this directory (.blip-version)
+  blip toolchain default <version>  set the fallback
+  blip toolchain shim               install the bin/ shims
+  blip toolchain remove <version>   delete a version
+
+Resolution is $BLIP_VERSION, then the nearest .blip-version walking up,
+then the default file. $BLIP_RELEASE_BASE retargets the release download
+at a local directory (offline fixtures); without it, releases come from
+github. Installing starts from the current release layout -- a bare
+binary -- so lib/ and programs/ snapshot from the running blip beside it.')
 		}
 		'pkg' {
 			println('blip pkg -- package management
@@ -605,6 +635,9 @@ fn main() {
 			}
 			'pkg' {
 				exit_code(pkg_command(args[1..]))
+			}
+			'toolchain' {
+				exit_code(toolchain_command(args[1..]))
 			}
 			'version', '-V', '--version' {
 				println('blip ${version}')
@@ -1443,6 +1476,194 @@ fn pkg_why(spec string) int {
 		for f in u.reqs[name] {
 			println('  ${f.requester} wants ${f.req}')
 		}
+		return 0
+	}
+}
+
+// ---- toolchain ------------------------------------------------------------
+//
+// `blip toolchain` manages blip itself (Track G4): versions live in
+// <home>/versions/<version>/, <home>/bin/blip is the shim that resolves
+// the version per directory, and `.blip-version` pins a project.
+
+fn toolchain_command(args []string) int {
+	$if wasm32 {
+		println('blip: toolchain not available in wasm build')
+		return 1
+	} $else {
+		if args.len == 0 {
+			eprintln('blip: toolchain needs a subcommand')
+			eprintln('  blip toolchain install <version>  fetch and unpack a release')
+			eprintln('  blip toolchain list               installed versions')
+			eprintln('  blip toolchain use <version>      pin this directory')
+			eprintln('  blip toolchain default <version>  set the fallback')
+			eprintln('  blip toolchain shim               install the bin/ shims')
+			eprintln('  blip toolchain remove <version>   delete a version')
+			return 2
+		}
+		sub := args[0]
+		match sub {
+			'install' {
+				if args.len < 2 {
+					eprintln('blip: toolchain install needs a version')
+					return 2
+				}
+				return toolchain_install(args[1])
+			}
+			'list' {
+				return toolchain_list()
+			}
+			'use' {
+				if args.len < 2 {
+					eprintln('blip: toolchain use needs a version')
+					return 2
+				}
+				toolchain.use_version('.', args[1]) or {
+					eprintln(err.msg())
+					return 1
+				}
+				println('pinned ${args[1]} in ${os.getwd()}')
+				return 0
+			}
+			'default' {
+				if args.len < 2 {
+					eprintln('blip: toolchain default needs a version')
+					return 2
+				}
+				toolchain.write_default(args[1]) or {
+					eprintln(err.msg())
+					return 1
+				}
+				println('default is ${args[1]}')
+				return 0
+			}
+			'shim' {
+				return toolchain_shim()
+			}
+			'remove' {
+				if args.len < 2 {
+					eprintln('blip: toolchain remove needs a version')
+					return 2
+				}
+				toolchain.remove_version(args[1]) or {
+					eprintln(err.msg())
+					return 1
+				}
+				println('removed ${args[1]}')
+				return 0
+			}
+			else {
+				eprintln('blip: unknown toolchain subcommand `${sub}`')
+				eprintln('run `blip help toolchain` for usage')
+				return 2
+			}
+		}
+	}
+}
+
+// toolchain_install fetches a release artifact and assembles it into
+// <home>/versions/<version>/. The artifact comes from $BLIP_RELEASE_BASE
+// when set (a directory holding v<version>/ files, for offline fixtures
+// and mirrors), else the github release download. The binary layout it
+// starts from is the current one -- a bare binary -- so lib/ and programs/
+// snapshot from the running blip beside it.
+fn toolchain_install(version string) int {
+	$if wasm32 {
+		println('blip: toolchain not available in wasm build')
+		return 1
+	} $else {
+		base := os.getenv('BLIP_RELEASE_BASE')
+		file := toolchain.artifact_file()
+		url := toolchain.release_url(version)
+		tmp := os.join_path(os.temp_dir(), 'blip_toolchain_artifact')
+		os.rm(tmp) or {}
+		if base != '' && !base.contains('://') {
+			src := os.join_path(os.join_path(base, 'v' + version), file)
+			if !os.exists(src) {
+				eprintln('blip: no artifact at ${src}')
+				return 1
+			}
+			src_bytes := os.read_file(src) or {
+				eprintln('blip: cannot read ${src}: ${err.msg()}')
+				return 1
+			}
+			os.write_file(tmp, src_bytes) or {
+				eprintln('blip: cannot stage ${src}: ${err.msg()}')
+				return 1
+			}
+		} else {
+			r := os.exec(['curl', '-fsSL', '-o', tmp, url])
+			if r.exit_code != 0 {
+				eprintln('blip: cannot download ${url}')
+				eprintln(r.output.trim_space())
+				return 1
+			}
+		}
+		dst := toolchain.install_from_artifact(version, tmp, resource_path('lib'),
+			resource_path('programs')) or {
+			eprintln(err.msg())
+			return 1
+		}
+		os.rm(tmp) or {}
+		println('installed ${version} in ${dst}')
+		return 0
+	}
+}
+
+// toolchain_list shows installed versions, marking the default and the pin
+// that applies here (upward search, same as the shim resolves).
+fn toolchain_list() int {
+	$if wasm32 {
+		println('blip: toolchain not available in wasm build')
+		return 1
+	} $else {
+		vs := toolchain.installed_versions()
+		if vs.len == 0 {
+			println('no toolchains installed')
+			return 0
+		}
+		def := toolchain.read_default() or { '' }
+		pinned := toolchain.find_pin(os.getwd()) or { toolchain.Pin{ version: '', file: '' } }
+		for v in vs {
+			mut marks := []string{}
+			if v == def {
+				marks << 'default'
+			}
+			if v == pinned.version && pinned.version != '' {
+				marks << 'pinned here'
+			}
+			suffix := if marks.len > 0 { ' (' + marks.join(', ') + ')' } else { '' }
+			println('${v}${suffix}')
+		}
+		return 0
+	}
+}
+
+// toolchain_shim writes the bin/ shims with this home embedded, so the one
+// dir on PATH resolves every project to its version.
+fn toolchain_shim() int {
+	$if wasm32 {
+		println('blip: toolchain not available in wasm build')
+		return 1
+	} $else {
+		home := toolchain.home()
+		bin := toolchain.bin_dir()
+		os.mkdir_all(bin) or {
+			eprintln('blip: cannot create ${bin}: ${err.msg()}')
+			return 1
+		}
+		sh := os.join_path(bin, 'blip')
+		bat := os.join_path(bin, 'blip.bat')
+		os.write_file(sh, toolchain.shim_sh(home, toolchain.binary_name())) or {
+			eprintln('blip: cannot write ${sh}: ${err.msg()}')
+			return 1
+		}
+		os.chmod(sh, 0o755) or {}
+		os.write_file(bat, toolchain.shim_bat(home, toolchain.binary_name())) or {
+			eprintln('blip: cannot write ${bat}: ${err.msg()}')
+			return 1
+		}
+		println('shims in ${bin}; add it to PATH')
 		return 0
 	}
 }

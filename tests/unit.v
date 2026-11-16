@@ -8,6 +8,7 @@ import blip.machine
 import blip.manifest
 import blip.migrate
 import blip.pkg
+import blip.toolchain
 import blip.prims
 import blip.printer
 import blip.reader
@@ -827,6 +828,112 @@ fn (mut s Suite) modular_core() {
 	s.record('enable_env restores env', m.has_prim('env'), 'env present')
 }
 
+// ---- toolchain: versions, pins, shims (roadmap Track G4) ------------------
+//
+// The layout half of self-management is pinned here with a temp BLIP_HOME;
+// the download-and-exec half runs through the CLI in tests/project.v,
+// which builds a second versioned binary and drives the shims for real.
+fn (mut s Suite) toolchain_pins() {
+	old_home := os.getenv('BLIP_HOME')
+	th := os.join_path(os.vtmp_dir(), 'blip_tc_pins')
+	os.rmdir_all(th) or {}
+	os.setenv('BLIP_HOME', th, true)
+	s.record('toolchain home honors env', toolchain.home() == th, th)
+	os.setenv('BLIP_HOME', '', true)
+	s.record('toolchain home defaults under user', toolchain.home().ends_with('.blip'),
+		toolchain.home())
+	os.setenv('BLIP_HOME', th, true)
+	af := toolchain.artifact_file()
+	$if windows {
+		s.record('toolchain artifact is a zip', af == 'blip-windows.zip', af)
+	} $else {
+		s.record('toolchain artifact is a tarball', af == 'blip-linux.tar.gz', af)
+	}
+	s.record('toolchain url defaults to github',
+		toolchain.release_url('1.0.0') == 'https://github.com/metif12/blip/releases/download/v1.0.0/' + af,
+		toolchain.release_url('1.0.0'))
+	os.setenv('BLIP_RELEASE_BASE', '/srv/rel', true)
+	s.record('toolchain url honors base',
+		toolchain.release_url('1.0.0') == '/srv/rel/v1.0.0/' + af, toolchain.release_url('1.0.0'))
+	os.setenv('BLIP_RELEASE_BASE', '', true)
+	// Pins resolve upward; missing pins and versions are errors, not guesses.
+	os.mkdir_all(os.join_path(th, 'versions/v1/inner/deep')) or {}
+	os.write_file(os.join_path(th, 'versions/v1/.blip-version'), '9.9') or {}
+	found := toolchain.find_pin(os.join_path(th, 'versions/v1/inner/deep')) or {
+		s.record('toolchain pin walks up', false, 'no pin found')
+		toolchain.Pin{}
+	}
+	s.record('toolchain pin walks up', found.version == '9.9'
+		&& found.file == os.join_path(th, 'versions/v1/.blip-version'), found.version)
+	os.rm(os.join_path(th, 'versions/v1/.blip-version')) or {}
+	s.record('toolchain pin misses cleanly', if _ := toolchain.find_pin(os.join_path(th,
+		'versions/v1/inner')) {
+		false
+	} else {
+		true
+	}, 'none without a file')
+	toolchain.use_version(th, 'v1') or {
+		s.record('toolchain use refuses missing', err.msg().contains('not installed'), err.msg())
+	}
+	os.write_file(os.join_path(th, 'versions/v1/' + toolchain.binary_name()), 'fake') or {}
+	toolchain.use_version(os.join_path(th, 'versions/v1/inner'), 'v1') or {
+		s.record('toolchain use pins', false, err.msg())
+	}
+	s.record('toolchain use pins',
+		os.read_file(os.join_path(th, 'versions/v1/inner/.blip-version')) or { '' } == 'v1',
+		'pinned')
+	// Default round-trips; the default version cannot be removed.
+	toolchain.write_default('nope') or {
+		s.record('toolchain default refuses missing', err.msg().contains('not installed'), err.msg())
+	}
+	toolchain.write_default('v1') or { s.record('toolchain default writes', false, err.msg()) }
+	s.record('toolchain default reads', (toolchain.read_default() or { '' }) == 'v1', 'v1')
+	toolchain.remove_version('v1') or {
+		s.record('toolchain remove refuses default', err.msg().contains('default'), err.msg())
+	}
+	os.mkdir_all(os.join_path(th, 'versions/v2')) or {}
+	toolchain.remove_version('v2') or { s.record('toolchain remove deletes', false, err.msg()) }
+	s.record('toolchain remove deletes', !os.is_dir(os.join_path(th, 'versions/v2')), 'gone')
+	toolchain.remove_version('v2') or {
+		s.record('toolchain remove misses loudly', err.msg().contains('not installed'), err.msg())
+	}
+	s.record('toolchain versions sorted', toolchain.installed_versions() == ['v1'], 'v1 only')
+	// Shims resolve env, then the upward pin, then the default, then fail.
+	sh := toolchain.shim_sh(th, 'blip')
+	s.record('toolchain sh shim resolves', sh.contains('BLIP_VERSION') && sh.contains('.blip-version')
+		&& sh.contains('/default') && sh.contains('/versions/'), 'three levels')
+	bat := toolchain.shim_bat(th, 'blip.exe')
+	s.record('toolchain bat shim resolves', bat.contains('BLIP_VERSION')
+		&& bat.contains('.blip-version') && bat.contains('default'), 'three levels')
+	// install_from_artifact assembles from a plain directory too (no tar).
+	ad := os.join_path(os.vtmp_dir(), 'blip_tc_asm_probe')	os.rmdir_all(ad) or {}
+	os.mkdir_all(os.join_path(ad, 'src')) or {}
+	os.mkdir_all(os.join_path(ad, 'res/lib')) or {}
+	os.write_file(os.join_path(ad, 'src/' + toolchain.binary_name()), 'fakebin') or {}
+	os.write_file(os.join_path(ad, 'res/lib/std.blip'), '(def x 1)\n') or {}
+	got := toolchain.install_from_artifact('asmv', os.join_path(ad, 'src'), os.join_path(ad,
+		'res/lib'), '') or {
+		s.record('toolchain assembles a version', false, err.msg())
+		''
+	}
+	s.record('toolchain assembles a version', os.exists(os.join_path(got, toolchain.binary_name()))
+		&& os.exists(os.join_path(got, 'lib/std.blip')), got)
+	s.record('toolchain dirs nest',
+		toolchain.version_dir('v1') == os.join_path(toolchain.versions_dir(), 'v1'), 'versions/v1')
+	// unpack handles real tarballs too (system tar reads and writes them).
+	os.mkdir_all(os.join_path(ad, 'arch/inner')) or {}
+	os.write_file(os.join_path(ad, 'arch/inner/f.blip'), '(def x 1)\n') or {}
+	os.execute('tar -a -cf "${ad}/pkg.tgz" -C "${ad}/arch" inner')
+	toolchain.unpack(os.join_path(ad, 'pkg.tgz'), os.join_path(ad, 'unpacked')) or {
+		s.record('toolchain unpacks tarballs', false, err.msg())
+	}
+	s.record('toolchain unpacks tarballs',
+		os.exists(os.join_path(ad, 'unpacked/inner/f.blip')), 'round trip')
+	os.rmdir_all(ad) or {}
+	os.rmdir_all(th) or {}
+	os.setenv('BLIP_HOME', old_home, true)
+}
+
 fn main() {
 	mut s := Suite{}
 	s.install_pins()
@@ -850,6 +957,7 @@ fn main() {
 	s.manifest()
 	s.modular_core()
 	s.pkg_logic()
+	s.toolchain_pins()
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')
