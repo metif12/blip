@@ -182,4 +182,17 @@
 (assert (= (match '(5) [(list x) #:when (odd? x) 'odd] [_ 'other]) 'odd)
   "a guard is tested with the bindings in scope")
 
+;; --- match* asserts: the expander must not fold the body into the pattern ---
+;; Each of these answered nil before the transform fix, because the body was
+;; compiled as an extra pattern and the length check always missed.
+(assert (= (match* (list 1 2) [(a b) (+ a b)]) 3)
+  "a match* clause binds each subject in position")
+(assert (= (match* (list 1 2 3) [(1 2 x) x]) 3)
+  "a match* clause mixes literals and binders")
+(assert (= (err-value (match* (list (safe-div 10 2) (safe-div 1 0))
+                              [(5 _) 'worked]
+                              [(_ bad) bad]))
+           'divide-by-zero)
+  "a match* miss falls through to the next clause")
+
 (print "match ok")

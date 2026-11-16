@@ -444,12 +444,29 @@ fn (mut e Emitter) match_expr(kids []reader.NodeId) string {
 	is_star := head_node.value.ends_with('*')
 	mut subject := ''
 	if is_star {
-		subj_kids := e.kids(kids[1])
-		mut parts := []string{}
-		for s in subj_kids {
-			parts << e.value(s)
+		// The subject form is either (list s1 s2 ...) or the bare grouping
+		// (s1 s2 ...) the tour uses. Either way its kids include a head that
+		// is not a subject to emit: the `list` symbol in the first shape,
+		// the first subject itself in the second.
+		subj_form := kids[1]
+		if e.node(subj_form).tag == .list {
+			subj_kids := e.kids(subj_form)
+			mut si := 0
+			if subj_kids.len > 0 {
+				h := e.node(subj_kids[0])
+				if h.tag == .sym && h.value == 'list' {
+					si = 1
+				}
+			}
+			mut parts := []string{}
+			for si < subj_kids.len {
+				parts << e.value(subj_kids[si])
+				si++
+			}
+			subject = 'blip.list(${parts.join(', ')})'
+		} else {
+			subject = e.value(subj_form)
 		}
-		subject = 'blip.list(${parts.join(', ')})'
 	} else {
 		subject = e.value(kids[1])
 	}

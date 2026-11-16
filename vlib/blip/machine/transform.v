@@ -12,7 +12,31 @@ import blip.printer
 import blip.reader
 
 fn (mut m Machine) transform_match_star(kids []blip.NodeId) blip.NodeId {
-	subjects := m.arena.kids(kids[1])
+	// The subject form is either (list s1 s2 ...) or the bare grouping
+	// (s1 s2 ...) the tour uses -- e.g. (match* ((ok 1) 2) ...). Either way
+	// its kids include a head that is not a subject: the `list` symbol in
+	// the first shape, the first subject itself in the second. Keeping the
+	// `list` head made the primitive ride along as subject zero
+	// (#<primitive list>), so every arity missed; evaluating the bare
+	// grouping as a call fails instead. The emitter (emit/pattern.v
+	// match_expr) applies the same rule for the same reason.
+	mut inner := kids[1]
+	if m.arena.node(kids[1]).tag == .list {
+		s_kids := m.arena.kids(kids[1])
+		if s_kids.len > 0 {
+			mut subjects := []blip.NodeId{}
+			mut si := 0
+			if m.arena.node(s_kids[0]).tag == .sym
+				&& m.arena.node(s_kids[0]).value == 'list' {
+				si = 1
+			}
+			for si < s_kids.len {
+				subjects << s_kids[si]
+				si++
+			}
+			inner = m.call_node(m.sym_node('list'), subjects)
+		}
+	}
 	// Every subject is passed straight into ONE `(list ...)` call, which is what
 	// makes each exactly-once evaluation: the list is built before the match sees
 	// it, and the match only ever reads it.
@@ -21,7 +45,6 @@ fn (mut m Machine) transform_match_star(kids []blip.NodeId) blip.NodeId {
 	// bind them in the generated `let`, so every `match*` failed with
 	// "unbound identifier: s_1". The temporaries were never needed -- `(list a b)`
 	// already evaluates each argument once.
-	inner := m.call_node(m.sym_node('list'), subjects)
 	mut clauses := []blip.NodeId{}
 	mut c := 2
 	for c < kids.len {
@@ -36,13 +59,18 @@ fn (mut m Machine) transform_match_star(kids []blip.NodeId) blip.NodeId {
 			body << ckids[bi]
 			bi++
 		}
-		// One clause becomes [(list)] whose pattern is (list P1 P2 ...), so each
-		// pattern sees the subject in its own position.
+		// One clause becomes a `match` clause whose pattern is the clause's
+		// own pattern list under `list`, so each pattern sees the subject in
+		// its own position. Only the FIRST child is patterns; the rest is the
+		// body. Folding the body in made every multi-pattern clause miss,
+		// since a body form never matches a subject. (The emitter never had
+		// this bug: it has always iterated the pattern's own children.)
 		mut pat := []blip.NodeId{}
 		pat << m.sym_node('list')
+		subpats := m.arena.kids(ckids[0])
 		mut p := 0
-		for p < ckids.len {
-			pat << ckids[p]
+		for p < subpats.len {
+			pat << subpats[p]
 			p++
 		}
 		clauses << m.list_of([m.list_of(pat), m.make_begin(body)])

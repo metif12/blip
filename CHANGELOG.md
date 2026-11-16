@@ -4,6 +4,30 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### `match*` fixed without breaking anything (roadmap §10 item 5 done)
+
+- Two faults, both with failing-before proof. (a) Pattern side:
+  `transform_match_star` folded the clause body into the pattern, so every
+  multi-pattern clause missed (`blip run` on the new asserts: `assertion
+  failed` before, `"match ok"` after). (b) Subject side: both engines kept
+  the subject form's `list` head as subject zero (`+: + expects an integer,
+  got #<primitive list>` after fixing only (a)), so every arity missed;
+  `vlib/blip/emit/pattern.v` had the same fault. Both now strip the head:
+  `(list s1 s2 ...)` and the bare grouping `(s1 s2 ...)` build
+  `(list s1 s2 ...)`; a bare variable passes through unwrapped.
+- Gate: three new asserts in `examples/03_match.lip` (binding, mixed
+  literal/binder, miss-falls-through via `safe-div`); full suite green
+  (`binding_forms`, `emit_js` 29 with node-run parity, `examples_run`,
+  `programs_run`, `repl_golden`, `contracts`, `lsp`, `hostile`,
+  `macros_gate`, `genprims --check`). JS parity proven by hand:
+  `match*` emits `blip.list(1, 2)` (not `blip.list(list, 1, 2)`) and node
+  prints `3` where the machine prints `3`.
+- Docs use only the canonical shape going forward: `(list ...)` subject,
+  `[(p1 p2 ...) body]` clause. The site tour/index bare-grouping examples
+  (`(match* ((ok 1) 2) ...)`) are rewritten to it with the same answers
+  (`3`, `nil`); the tour's "answers with its last pattern" becomes "answers
+  with its body". Tour snippets were run before being written.
+
 ### `blip check` understands `def`, and the docs lose their superlatives
 
 - `check_source` collects signatures from `def` exactly like `define`, and

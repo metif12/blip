@@ -178,14 +178,14 @@ Labelled arguments are positional underneath — pure sugar, and one of the most
   [_ 'small])                           ;=> big
 ```
 
-`match*` destructures several values at once, atomically. A clause holds one flat pattern per subject — every pattern must match for the clause to try — and answers with its last pattern, so put the value you want there.
+`match*` destructures several values at once, atomically. A clause holds one pattern per subject inside its own list -- every pattern must match for the clause to try -- and answers with its body.
 
 ```
-(match* ((ok 1) 2)
-  [(ok a) 2])                        ;=> 2
+(match* (list 1 2)
+  [(a b) (+ a b)])                  ;=> 3
 
-(match* ((ok 1) 3)
-  [(ok a) 2])                        ;=> nil, the second pattern misses
+(match* (list 1 3)
+  [(a 2) 'two])                     ;=> nil, the second pattern misses
 ```
 
 Literals in pattern position are the self-evaluating ones: numbers, strings, keywords. A quoted symbol is a list, so it never matches a bare value; a bare symbol always binds.

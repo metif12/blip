@@ -564,13 +564,20 @@ never smuggled into a patch.
    here; until then the section above is history, not instructions. Same for
    the two stale "pinned toolchain" notes in `site/content/getting-started.md`
    and the CI comment about building the pinned compiler from source.
-5. **`match*` multi-pattern clauses miss**: `transform_match_star`
-   (`vlib/blip/machine/transform.v`) builds the `match` pattern from ALL
+5. ~~**`match*` multi-pattern clauses miss**~~ **done 2026-11-16**: two
+   faults, both fixed and gated. (a) `transform_match_star`
+   (`vlib/blip/machine/transform.v`) built the `match` pattern from ALL
    clause children instead of from the pattern list's children, so the body
-   becomes an extra pattern and every multi-pattern clause misses
-   (`(match* (list 1 2) [(a b) (+ a b)])` answers nil). Notably,
-   `examples/03_match.lip` carries zero assertions over `match*` -- only
-   `;=>` comments, which `blip test` ignores -- so nothing turned red.
-   Gate: assert-backed `match*` cases covering literal, binding, and mixed
-   patterns, green, before any tour example claims a `match*` answer.
+   became an extra pattern and every multi-pattern clause missed
+   (`(match* (list 1 2) [(a b) (+ a b)])` answered nil). (b) Both engines
+   kept the subject form's `list` head as subject zero (`#<primitive list>`
+   rode along), so every arity missed even with (a) fixed; the emitter
+   (`vlib/blip/emit/pattern.v`) had the same fault, and both now strip the
+   head -- `(list s1 s2 ...)` and the tour's bare grouping `(s1 s2 ...)`
+   both build `(list s1 s2 ...)`, a bare variable passes through. Gate met:
+   `examples/03_match.lip` carries three `match*` asserts (binding, mixed
+   literal/binder, miss-falls-through) that fail without the fix and pass
+   with it; `binding_forms`, `emit_js` (29, node-run parity), `examples_run`,
+   `programs_run`, `repl_golden`, `contracts`, `lsp`, `hostile`,
+   `macros_gate`, and `genprims --check` all green.
 

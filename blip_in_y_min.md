@@ -233,12 +233,9 @@ subject is evaluated exactly once:
   [{:kind :dog :name n} n])        ;=> "rex"
 
 ; multi-subject, atomic: two values, one clause list, no nesting.
-; STATUS: multi-pattern clauses currently miss where the equivalent `match`
-; hits (the expander folds the body into the pattern list -- tracked as
-; roadmap §10 item 5). Until that is fixed, verify any `match*` shape in a
-; REPL before relying on it, and nest `match` where the answer must hold:
-(match* (list (ok 1) (ok 2))
-  [((ok a) (ok b)) (+ a b)])
+; Each clause wraps its patterns in their own list; the body follows it:
+(match* (list 1 2)
+  [(a b) (+ a b)])   ;=> 3
 
 ; guards test the bindings in scope
 (match '(5)

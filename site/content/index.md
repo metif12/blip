@@ -19,8 +19,8 @@ A million-deep tail call returns, because a tail call is a loop iteration, not a
 **`match*`** destructures several values at once, atomically — no nesting one match inside another. **`use`** threads fallible calls flat instead of staircasing callbacks or early returns. **Opaque types** hide constructors behind smart constructors, with no class system and no interfaces.
 
 ```
-(match* ((ok 1) 2)
-  [(ok a) 2])          ;=> 2
+(match* (list 1 2)
+  [(a b) (+ a b)])    ;=> 3
 ```
 
 One clause per combination, no nesting. Take the [tour](tour.html) for the full language, or skip to [getting started](getting-started.html).
