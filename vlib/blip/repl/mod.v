@@ -91,7 +91,7 @@ fn (mut r Repl) feed(line string) !int {
 	if r.buffer.count('\n') == 1 && line.starts_with(',') {
 		cmd := r.buffer
 		// The buffer MUST be cleared here. It is not: leaving it means the next
-		// line is appended to `,l lib.vl`, and the two are then evaluated as a
+		// line is appended to `,l lib.blip`, and the two are then evaluated as a
 		// single list -- so `,l` runs twice, once with the following line as an
 		// argument, and the REPL reports "unbound identifier" for a file it had
 		// just loaded.

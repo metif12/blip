@@ -1,5 +1,5 @@
 name = "Blip"
-path_suffixes = ["lip"]
+path_suffixes = ["blip"]
 line_comments = ["; "]
 block_comment = ["#| ", " |#"]
 brackets = [

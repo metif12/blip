@@ -1,4 +1,4 @@
-;; programs/brainfuck.lip -- a Brainfuck interpreter in blip.
+;; programs/brainfuck.blip -- a Brainfuck interpreter in blip.
 ;;
 ;; This is the smallest program that requires the interpreter to drive another
 ;; machine: the Brainfuck tape is a vector, the program is a string, and the

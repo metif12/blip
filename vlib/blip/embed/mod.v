@@ -18,10 +18,10 @@ import blip.host
 import blip.machine
 import blip.printer
 
-// Embedded prelude: the same lib/std.lip `blip run` loads, compiled into the
+// Embedded prelude: the same lib/std.blip `blip run` loads, compiled into the
 // embedder so there is no path to resolve and no file to ship. A file-based
 // prelude is still available via Config{prelude: .file}.
-const embedded_std = $embed_file('../../../lib/std.lip').to_string()
+const embedded_std = $embed_file('../../../lib/std.blip').to_string()
 
 pub enum PreludeMode {
 	embedded
@@ -34,7 +34,7 @@ pub:
 	max_steps    int
 	max_kont     int
 	prelude      PreludeMode = .embedded
-	prelude_path string      = 'lib/std.lip'
+	prelude_path string      = 'lib/std.blip'
 }
 
 @[heap]

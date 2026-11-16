@@ -1,7 +1,7 @@
-;; lib/std.lip -- the blip standard library, in blip.
+;; lib/std.blip -- the blip standard library, in blip.
 ;;
 ;; Loaded by `blip run` and by the REPL before your program, so a program does not
-;; have to say `(require "std.lip")` for names everybody assumes exist. That is
+;; have to say `(require "std.blip")` for names everybody assumes exist. That is
 ;; the same rule every language with a prelude follows, and it is what lets the
 ;; examples in examples/ read the way they do: `(parse-in "key: value")` is a
 ;; call, not a definition the reader has to scroll past.

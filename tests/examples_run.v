@@ -1,6 +1,6 @@
 module main
 
-// The example suite: run every examples/*.lip file and check its output.
+// The example suite: run every examples/*.blip file and check its output.
 //
 // The examples are the specification. Each one ends with a marker line --
 // "basics ok", "data ok", "match ok", "errors ok", "pipelines ok",
@@ -45,14 +45,14 @@ fn run_example(path string) !string {
 		return error('cannot read ${path}')
 	}
 	h := host.new_capture()
-	for f in ['lib/std.lip', 'examples/lib/geometry.blip', 'examples/lib/text.blip'] {
+	for f in ['lib/std.blip', 'examples/lib/geometry.blip', 'examples/lib/text.blip'] {
 		body := os.read_file(f) or {
 			return error('cannot read ${f}')
 		}
 		h.give_file(f, body)
 	}
 	mut m := machine.new_standalone(h)
-	m.load('lib/std.lip') or {
+	m.load('lib/std.blip') or {
 		return error('cannot load the standard library: ${err.msg()}')
 	}
 	m.source = path
@@ -86,13 +86,13 @@ fn main() {
 	// The seven examples, in the order they are meant to be read. Each one builds
 	// on the previous: 01 is the language, 02 is data, 03 is match, 04 is
 	// errors, 05 is macros and pipes, 06 is modules, 07 is config.
-	s.check_example('01_basics', 'examples/01_basics.lip', 'basics ok')
-	s.check_example('02_data', 'examples/02_data.lip', 'data ok')
-	s.check_example('03_match', 'examples/03_match.lip', 'match ok')
-	s.check_example('04_errors', 'examples/04_errors.lip', 'errors ok')
-	s.check_example('05_pipelines', 'examples/05_pipelines.lip', 'pipelines ok')
-	s.check_example('06_modules', 'examples/06_modules.lip', 'modules ok')
-	s.check_example('07_config', 'examples/07_config.lip', 'config ok')
+	s.check_example('01_basics', 'examples/01_basics.blip', 'basics ok')
+	s.check_example('02_data', 'examples/02_data.blip', 'data ok')
+	s.check_example('03_match', 'examples/03_match.blip', 'match ok')
+	s.check_example('04_errors', 'examples/04_errors.blip', 'errors ok')
+	s.check_example('05_pipelines', 'examples/05_pipelines.blip', 'pipelines ok')
+	s.check_example('06_modules', 'examples/06_modules.blip', 'modules ok')
+	s.check_example('07_config', 'examples/07_config.blip', 'config ok')
 
 	if s.fails > 0 {
 		println('${s.fails} FAILURE(S)')

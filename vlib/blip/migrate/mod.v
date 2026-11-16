@@ -23,7 +23,9 @@
 //     may be future code or plain data; guessing wrong corrupts silently,
 //     while leaving it produces a loud removal error at runtime).
 //   - `define/contract` is kept with a warning (def/contract lands separately).
-//   - `.lip` files are not renamed (the v2 loader still accepts them).
+// A `.lip` file IS renamed to `.blip`: the v2 loader reads `.blip` only,
+// so leaving the old extension would migrate the content and still refuse
+// to load it.
 module migrate
 
 import blip.reader
@@ -40,6 +42,7 @@ pub struct FileReport {
 pub:
 	path     string
 	changed  bool
+	renamed  bool
 	warnings []string
 }
 
@@ -386,7 +389,12 @@ fn collect_files(dir string, mut out []string) {
 }
 
 // migrate_path migrates one file or every .lip/.blip file under a
-// directory, writing back in place unless check_only is set.
+// directory, writing back in place unless check_only is set. A `.lip`
+// file is renamed to `.blip` alongside the rewrite (v2 loads `.blip`
+// only): in check mode the report marks the rename without touching
+// the filesystem, otherwise the migrated text lands at the new path
+// and the old file is removed. A pre-existing `.blip` beside the `.lip`
+// is a conflict the tool will not resolve by overwriting -- it errors.
 pub fn migrate_path(target string, check_only bool) ![]FileReport {
 	mut files := []string{}
 	if os.is_dir(target) {
@@ -398,12 +406,23 @@ pub fn migrate_path(target string, check_only bool) ![]FileReport {
 	for f in files {
 		src := os.read_file(f) or { return error('blip: cannot read ${f}') }
 		r := migrate_source(src) or { return error('blip: ${f}: ${err.msg()}') }
-		if r.changed && !check_only {
-			os.write_file(f, r.text) or { return error('blip: cannot write ${f}') }
+		new_path := if f.ends_with('.lip') { f[..f.len - 4] + '.blip' } else { f }
+		renamed := new_path != f
+		if renamed && !check_only && os.exists(new_path) {
+			return error('blip: ${new_path} already exists; remove one spelling and run migrate again')
+		}
+		if !check_only {
+			if r.changed || renamed {
+				os.write_file(new_path, r.text) or { return error('blip: cannot write ${new_path}') }
+			}
+			if renamed {
+				os.rm(f) or { return error('blip: cannot remove ${f}') }
+			}
 		}
 		out << FileReport{
 			path:     f
-			changed:  r.changed
+			changed:  r.changed || renamed
+			renamed:  renamed
 			warnings: r.warnings
 		}
 	}

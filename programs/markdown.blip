@@ -1,4 +1,4 @@
-;; programs/markdown.lip -- Markdown to HTML in blip.
+;; programs/markdown.blip -- Markdown to HTML in blip.
 ;;
 ;; Third on the roadmap's real-program list. Exercises lists, higher-order
 ;; functions and string building. Nothing aborts: malformed input renders

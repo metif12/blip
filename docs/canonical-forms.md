@@ -12,8 +12,8 @@ code never has to change.
 | Anonymous function | `(fn [x] ...)` | `(lambda (x) ...)`, `(λ [x] ...)` | Racket users reach for `λ`, Scheme/Elisp/Steel users for `lambda`; one implementation serves all three |
 | Definition | `(def name ...)` | `(define name ...)` | `define` is what half of Lisp writes; `def` is shorter and reads the same |
 | List head / tail | `car` / `cdr` | `first` / `rest` | same prims (`prim_car`, `prim_cdr`); the short names win |
-| Source file | `.blip` for new files | `.lip` works identically | the whole corpus -- examples, prelude -- is `.lip`; `.blip` is the name going forward |
-| Old modules | (rename to `.blip`) | `.vl` loads with a `m.warnings` entry | migration path, not a breakage: the file still loads |
+| Source file | `.blip` only | `.lip`/`.vl` refused with a migration line (v2 A2, 2026-11-17) | v1 compat removed: the loader errors naming `.blip` |
+| Old modules | (renamed to `.blip`) | gone in v2 | corpus renamed; `blip migrate` renames |
 
 ## Quiet synonyms (same meaning, no advertisement either way)
 

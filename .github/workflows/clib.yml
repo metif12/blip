@@ -123,7 +123,7 @@ jobs:
           Get-ChildItem dist
 
       # Smoke test: compile example_eval.c against the library and run it
-      # from the repo root (blip_load reads clib/smoke_prog.lip relatively).
+      # from the repo root (blip_load reads clib/smoke_prog.blip relatively).
       - name: Build and run the smoke test (linux)
         if: runner.os == 'Linux'
         run: |
@@ -156,5 +156,5 @@ jobs:
             clib/blip.h
             clib/blip.def
             clib/example_eval.c
-            clib/smoke_prog.lip
+            clib/smoke_prog.blip
             docs/c-lib.md

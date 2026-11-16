@@ -18,7 +18,7 @@ module machine
 //
 // Derived forms (`let`, `when`, `cond`, `loop`, ...) are implemented as
 // TRANSFORMATIONS to the core forms, not as extra continuation types. That
-// keeps the core small -- quote, if, define, set!, lambda, begin, and
+// keeps the core small -- quote, if, def, set!, fn, begin, and
 // application -- and means every derived form inherits tail-call behaviour for
 // free rather than needing it re-implemented per form.
 //
@@ -84,11 +84,6 @@ pub mut:
 	src_text string
 	// loaded is the set of module paths this machine has already evaluated.
 	loaded []string
-	// warnings collects deprecation notices (loading a `.vl` file) without
-	// failing the program. A deprecation that breaks programs is a removal,
-	// and a warning nobody can read -- e.g. one printed to a captured host --
-	// is silence, so they accumulate here for the caller to report.
-	warnings []string
 	// macros names the procedures defmacro created, so macex can tell a macro from
 	// a function without guessing from its shape.
 	macros []string
@@ -99,7 +94,7 @@ pub mut:
 	// Single-entry env lookup cache: tight loops re-read the same name in the
 	// same frame, and each lookup walks parent pointers with a map probe per
 	// frame. The entry is valid only when cache_ok and the arena version
-	// matches; define/set bump the version, so a stale hit is impossible.
+	// matches; def/set bump the version, so a stale hit is impossible.
 	cache_env  blip.EnvId = blip.no_env
 	cache_name string
 	cache_val  blip.Value
@@ -132,8 +127,8 @@ pub fn new_machine_with(a &reader.Arena, h host.Host) &Machine {
 		}
 	}
 	// The global environment must be a real frame, not `no_env`: `no_env` is the
-	// null env, and a `define` into it dereferences nil. Getting this wrong
-	// crashes on the first `(define ...)` with no diagnostic.
+	// null env, and a `def` into it dereferences nil. Getting this wrong
+	// crashes on the first `(def ...)` with no diagnostic.
 	m.globals = m.envs.new_env(blip.no_env)
 	m.env = m.globals
 	return m
@@ -225,12 +220,13 @@ pub fn (mut m Machine) run_checked(res reader.Forms) !blip.Value {
 // It deliberately does not create a machine of its own. A `load` that started a
 // fresh machine would run the file perfectly and then throw away every definition
 // in it, which is the specific failure the roadmap calls out.
+//
+// v2 loads `.blip` files only (roadmap A2). A `.lip` or `.vl` path is
+// refused with a migration line instead of a warning: rename to `.blip`
+// and run `blip migrate` on the file.
 pub fn (mut m Machine) load(path string) !blip.Value {
-	// `.vl` is deprecated: `.blip` is the canonical source extension and
-	// `.vl` support will be removed in a future release (see CHANGELOG).
-	// The file still loads -- a deprecation that breaks programs is a removal.
-	if path.ends_with('.vl') {
-		m.warnings << 'blip: ${path}: .vl is deprecated and will be removed; rename to .blip'
+	if path.ends_with('.lip') || path.ends_with('.vl') {
+		return error('blip: ${path}: v2 loads .blip files only; rename to .blip and run `blip migrate` on it')
 	}
 	src := m.host.host_load(path)!
 	prev := m.source
@@ -262,7 +258,7 @@ $if wasm32 {
 			return none
 		}
 		base := 'blip_modules'
-		direct := os.join_path(os.join_path(base, name), 'blip.lip')
+		direct := os.join_path(os.join_path(base, name), 'blip.blip')
 		if os.exists(direct) {
 			return direct
 		}
@@ -278,7 +274,7 @@ $if wasm32 {
 			if !os.is_dir(candidate) {
 				continue
 			}
-			entry := os.join_path(candidate, 'blip.lip')
+			entry := os.join_path(candidate, 'blip.blip')
 			if os.exists(entry) {
 				return entry
 			}
@@ -1088,11 +1084,11 @@ fn (mut m Machine) step_return() !bool {
 		}
 		.define_k {
 			m.form = k.expr
-			// Restore the scope the `define` was WRITTEN in. Without this,
-			// `(define g (make-thunk))` binds `g` inside the thunk's frame --
+			// Restore the scope the `def` was WRITTEN in. Without this,
+			// `(def g (make-thunk))` binds `g` inside the thunk's frame --
 			// which is gone by the time anyone looks for it. It reported as
 			// "unbound identifier: g" and was invisible to every tail-call test,
-			// because a global define at top level has m.env == m.globals and
+			// because a global def at top level has m.env == m.globals and
 			// the frame the value came back in happens to be the wrong one only
 			// when the value was produced by a call.
 			m.env = k.env
@@ -3168,7 +3164,7 @@ fn (mut m Machine) eval_struct(kids []blip.NodeId) ! {
 
 // require => load another file into THIS machine.
 //
-// `(require "lib/geometry.vl")` loads the file and its definitions land in the
+// `(require "lib/geometry.blip")` loads the file and its definitions land in the
 // global frame, which is what makes them visible to the requirer. The filters --
 // `only-in` and `prefix-in` -- are accepted and ignored, because implementing
 // them means renaming what a file defines, which needs the file's forms rather
@@ -3178,7 +3174,7 @@ fn (mut m Machine) eval_struct(kids []blip.NodeId) ! {
 // resolve_path makes a relative `require` relative to the file that required it,
 // not to the process's working directory.
 //
-// `./x.vl` and `x.vl` therefore mean one thing -- the same module -- and a package
+// `./x.blip` and `x.blip` therefore mean one thing -- the same module -- and a package
 // can never be shadowed by an unrelated file of the same name sitting in whatever
 // directory the program was started from. It is also why `load` records the
 // source path it is running: this is the only consumer of it.

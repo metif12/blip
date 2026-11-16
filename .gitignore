@@ -24,7 +24,7 @@ tools/*.exe
 tmp/
 tests/out.txt
 
-# Generated website: rebuilt by `blip run site/build.lip`, never edited.
+# Generated website: rebuilt by `blip run site/build.blip`, never edited.
 site_out/
 tools/*.exe
 *.exe

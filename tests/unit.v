@@ -247,7 +247,7 @@ fn (mut s Suite) reader_diags() {
 	res := reader.read_all('(+ 1')
 	s.eq('read_all reports the open list', res.diags.len.str(), '1')
 	d := res.diags[0]
-	s.eq('diagnostic render', d.render('f.lip'), 'f.lip:1:5: unclosed list, expected byte 0x29')
+	s.eq('diagnostic render', d.render('f.blip'), 'f.blip:1:5: unclosed list, expected byte 0x29')
 }
 
 fn (mut s Suite) reader_depth() {
@@ -308,8 +308,8 @@ fn (mut s Suite) machine_api() {
 	_ := m1
 	mut m := machine.new_standalone(h)
 	s.eq('where with no source', m.where(), 'blip')
-	m.source = 'demo.lip'
-	s.eq('where names the source', m.where(), 'demo.lip')
+	m.source = 'demo.blip'
+	s.eq('where names the source', m.where(), 'demo.blip')
 
 	v := m.run_str('(+ 1 2)') or { blip.nil_value() }
 	s.eq('run_str', printer.write(v), '3')
@@ -360,11 +360,11 @@ fn (mut s Suite) machine_nodes() {
 	fresh := m.fresh('tmp')
 	s.record('fresh makes distinct names', fresh.starts_with('tmp'), '${fresh}')
 
-	s.eq('resolve_path of an absolute path', m.resolve_path('/x/y.lip'), '/x/y.lip')
-	s.eq('clean_path collapses dot-dot', machine.clean_path('site/../programs/markdown.lip'),
-		'programs/markdown.lip')
-	s.eq('clean_path drops dots', machine.clean_path('site/./x.lip'), 'site/x.lip')
-	s.eq('clean_path keeps a leading dot-dot', machine.clean_path('../x.lip'), '../x.lip')
+	s.eq('resolve_path of an absolute path', m.resolve_path('/x/y.blip'), '/x/y.blip')
+	s.eq('clean_path collapses dot-dot', machine.clean_path('site/../programs/markdown.blip'),
+		'programs/markdown.blip')
+	s.eq('clean_path drops dots', machine.clean_path('site/./x.blip'), 'site/x.blip')
+	s.eq('clean_path keeps a leading dot-dot', machine.clean_path('../x.blip'), '../x.blip')
 
 	// Every transform is exercised through the function that names it, because
 	// a transform reached only through source is covered only while some
@@ -409,6 +409,30 @@ fn (mut s Suite) machine_nodes() {
 		mm_case.text)
 	mm_when := migrate.migrate_source('(when c (f))') or { migrate.MigrateResult{} }
 	s.record('migrate turns when into if', mm_when.text == '(if c (begin (f)) nil)', mm_when.text)
+	// `migrate_path` renames `.lip` to `.blip` (v2 loads `.blip` only):
+	// --check reports without touching the filesystem, a real run moves
+	// the content and removes the old spelling.
+	tmpd := os.join_path(os.vtmp_dir(), 'blip_migrate_probe')
+	os.rmdir_all(tmpd) or {}
+	os.mkdir_all(tmpd) or { s.record('migrate rename setup', false, err.msg()) }
+	os.write_file(os.join_path(tmpd, 'old.blip'), '(def x 1)') or {}
+	os.write_file(os.join_path(tmpd, 'legacy.lip'), '(define x 1)') or {}
+	reps := migrate.migrate_path(tmpd, true) or { []migrate.FileReport{} }
+	mut saw_rename := false
+	for r in reps {
+		if r.path.ends_with('legacy.lip') && r.renamed {
+			saw_rename = true
+		}
+	}
+	s.record('migrate --check reports the .lip rename', saw_rename, 'legacy.lip marked renamed')
+	still_old := os.exists(os.join_path(tmpd, 'legacy.lip'))
+	s.record('migrate --check touches nothing', still_old, 'legacy.lip still on disk')
+	reps2 := migrate.migrate_path(tmpd, false) or { []migrate.FileReport{} }
+	_ = reps2
+	moved := os.read_file(os.join_path(tmpd, 'legacy.blip')) or { '' }
+	s.record('migrate renames .lip to .blip', moved == '(def x 1)' && !os.exists(os.join_path(tmpd,
+		'legacy.lip')), 'content migrated at the new path, old removed')
+	os.rmdir_all(tmpd) or {}
 
 	// A binding whose pattern is a LIST rather than a name is what makes it
 	// destructuring. `(cons a b)` is the shape `destructuring` accepts -- it
@@ -464,13 +488,13 @@ fn (mut s Suite) hosts() {
 	h.host_write('tail')
 	s.eq('host lines are collected', h.lines().join('|'), 'line one')
 	s.eq('host transcript keeps the raw write', h.transcript(), 'line one\ntail')
-	h.give_file('a.lip', '(+ 1 2)')
-	loaded := h.host_load('a.lip') or { '' }
+	h.give_file('a.blip', '(+ 1 2)')
+	loaded := h.host_load('a.blip') or { '' }
 	s.eq('host_load returns what it was given', loaded, '(+ 1 2)')
 	h.give_input(['typed'])
 	read := h.host_read_line() or { '' }
 	s.eq('host_read_line takes the first', read, 'typed')
-	missing := h.host_load('nope.lip') or { '' }
+	missing := h.host_load('nope.blip') or { '' }
 	s.record('host_load of an unknown file is an error', missing == '', 'empty fallback')
 }
 
@@ -482,7 +506,7 @@ fn (mut s Suite) repl_api() {
 	s.eq('prompt inside a string', repl.prompt('"ab'), 'blip"> ')
 
 	mut h := host.new_capture()
-	h.give_file('lib/std.lip', '')
+	h.give_file('lib/std.blip', '')
 	mut m := machine.new_standalone(h)
 	mut r := repl.new_with_machine(m, h)
 	r.run_lines(['(def (q) 1)', '(q)'])
@@ -497,8 +521,8 @@ fn (mut s Suite) error_format() {
 	// The Rust/V-style frame, exercised directly because the golden REPL test
 	// only sees it as one line of text.
 	src := '(+ 1\n  2\n   3'
-	out := blip.format_error('demo.lip', src, 3, 3, 'unclosed list, expected byte 0x29', 1)
-	s.record('the error names the place', out.contains('--> demo.lip:3:3'), 'has the location')
+	out := blip.format_error('demo.blip', src, 3, 3, 'unclosed list, expected byte 0x29', 1)
+	s.record('the error names the place', out.contains('--> demo.blip:3:3'), 'has the location')
 	s.record('the error shows the line', out.contains('3'), 'shows the line')
 	s.record('the error carries the message', out.contains('unclosed list'), 'has the message')
 	s.record('the error draws a caret', out.contains('^'), 'has a caret')

@@ -2,7 +2,7 @@
  *
  * One column, system type, a single green accent. Light by default, dark
  * under prefers-color-scheme. No frameworks, no webfonts, no JS: every
- * page is static HTML rendered by blip itself (site/build.lip).
+ * page is static HTML rendered by blip itself (site/build.blip).
  */
 
 :root {

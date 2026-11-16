@@ -38,7 +38,7 @@ on the command line.
 | `blip.server.command` | `blip` | Path or command name of the blip executable. |
 | `blip.server.args` | `["lsp"]` | Arguments passed to it. The language server is the `lsp` subcommand. |
 
-The extension starts `blip lsp` over stdio when a `.lip` file is opened. There
+The extension starts `blip lsp` over stdio when a `.blip` file is opened. There
 are no other settings, because the server reads no others: it answers
 `initialize` with diagnostics only, so no setting is forwarded to it with
 `workspace/didChangeConfiguration`.

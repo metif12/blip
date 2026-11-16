@@ -44,7 +44,7 @@ extern "C" {
 typedef struct BlipInterp BlipInterp;
 
 // blip_new creates an interpreter with the embedded prelude and default
-// limits. The prelude (lib/std.lip) is compiled into the library, so there
+// limits. The prelude (lib/std.blip) is compiled into the library, so there
 // is no file to ship and no path to configure. Never returns NULL.
 BlipInterp *blip_new(void);
 

@@ -55,7 +55,7 @@ jobs:
       - name: Generate the site
         run: |
           rm -rf site_out
-          ./blip run site/build.lip
+          ./blip run site/build.blip
 
       - name: Check the output is complete
         run: |

@@ -63,7 +63,7 @@ fn cli_position(src string) (int, int) {
 		return 0, 0
 	}
 	d := probe.diags[0]
-	text := blip.format_error('main.lip', src, d.line, d.col, d.msg, 1)
+	text := blip.format_error('main.blip', src, d.line, d.col, d.msg, 1)
 	// The header reads "  --> path:line:col". Pull the two numbers out.
 	arrow := text.index('-->') or { return 0, 0 }
 	rest := text[arrow + 3..].trim_space()
@@ -78,9 +78,9 @@ fn cli_position(src string) (int, int) {
 // against the reader alone.
 fn blip_output(src string) string {
 	h := host.new_capture()
-	h.give_file('main.lip', src)
+	h.give_file('main.blip', src)
 	mut m := machine.new_standalone(h)
-	m.load('main.lip') or { return 'ERROR: ${err.msg()}' }
+	m.load('main.blip') or { return 'ERROR: ${err.msg()}' }
 	return h.transcript().trim_right('\n')
 }
 
@@ -106,17 +106,17 @@ fn (mut s Suite) protocol() {
 	// didOpen publishes diagnostics for the text it was handed.
 	mut srv2 := lsp.new_test_server()
 	srv2.handle('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}')
-	srv2.handle('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///t.lip","text":"(+ 1"}}}')
+	srv2.handle('{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{"textDocument":{"uri":"file:///t.blip","text":"(+ 1"}}}')
 	got := srv2.captured()
 	last := if got.len > 0 { got[got.len - 1] } else { '' }
 	s.record('didOpen publishes diagnostics', last.contains('publishDiagnostics'),
 		'notification sent')
-	s.record('didOpen names the uri', last.contains('file:///t.lip'), 'uri echoed')
+	s.record('didOpen names the uri', last.contains('file:///t.blip'), 'uri echoed')
 	s.record('didOpen carries the message', last.contains('unclosed list'),
 		'diagnostic present')
 
 	// didChange re-diagnoses the new text.
-	srv2.handle('{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file:///t.lip","version":2},"contentChanges":[{"text":"(+ 1 2)"}]}}')
+	srv2.handle('{"jsonrpc":"2.0","method":"textDocument/didChange","params":{"textDocument":{"uri":"file:///t.blip","version":2},"contentChanges":[{"text":"(+ 1 2)"}]}}')
 	now := srv2.captured()
 	last2 := if now.len > 0 { now[now.len - 1] } else { '' }
 	s.record('didChange re-diagnoses', last2.contains('publishDiagnostics'),
@@ -127,7 +127,7 @@ fn (mut s Suite) protocol() {
 		'${srv2.captured().len} messages')
 
 	// didClose clears the diagnostics for that document.
-	srv2.handle('{"jsonrpc":"2.0","method":"textDocument/didClose","params":{"textDocument":{"uri":"file:///t.lip"}}}')
+	srv2.handle('{"jsonrpc":"2.0","method":"textDocument/didClose","params":{"textDocument":{"uri":"file:///t.blip"}}}')
 	closed := srv2.captured()
 	last3 := if closed.len > 0 { closed[closed.len - 1] } else { '' }
 	s.record('didClose clears diagnostics', last3.contains('"diagnostics":[]'),
@@ -136,7 +136,7 @@ fn (mut s Suite) protocol() {
 	// didSave re-diagnoses from the text it was given.
 	mut srv3 := lsp.new_test_server()
 	srv3.handle('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}')
-	srv3.handle('{"jsonrpc":"2.0","method":"textDocument/didSave","params":{"textDocument":{"uri":"file:///s.lip"},"text":"[1 2"}}}')
+	srv3.handle('{"jsonrpc":"2.0","method":"textDocument/didSave","params":{"textDocument":{"uri":"file:///s.blip"},"text":"[1 2"}}}')
 	saved := srv3.captured()
 	last4 := if saved.len > 0 { saved[saved.len - 1] } else { '' }
 	s.record('didSave re-diagnoses', last4.contains('publishDiagnostics'),

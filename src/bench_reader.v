@@ -73,10 +73,10 @@ fn main() {
 	bench_one('quoted    ', quoted, iters)
 
 	mut corpus := ''
-	for f in ['lib/std.lip', 'examples/01_basics.lip', 'examples/02_data.lip',
-		'examples/03_match.lip', 'examples/04_errors.lip', 'examples/05_pipelines.lip',
-		'examples/06_modules.lip', 'examples/07_config.lip', 'programs/brainfuck.lip',
-		'programs/json.lip'] {
+	for f in ['lib/std.blip', 'examples/01_basics.blip', 'examples/02_data.blip',
+		'examples/03_match.blip', 'examples/04_errors.blip', 'examples/05_pipelines.blip',
+		'examples/06_modules.blip', 'examples/07_config.blip', 'programs/brainfuck.blip',
+		'programs/json.blip'] {
 		corpus += os.read_file(f) or {
 			eprintln('bench_reader: cannot read ${f}')
 			exit(1)

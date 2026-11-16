@@ -321,7 +321,7 @@ fn main() {
 	s.check_err('add a string', '(+ 1 "a")', 'expects an integer')
 
 	// ---- truthiness is R5RS-strict: only #f is false ---------------------
-	// The cost of getting this backwards was real: `config.lip` used the
+	// The cost of getting this backwards was real: `config.blip` used the
 	// Ruby/JS idiom `(or (env "TEMP") fallback)`, and on the runner env
 	// returned nil — which is TRUE here, so or handed nil back and
 	// string-append died. An unset variable is tested with `nil?`, not `or`.

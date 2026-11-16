@@ -1,4 +1,4 @@
-;; examples/02_data.lip
+;; examples/02_data.blip
 ;; Data: what a value can be, and how it prints.
 ;;
 ;; The brackets tell you the type. No predicate is needed to know what you have,

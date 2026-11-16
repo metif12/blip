@@ -1,6 +1,6 @@
 module main
 
-// The programs gate: run every programs/*.lip file and check its output.
+// The programs gate: run every programs/*.blip file and check its output.
 //
 // The examples are the specification; the programs are the proof. Each one
 // ends with a marker line -- "brainfuck ok", "json ok" -- and this file runs
@@ -38,12 +38,12 @@ fn run_program(path string) !string {
 		return error('cannot read ${path}')
 	}
 	h := host.new_capture()
-	std := os.read_file('lib/std.lip') or {
-		return error('cannot read lib/std.lip')
+	std := os.read_file('lib/std.blip') or {
+		return error('cannot read lib/std.blip')
 	}
-	h.give_file('lib/std.lip', std)
+	h.give_file('lib/std.blip', std)
 	mut m := machine.new_standalone(h)
-	m.load('lib/std.lip') or {
+	m.load('lib/std.blip') or {
 		return error('cannot load the standard library: ${err.msg()}')
 	}
 	m.source = path
@@ -77,7 +77,7 @@ fn (mut s Suite) check_program(label string, path string, want string) {
 // today, none tomorrow -- while still catching a mistyped program or a
 // broken `.` command, which is what an output gate is for.
 fn (mut s Suite) hello_world_output() {
-	out := run_program('programs/brainfuck.lip') or {
+	out := run_program('programs/brainfuck.blip') or {
 		s.fail('brainfuck hello world', err.msg())
 		return
 	}
@@ -98,14 +98,14 @@ fn (mut s Suite) hello_world_output() {
 fn main() {
 	mut s := Suite{}
 
-	s.check_program('brainfuck', 'programs/brainfuck.lip', 'brainfuck ok')
+	s.check_program('brainfuck', 'programs/brainfuck.blip', 'brainfuck ok')
 	s.hello_world_output()
-	s.check_program('json', 'programs/json.lip', 'json ok')
-	s.check_program('config', 'programs/config.lip', 'config ok')
-	s.check_program('csv_to_table', 'programs/csv_to_table.lip', 'csv ok')
-	s.check_program('lint_commit', 'programs/lint_commit.lip', 'lint ok')
-	s.check_program('markdown', 'programs/markdown.lip', 'markdown ok')
-	s.check_program('pratt', 'programs/pratt.lip', 'pratt ok')
+	s.check_program('json', 'programs/json.blip', 'json ok')
+	s.check_program('config', 'programs/config.blip', 'config ok')
+	s.check_program('csv_to_table', 'programs/csv_to_table.blip', 'csv ok')
+	s.check_program('lint_commit', 'programs/lint_commit.blip', 'lint ok')
+	s.check_program('markdown', 'programs/markdown.blip', 'markdown ok')
+	s.check_program('pratt', 'programs/pratt.blip', 'pratt ok')
 
 	if s.fails > 0 {
 		println('${s.fails} FAILURE(S)')

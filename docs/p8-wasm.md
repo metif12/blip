@@ -14,7 +14,7 @@ WASM instructions instead of JS. Two options:
 - **Option A: reuse V's WASM backend.** Compile blip itself (the
   interpreter) to WASM, then embed the program as data. The interpreter runs
   the program in-browser. This is the "client-side playground" proof: the
-  whole blip VM in a .wasm module, evaluating .lip source at runtime.
+  whole blip VM in a .wasm module, evaluating .blip source at runtime.
   Heavy (~MBs of WASM) but reuses everything.
 
 - **Option B: a WASM codegen in emit/.** Mirror emit/mod.v but emit WASM
@@ -36,7 +36,7 @@ guards with WASM-compatible alternatives (or compile-time defaults).
 
 ### 3. Client-side playground
 
-A web page that loads the .wasm module, takes .lip source, and evaluates it.
+A web page that loads the .wasm module, takes .blip source, and evaluates it.
 This is the proof that blip is embedded in the strongest sense.
 
 ## First concrete step
@@ -57,7 +57,7 @@ V's WASM backend is incomplete (no full os module, no network). So the
 WASM build of blip will be a subset: no file I/O, no LSP, no subprocess.
 The REPL and `run` work on in-memory source; `emit-js` works (it's pure).
 `blip build --target wasm` is for embedding the interpreter, not for
-compiling arbitrary .lip programs to standalone .wasm.
+compiling arbitrary .blip programs to standalone .wasm.
 
 ## Findings (2026-10-30)
 

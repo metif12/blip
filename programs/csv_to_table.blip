@@ -1,4 +1,4 @@
-;; programs/csv_to_table.lip -- CSV to table, the roadmap's third program.
+;; programs/csv_to_table.blip -- CSV to table, the roadmap's third program.
 ;;
 ;; The first program that forces file I/O into existence. A CSV file becomes
 ;; a vector of tables, one per row, with the header row as keys. Nothing

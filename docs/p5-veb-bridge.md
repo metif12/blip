@@ -70,7 +70,7 @@ bridge function for that path.
 3. `veb-route` primitive + a parked machine.
 4. A tiny V server example that routes one request through blip. (Done:
    `programs/veb_server.v` routes seven pages through blip handlers.)
-5. The site itself served by blip handlers (replaces the static `build.lip`
+5. The site itself served by blip handlers (replaces the static `build.blip`
    output for dynamic content).
 
 ## Gate

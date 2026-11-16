@@ -27,12 +27,12 @@ RUN curl -sSL -o v.zip "https://github.com/vlang/v/releases/download/${V_VERSION
 
 ENV PATH=/opt/v:$PATH
 
-# The prelude lives beside the binary. std_path() looks for lib/std.lip two
+# The prelude lives beside the binary. std_path() looks for lib/std.blip two
 # levels up from the executable, so a binary in /usr/local/bin needs it in
 # /usr/local/lib. Without it the image builds and then every program fails to
 # load the standard library, which is the sort of thing that only shows up on
 # someone else's machine.
-COPY lib/std.lip /usr/local/lib/std.lip
+COPY lib/std.blip /usr/local/lib/std.blip
 
 COPY . /src
 WORKDIR /src

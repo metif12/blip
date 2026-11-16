@@ -380,7 +380,7 @@ the roadmap.)
 ## Running
 
 ```sh
-blip run file.blip         # evaluate (`.lip` works too; new files use `.blip`)
+blip run file.blip         # evaluate (v2 loads `.blip` only)
 blip test file.blip        # check ;=> expectations (top-level forms only)
 blip build file.blip       # compile to JavaScript
 blip fmt file.blip         # format
@@ -393,4 +393,4 @@ blip repl                  # bare `blip`
 - `programs/` -- real programs (brainfuck, json, markdown, ...).
 - `docs/canonical-forms.md` -- the one-spelling-per-idea table.
 - `docs/000-blip-design.md` -- the design document: motivation, trade-offs.
-- `lib/std.lip` -- the standard library, written in blip itself.
+- `lib/std.blip` -- the standard library, written in blip itself.

@@ -1,7 +1,7 @@
-;; lib/geometry.vl -- the module examples/06_modules.lip requires.
+;; lib/geometry.blip -- the module examples/06_modules.blip requires.
 ;;
-;; Resolution is FILE-RELATIVE to the requiring file, so `examples/06_modules.lip`
-;; says "lib/geometry.vl" and finds this. Nothing here knows where it was loaded
+;; Resolution is FILE-RELATIVE to the requiring file, so `examples/06_modules.blip`
+;; says "lib/geometry.blip" and finds this. Nothing here knows where it was loaded
 ;; from, which is what makes a package impossible to shadow with an unrelated file
 ;; of the same name in the working directory.
 

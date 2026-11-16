@@ -32,7 +32,7 @@ fn indent(n int) string {
 fn main() {
 	files := os.args[1..]
 	if files.len == 0 {
-		println('usage: reader_probe <file.lip> ...')
+		println('usage: reader_probe <file.blip> ...')
 		exit(2)
 	}
 	mut total_diags := 0

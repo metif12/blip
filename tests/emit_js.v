@@ -47,9 +47,9 @@ fn (mut s Suite) eq(label string, got string, want string) {
 // blip_output runs the source on the blip machine and returns what it printed.
 fn blip_output(src string) string {
 	h := host.new_capture()
-	h.give_file('main.lip', src)
+	h.give_file('main.blip', src)
 	mut m := machine.new_standalone(h)
-	m.load('main.lip') or { return 'ERROR: ${err.msg()}' }
+	m.load('main.blip') or { return 'ERROR: ${err.msg()}' }
 	return h.transcript().trim_right('\n')
 }
 
@@ -93,7 +93,7 @@ fn blip_cli() string {
 	return os.real_path(cli)
 }
 
-// blip_file_output runs a FILE through the blip CLI, which loads lib/std.lip.
+// blip_file_output runs a FILE through the blip CLI, which loads lib/std.blip.
 //
 // The in-process `blip_output` deliberately does NOT load the standard library,
 // because these checks are small snippets of primitives and a 630-line prelude
@@ -136,7 +136,7 @@ fn (mut s Suite) check(label string, src string) {
 // difference is the thing being tested -- an example that prints the right
 // shape with the wrong values would pass a golden-output check and fail this.
 fn (mut s Suite) check_example(name string) {
-	path := 'examples/${name}.lip'
+	path := 'examples/${name}.blip'
 	src := os.read_file(path) or {
 		s.fails++
 		println('FAIL ${name} => cannot read ${path}')
@@ -152,7 +152,7 @@ fn (mut s Suite) check_example(name string) {
 		println('FAIL ${name} => refused: ${res.blocked.join(', ')}')
 		return
 	}
-	// Both sides run the same FILE, so both get lib/std.lip. Comparing an emitted
+	// Both sides run the same FILE, so both get lib/std.blip. Comparing an emitted
 	// program against a snippet-only interpreter is how 03_match looked like a
 	// failure of the backend when it was a missing prelude.
 	s.eq('${name} output matches the interpreter', node_output(res.js), blip_file_output(path))
@@ -276,7 +276,7 @@ fn (mut s Suite) real_programs() {
 	mut refused := []string{}
 	mut running := []string{}
 	for ex in examples {
-		path := 'examples/${ex}.lip'
+		path := 'examples/${ex}.blip'
 		src := os.read_file(path) or {
 			continue
 		}

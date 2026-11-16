@@ -1,4 +1,4 @@
-;; examples/04_errors.lip
+;; examples/04_errors.blip
 ;; Two error mechanisms, deliberately. Half a design serves neither.
 ;;
 ;;   Result  -- for things a caller should reasonably handle. A value.

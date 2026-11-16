@@ -23,7 +23,7 @@ fn (mut s Suite) ok(label string, detail string) {
 fn main() {
 	mut s := Suite{}
 	mut m := machine.new_standalone(host.new_capture())
-	std := os.read_file('lib/std.lip') or { '' }
+	std := os.read_file('lib/std.blip') or { '' }
 	if std != '' { m.load(std) or {} }
 	// Register a handler that echoes the path and body.
 	m.run_str('(veb-route "/" (fn [req] (string-append "got: " (get req :path) " " (get req :body))))') or {

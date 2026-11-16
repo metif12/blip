@@ -1,6 +1,6 @@
 # The tour
 
-blip is a Lisp: programs are S-expressions, evaluation is substitution plus a small set of special forms, and the standard library is ordinary blip. This page walks the whole language in order. Every snippet runs — paste it into the [playground](playground.html) or a `.lip` file and try it.
+blip is a Lisp: programs are S-expressions, evaluation is substitution plus a small set of special forms, and the standard library is ordinary blip. This page walks the whole language in order. Every snippet runs — paste it into the [playground](playground.html) or a `.blip` file and try it.
 
 ## Programs
 

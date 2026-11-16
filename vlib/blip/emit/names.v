@@ -16,7 +16,7 @@ fn (mut e Emitter) callable(name string) string {
 	// A hyphenated, question-marked or bang-ed name is not a JavaScript
 	// identifier, so it is mangled with the same rule `symbol` uses -- one rule,
 	// in one place, so a definition and a call always agree. Refusing it here
-	// used to throw away every name in 01_basics.lip that was not a bare word:
+	// used to throw away every name in 01_basics.blip that was not a bare word:
 	// count-down, even?, odd?, not-tail and via-cond, five of the eight forms
 	// the emitter reported for that file.
 	return e.mangle_name(name)

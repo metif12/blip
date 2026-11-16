@@ -42,7 +42,7 @@ through an import library built from `clib/blip.def`:
 v -shared -cc msvc -path "vlib|@vlib" -o blip.dll clib/blip.v
 lib /def:clib/blip.def /out:blip.lib /machine:x64
 cl /nologo clib/example_eval.c blip.lib /Feclib_smoke.exe
-clib_smoke.exe          :: run from the repo root: blip_load reads clib/smoke_prog.lip
+clib_smoke.exe          :: run from the repo root: blip_load reads clib/smoke_prog.blip
 ```
 
 MinGW alternative, verified locally: build with `-cc gcc -path "vlib|@vlib"`, then
@@ -127,7 +127,7 @@ deep` instead of hanging the host. The smoke test proves both.
   cannot find `libblip.so`; re-link with `-Wl,-rpath,'$ORIGIN'` or set
   `LD_LIBRARY_PATH`.
 - `blip_load` fails in the smoke test: run from the repo root, so the
-  relative path `clib/smoke_prog.lip` resolves.
+  relative path `clib/smoke_prog.blip` resolves.
 - Version drift: `blip_version` mirrors `const version` in `main.v`; the
   release tarballs always pair one header with the library built from the
   same tag.

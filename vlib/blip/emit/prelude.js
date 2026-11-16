@@ -284,7 +284,7 @@ const blip = {
   // here: "42", not "42.0". The integer spelling is exact.
   number_string: (n) => typeof n === "string" ? n : String(n),
   // `even?` and `odd?` are primitives in blip (prims/mod.v). They are not the
-  // `letrec` bindings in examples/01_basics.lip -- those shadow them locally,
+  // `letrec` bindings in examples/01_basics.blip -- those shadow them locally,
   // and the top-level `(filter even? ...)` uses the primitive. An emitter with
   // no binding for them emits a call to a name nobody defined.
   // ---- Result -------------------------------------------------------------

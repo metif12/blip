@@ -1,7 +1,7 @@
 {
 	"name": "blip",
 	"scopeName": "source.blip",
-	"fileTypes": [".lip"],
+	"fileTypes": [".blip"],
 	"patterns": [
 		{ "include": "#comment-line" },
 		{ "include": "#comment-block" },

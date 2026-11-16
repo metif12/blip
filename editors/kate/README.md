@@ -31,9 +31,9 @@ references, rename, formatting, semantic tokens and more.
    If `blip` is not on PATH, use the absolute path to the executable.
 
 3. Set the document type to **Lisp** (or create a custom highlighting mode)
-   so `.lip` files are recognised.
+   so `.blip` files are recognised.
 
-4. Open a `.lip` file. Kate will start `blip lsp` and show diagnostics,
+4. Open a `.blip` file. Kate will start `blip lsp` and show diagnostics,
    hover, completion and the other features listed above.
 
 ## Notes

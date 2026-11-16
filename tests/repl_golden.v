@@ -146,10 +146,10 @@ fn (mut s Suite) a_read_error_does_not_end_the_session() bool {
 fn (mut s Suite) load_and_reload_use_the_running_machine() bool {
 	h := host.new_capture()
 	mut r := repl.new(h)
-	h.give_file('lib.vl', '(def from-file 10)\n(def (twice n) (* 2 n))')
-	r.run_lines(['(def before 1)', ',l lib.vl', '(twice from-file)', 'before', ',r'])
+	h.give_file('lib.blip', '(def from-file 10)\n(def (twice n) (* 2 n))')
+	r.run_lines(['(def before 1)', ',l lib.blip', '(twice from-file)', 'before', ',r'])
 	got := h.lines().join('|')
-	want := 'before|loaded lib.vl|20|1|loaded lib.vl'
+	want := 'before|loaded lib.blip|20|1|loaded lib.blip'
 	return s.passed('load and reload use the running machine', got == want,
 		'a definition from before the load survives it, and ,r works', 'got ${got}, want ${want}')
 }
@@ -157,9 +157,9 @@ fn (mut s Suite) load_and_reload_use_the_running_machine() bool {
 fn (mut s Suite) a_missing_load_reports_and_continues() bool {
 	h := host.new_capture()
 	mut r := repl.new(h)
-	r.run_lines([',l nope.vl', '(+ 1 1)'])
+	r.run_lines([',l nope.blip', '(+ 1 1)'])
 	got := h.lines().join('|')
-	want := 'error: no such file in the capture host: nope.vl|2'
+	want := 'error: no such file in the capture host: nope.blip|2'
 	return s.passed('a missing load reports and continues', got == want,
 		'the error did not end the session', 'got ${got}, want ${want}')
 }
@@ -210,7 +210,7 @@ fn (mut s Suite) golden_stdin_to_stdout() bool {
 
 	// The input is written here rather than checked in, because it is also the
 	// documentation of what the session does: multi-line input, a failure, a
-	// recovery, a failed load, and a quit. `,l no-such-file.vl` is here to prove
+	// recovery, a failed load, and a quit. `,l no-such-file.blip` is here to prove
 	// that a FAILED load does not end the session either.
 	input := [
 		'(def (greet name)',
@@ -218,7 +218,7 @@ fn (mut s Suite) golden_stdin_to_stdout() bool {
 		'(greet "world")',
 		'(car 1)',
 		'(greet "again")',
-		',l no-such-file.vl',
+		',l no-such-file.blip',
 		'(greet "still here")',
 		'(print "a string',
 		'that spans two lines")',

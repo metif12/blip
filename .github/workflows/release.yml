@@ -84,7 +84,7 @@ jobs:
             echo "::error::refusing to release: a check failed"
             exit 1
           fi
-          ./reader_probe examples/*.lip
+          ./reader_probe examples/*.blip
 
   build:
     needs: verify
@@ -122,7 +122,7 @@ jobs:
           zip -q ../blip-windows.zip blip.exe
           cd ..
           mkdir -p site_out
-          ./dist/blip-linux run site/build.lip
+          ./dist/blip-linux run site/build.blip
           test -s site_out/index.html
           test -s site_out/about.html
           test -s site_out/getting-started.html
@@ -178,7 +178,7 @@ jobs:
             Reproduce it locally with the commands in `CONTRIBUTING.md`. The
             same nine suites run in the `verify` job before anything here was
             built, and the site in `blip-site.tar.gz` is the output of
-            `site/build.lip` rather than something edited by hand.
+            `site/build.blip` rather than something edited by hand.
 
             `blip-clib-*.tar.gz/.zip` is the C embedding library: `blip.h`,
             the shared object, a worked example and `docs/c-lib.md`.
@@ -255,7 +255,7 @@ jobs:
           gcc clib/example_eval.c -o dist/clib_smoke -Ldist -lblip -Wl,-rpath,'$ORIGIN' -Iclib
           ./dist/clib_smoke | tee clib_smoke.txt
           grep -q 'clib smoke: all checks passed' clib_smoke.txt
-          cp clib/blip.h clib/blip.def clib/example_eval.c clib/smoke_prog.lip docs/c-lib.md pkg/blip-clib/
+          cp clib/blip.h clib/blip.def clib/example_eval.c clib/smoke_prog.blip docs/c-lib.md pkg/blip-clib/
           cp dist/libblip.so pkg/blip-clib/
           tar czf blip-clib-linux.tar.gz -C pkg blip-clib
           (cd dist && sha256sum libblip.so) > SHA256SUMS.clib-linux
@@ -277,7 +277,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Select-String -Path clib_smoke.txt -Pattern 'clib smoke: all checks passed' | Out-Null
           if ($LASTEXITCODE -ne 0) { Write-Error 'smoke marker missing'; exit 1 }
-          Copy-Item clib/blip.h, clib/blip.def, clib/example_eval.c, clib/smoke_prog.lip, docs/c-lib.md pkg/blip-clib/
+          Copy-Item clib/blip.h, clib/blip.def, clib/example_eval.c, clib/smoke_prog.blip, docs/c-lib.md pkg/blip-clib/
           Copy-Item dist/blip.dll, dist/blip.lib pkg/blip-clib/
           Compress-Archive -Path pkg/blip-clib -DestinationPath blip-clib-windows.zip
           Get-FileHash blip-clib-windows.zip -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  blip-clib-windows.zip" } | Out-File SHA256SUMS.clib-windows -Encoding ascii

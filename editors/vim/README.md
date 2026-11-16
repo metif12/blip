@@ -19,8 +19,8 @@ lspconfig.blip.setup({})
 
 For Vim, use a plugin such as `vim-lsp` or `ale` and point it at `blip lsp`.
 
-Set the filetype for `.lip` files:
+Set the filetype for `.blip` files:
 
 ```vim
-autocmd BufRead,BufNewFile *.lip setfiletype blip
+autocmd BufRead,BufNewFile *.blip setfiletype blip
 ```

@@ -1,4 +1,4 @@
-;; examples/07_config.lip
+;; examples/07_config.blip
 ;; Configuration as code.
 ;;
 ;; Guix showed that a configuration file can be a program in the same language

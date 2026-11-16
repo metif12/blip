@@ -131,10 +131,10 @@ fn main() {
 			corpus_files << cli
 		}
 	}
-	for extra in [os.join_path('examples', '01_basics.lip'), os.join_path('examples', '02_data.lip'),
-		os.join_path('examples', '03_match.lip'), os.join_path('examples', '04_errors.lip'),
-		os.join_path('examples', '05_pipelines.lip'), os.join_path('examples', '06_modules.lip'),
-		os.join_path('programs', 'brainfuck.lip'), os.join_path('programs', 'json.lip')] {
+	for extra in [os.join_path('examples', '01_basics.blip'), os.join_path('examples', '02_data.blip'),
+		os.join_path('examples', '03_match.blip'), os.join_path('examples', '04_errors.blip'),
+		os.join_path('examples', '05_pipelines.blip'), os.join_path('examples', '06_modules.blip'),
+		os.join_path('programs', 'brainfuck.blip'), os.join_path('programs', 'json.blip')] {
 		if os.exists(extra) {
 			corpus_files << extra
 		}

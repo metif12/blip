@@ -18,14 +18,14 @@ import strings
 //
 //   blip                      a REPL
 //   blip repl                 the same REPL, spelled out
-//   blip run <file.lip> ...   evaluate files, in order, in one machine
-//   blip <file.lip>           shorthand for `run`
-//   blip test <file.lip> ...  evaluate and check the `;=>` expectations
-//   blip check <file.lip> ... report contract/type mismatches without running
-//   blip emit-js <file.lip>   compile a file to a JavaScript module on stdout
+//   blip run <file.blip> ...   evaluate files, in order, in one machine
+//   blip <file.blip>           shorthand for `run`
+//   blip test <file.blip> ...  evaluate and check the `;=>` expectations
+//   blip check <file.blip> ... report contract/type mismatches without running
+//   blip emit-js <file.blip>   compile a file to a JavaScript module on stdout
 //   blip build <file> [-o out.js]  compile a file to a self-contained .js module
-//   blip fmt [-w] <file.lip>  pretty-print (normalize) a file, write back with -w
-//   blip doc <file.lip>       generate documentation from doc comments
+//   blip fmt [-w] <file.blip>  pretty-print (normalize) a file, write back with -w
+//   blip doc <file.blip>       generate documentation from doc comments
 //   blip lint [file]          check a commit message (default COMMIT_EDITMSG)
 //   blip vet [file]           same as lint, the linter hook
 //   blip lsp                  serve the language server over stdio
@@ -49,14 +49,14 @@ fn usage() {
 usage:
   blip                      start the REPL
   blip repl                 start the REPL
-  blip run <file.lip> ...   evaluate files in order, in one machine
-  blip <file.lip>           shorthand for `blip run`
-  blip test <file.lip> ...  evaluate and check the `;=>` expectations
-  blip check <file.lip> ... report contract/type mismatches without running
-  blip emit-js <file.lip>   compile a file to a JavaScript module on stdout
+  blip run <file.blip> ...   evaluate files in order, in one machine
+  blip <file.blip>           shorthand for `blip run`
+  blip test <file.blip> ...  evaluate and check the `;=>` expectations
+  blip check <file.blip> ... report contract/type mismatches without running
+  blip emit-js <file.blip>   compile a file to a JavaScript module on stdout
   blip build <file> [-o out.js]  compile a file to a self-contained .js module
-  blip fmt [-w] <file.lip>  pretty-print (normalize) a file, write back with -w
-  blip doc <file.lip>       generate documentation from doc comments
+  blip fmt [-w] <file.blip>  pretty-print (normalize) a file, write back with -w
+  blip doc <file.blip>       generate documentation from doc comments
   blip lint [file]          check a commit message (default COMMIT_EDITMSG)
   blip vet [file]           same as lint, the linter hook
   blip lsp                  serve the language server over stdio
@@ -88,7 +88,7 @@ Commands, at the start of a line:
   ,q        quit')
 		}
 		'run' {
-			println('blip run <file.lip> ... -- evaluate files
+			println('blip run <file.blip> ... -- evaluate files
 
 Several files are evaluated IN ORDER IN ONE MACHINE, so a definition made in the
 first is visible in the second. That is the difference between this and running
@@ -97,10 +97,10 @@ each file separately.
 The standard library is loaded first, so print and string-upcase are names
 rather than something every file has to require.
 
-blip somefile.lip is a shorthand for blip run somefile.lip.')
+blip somefile.blip is a shorthand for blip run somefile.blip.')
 		}
 		'test' {
-			println('blip test <file.lip> ... -- evaluate and check expectations
+			println('blip test <file.blip> ... -- evaluate and check expectations
 
 A ;=> expected comment on the same line as a form is an expectation: the form is
 evaluated and its value is compared, as text, against what follows the arrow. A
@@ -115,7 +115,7 @@ Exit status is 0 when every expectation held and 1 when any did not, so this
 works as a test gate from CI. Files without expectations are merely run.')
 		}
 		'check' {
-			println('blip check <file.lip> ... -- report mismatches without running
+			println('blip check <file.blip> ... -- report mismatches without running
 
 The static checker for erased annotations (M10). Functions defined with
 annotated `def` -- (def (add (x int) (y int)) int ...) -- have their
@@ -153,8 +153,8 @@ when it is not, so it works as a git commit-msg hook:
 
   blip lint .git/COMMIT_EDITMSG
 
-The rules live in programs/lint_commit.lip, which is also runnable on its
-own: blip run programs/lint_commit.lip')
+The rules live in programs/lint_commit.blip, which is also runnable on its
+own: blip run programs/lint_commit.blip')
 		}
 		'pkg' {
 			println('blip pkg -- package management
@@ -163,12 +163,12 @@ own: blip run programs/lint_commit.lip')
   blip pkg list                         what is installed, and from where
   blip pkg remove <name>                delete an installed package
 
-A package is a git repository holding .lip files. install clones it into
+A package is a git repository holding .blip files. install clones it into
 blip_modules/<owner>/<repo>, records it in blip.lock with the commit that was
 taken, and every later run sees it.
 
 Once installed, a package is reachable with (import <repo>), which loads its
-blip.lip entry point into the running machine -- the same thing use does for a
+blip.blip entry point into the running machine -- the same thing use does for a
 file, with the path resolved through blip_modules/ instead of by hand.')
 		}
 		'migrate' {
@@ -203,7 +203,7 @@ Prints the version and the compiler it was built with.')
 // It is loaded into the same machine as the program, so a program can rebind any
 // of it and the change is visible to a later file.
 // resource_path finds a file shipped beside the binary: the standard library
-// or a program. Both live next to the executable (`lib/std.lip`,
+// or a program. Both live next to the executable (`lib/std.blip`,
 // `programs/<name>`), with one directory up as the fallback for running from
 // source layouts. One helper, not two copies of the same probe.
 fn resource_path(rel string) string {
@@ -231,11 +231,22 @@ fn resource_path(rel string) string {
 // It is loaded into the same machine as the program, so a program can rebind any
 // of it and the change is visible to a later file.
 fn std_path() string {
-	return resource_path('lib${os.path_separator}std.lip')
+	return resource_path('lib${os.path_separator}std.blip')
 }
 
 fn programs_path(name string) string {
 	return resource_path('programs${os.path_separator}${name}')
+}
+
+// need_blip_ext enforces the v2 source extension (roadmap A2): only
+// `.blip` files evaluate. `Machine.load` guards `require`/`,l`/imports,
+// but `run`/`test`/`check` read through `run_str`, so every command that
+// takes a file path enforces it here too. `migrate` is exempt: it reads
+// v1 input on purpose.
+fn need_blip_ext(path string) ! {
+	if path.ends_with('.lip') || path.ends_with('.vl') {
+		return error('blip: ${path}: v2 loads .blip files only; rename to .blip and run `blip migrate` on it')
+	}
 }
 
 fn run_files(paths []string) int {
@@ -254,6 +265,11 @@ fn run_files(paths []string) int {
 			}
 		}
 		for path in paths {
+			need_blip_ext(path) or {
+				eprintln(err.msg())
+				code = 1
+				continue
+			}
 			src := os.read_file(path) or {
 				eprintln('blip: cannot read ${path}')
 				code = 1
@@ -377,9 +393,9 @@ fn main() {
 					return
 				}
 				os.setenv('BLIP_LINT_FILE', file, true)
-				prog := programs_path('lint_commit.lip')
+				prog := programs_path('lint_commit.blip')
 				if prog == '' {
-					eprintln('blip: cannot find programs/lint_commit.lip')
+					eprintln('blip: cannot find programs/lint_commit.blip')
 					exit_code(2)
 					return
 				}
@@ -419,7 +435,7 @@ fn main() {
 				}
 				if target == '' {
 					eprintln('blip: migrate needs a file or directory')
-					eprintln('usage: blip migrate [--check] <file.lip|dir>')
+					eprintln('usage: blip migrate [--check] <file|dir>')
 					exit_code(2)
 					return
 				}
@@ -470,7 +486,7 @@ fn main() {
 					return
 				}
 				if out == '' {
-					out = file.replace('.blip', '.js').replace('.lip', '.js')
+					out = file.replace('.blip', '.js')
 				}
 				exit_code(build_file(file, out))
 			}
@@ -497,13 +513,13 @@ fn main() {
 				}
 			}
 			else {
-				// Allow `blip file.lip` as a shorthand for `blip run file.lip`.
+				// Allow `blip file.blip` as a shorthand for `blip run file.blip`.
 				// A word that is neither a subcommand nor a file fails both ways,
 				// and saying only "cannot read" sends someone who mistyped a
 				// subcommand hunting for a file that was never theirs.
-				if !os.exists(args[0]) && !args[0].ends_with('.lip') && !args[0].ends_with('.blip') {
+				if !os.exists(args[0]) && !args[0].ends_with('.blip') {
 					eprintln('blip: ${args[0]} is neither a subcommand nor a file')
-					eprintln('run `blip help` for subcommands, or `blip run <file.lip>`')
+					eprintln('run `blip help` for subcommands, or `blip run <file.blip>`')
 					exit_code(2)
 				}
 				exit_code(run_files(args))
@@ -588,6 +604,11 @@ fn run_tests(paths []string) int {
 	} $else {
 		mut s := TestSuite{}
 		for path in paths {
+			need_blip_ext(path) or {
+				eprintln(err.msg())
+				s.fails++
+				continue
+			}
 			src := os.read_file(path) or {
 				eprintln('blip: cannot read ${path}')
 				s.fails++
@@ -679,6 +700,11 @@ fn check_files(paths []string) int {
 	} $else {
 		mut fails := 0
 		for path in paths {
+			need_blip_ext(path) or {
+				eprintln(err.msg())
+				fails++
+				continue
+			}
 			src := os.read_file(path) or {
 				eprintln('blip: cannot read ${path}')
 				fails++
@@ -771,6 +797,10 @@ fn doc_file(path string) int {
 		println('blip: doc not available in wasm build')
 		return 1
 	} $else {
+		need_blip_ext(path) or {
+			eprintln(err.msg())
+			return 1
+		}
 		src := os.read_file(path) or {
 			eprintln('blip: cannot read ${path}: ${err.msg()}')
 			return 1
@@ -784,8 +814,8 @@ fn doc_file(path string) int {
 				continue
 			}
 			// A definition line: flush the accumulated doc as an entry.
-			is_def := trimmed.starts_with('(define') || trimmed.starts_with('(def ')
-				|| trimmed.starts_with('(defmacro') || trimmed.starts_with('(struct')
+			is_def := trimmed.starts_with('(def ') || trimmed.starts_with('(defmacro')
+				|| trimmed.starts_with('(struct')
 			if is_def {
 				// Extract the name: second token after the opening paren.
 				mut name := ''
@@ -851,9 +881,9 @@ fn doc_file(path string) int {
 // ---- migrate -------------------------------------------------------------
 
 // migrate_cmd runs `blip migrate [--check] <file|dir>`: every .lip/.blip
-// file is rewritten in place unless --check is set (report-only, exit 1 if
-// anything would change). blip.mod stamping and version enforcement land
-// with the module-manifest change, next.
+// file is rewritten and every .lip renamed to .blip unless --check is set
+// (report-only, exit 1 if anything would change). blip.mod stamping and
+// version enforcement land with the module-manifest change, next.
 fn migrate_cmd(target string, check_only bool) int {
 	$if wasm32 {
 		println('blip: migrate not available in wasm build')
@@ -872,9 +902,17 @@ fn migrate_cmd(target string, check_only bool) int {
 			if r.changed {
 				changed++
 				if check_only {
-					println('${r.path}: would migrate')
+					if r.renamed {
+						println('${r.path}: would migrate and rename to .blip')
+					} else {
+						println('${r.path}: would migrate')
+					}
 				} else {
-					println('${r.path}: migrated')
+					if r.renamed {
+						println('${r.path}: migrated and renamed to .blip')
+					} else {
+						println('${r.path}: migrated')
+					}
 				}
 			}
 		}
@@ -893,6 +931,10 @@ fn fmt_file(path string, write bool) int {
 		println('blip: fmt not available in wasm build')
 		return 1
 	} $else {
+		need_blip_ext(path) or {
+			eprintln(err.msg())
+			return 1
+		}
 		src := os.read_file(path) or {
 			eprintln('blip: cannot read ${path}: ${err.msg()}')
 			return 1
@@ -935,6 +977,7 @@ fn fmt_file(path string, write bool) int {
 // while `emit-js` prints the partial module and reports the refusal alongside
 // it, so a refusal is visible rather than a silent `undefined`.
 fn compile_one(path string) !emit.Result {
+	need_blip_ext(path)!
 	src := os.read_file(path) or { return error('blip: cannot read ${path}') }
 	return emit.compile_program(src) or { return error('blip: ${path}: ${err.msg()}') }
 }

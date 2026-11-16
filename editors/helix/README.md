@@ -6,7 +6,7 @@ Add to `~/.config/helix/languages.toml`:
 [[language]]
 name = "blip"
 scope = "source.blip"
-file-types = ["lip"]
+file-types = ["blip"]
 roots = [".git"]
 language-servers = ["blip-lsp"]
 
@@ -15,4 +15,4 @@ command = "blip"
 args = ["lsp"]
 ```
 
-Helix will start `blip lsp` automatically for `.lip` files.
+Helix will start `blip lsp` automatically for `.blip` files.

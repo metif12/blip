@@ -269,7 +269,7 @@ fn main() {
 	// Config constructors: file + none + reload.
 	{
 		h3 := host.new_capture()
-		h3.give_file('pre.lip', '(def preloaded 99)')
+		h3.give_file('pre.blip', '(def preloaded 99)')
 		mut cfge := embed.new_with_config(h3, embed.Config{
 			prelude: .none
 		}) or {
@@ -289,7 +289,7 @@ fn main() {
 		} else {
 			s.ok('embed load_prelude', 'prelude reloaded')
 		}
-		lv2 := cfge.load('pre.lip') or {
+		lv2 := cfge.load('pre.blip') or {
 			s.fail('embed load', err.msg())
 			return
 		}
@@ -306,10 +306,10 @@ fn main() {
 	}
 	{
 		h4 := host.new_capture()
-		h4.give_file('lib/std.lip', '(def std-marker 1)')
+		h4.give_file('lib/std.blip', '(def std-marker 1)')
 		mut file_e := embed.new_with_config(h4, embed.Config{
 			prelude:      .file
-			prelude_path: 'lib/std.lip'
+			prelude_path: 'lib/std.blip'
 		}) or {
 			s.fail('embed new_with_config file', err.msg())
 			return

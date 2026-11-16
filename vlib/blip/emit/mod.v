@@ -86,7 +86,7 @@ mut:
 	// recorded rather than worked around.
 	takes_kwargs map[string]bool
 	// base is the directory the source being compiled lives in, so a
-	// `require "lib/x.vl"` resolves next to THIS file rather than next to
+	// `require "lib/x.blip"` resolves next to THIS file rather than next to
 	// the process's working directory -- the same rule resolve_path uses in
 	// the machine.
 	base string
@@ -112,8 +112,8 @@ $if wasm32 {
 	}
 } $else {
 	pub fn compile_program(src string) !Result {
-		std_src := os.read_file('lib/std.lip') or {
-			return error('cannot read lib/std.lip: ${err.msg()}')
+		std_src := os.read_file('lib/std.blip') or {
+			return error('cannot read lib/std.blip: ${err.msg()}')
 		}
 		return compile(std_src + '\n' + src)
 	}
@@ -133,8 +133,8 @@ $if wasm32 {
 } $else {
 	pub fn compile_file(path string) !Result {
 		src := os.read_file(path) or { return error('cannot read ${path}: ${err.msg()}') }
-		std_src := os.read_file('lib/std.lip') or {
-			return error('cannot read lib/std.lip: ${err.msg()}')
+		std_src := os.read_file('lib/std.blip') or {
+			return error('cannot read lib/std.blip: ${err.msg()}')
 		}
 		return compile_with_base(std_src + '\n' + src, os.dir(path))
 	}
@@ -181,7 +181,7 @@ fn (e &Emitter) local_js(name string) ?string {
 // max_depth bounds how deep the emitter will recurse into an AST before it
 // refuses the program.
 //
-// Without a bound, a real example -- `examples/01_basics.lip`, 153 lines --
+// Without a bound, a real example -- `examples/01_basics.blip`, 153 lines --
 // overflows the native stack and dies with `V panic: stack overflow`, exit code
 // 0xC00000FD. That is unrecoverable: no error is returned, nothing is explained,
 // and the caller gets a dead process. A limit turns the same program into a
@@ -782,7 +782,7 @@ fn (mut e Emitter) emit_let(kind string, kids []reader.NodeId) {
 	bindings := e.kids(kids[1])
 	mut body := kids[2..]
 	// `(let NAME VALUE body...)` is the same thing as `(let ([NAME VALUE])
-	// body...)`, and std.lip uses the short form everywhere -- every one of
+	// body...)`, and std.blip uses the short form everywhere -- every one of
 	// parse-in, lookup-sym, validate and connect is written that way. Reading
 	// kids[1] as a binding LIST took its children, which a symbol has none of,
 	// so the bindings were empty and the function body was emitted with nothing
@@ -1127,7 +1127,7 @@ fn (mut e Emitter) expression_form(name string, kids []reader.NodeId) ?string {
 		bindings := e.kids(kids[1])
 		mut names := []string{}
 		mut vals := []string{}
-		// `(let NAME VALUE body...)`, the short form std.lip is written in. The
+		// `(let NAME VALUE body...)`, the short form std.blip is written in. The
 		// bindings slot holds a symbol, whose children are none, so this reached
 		// the pair loop with nothing and bound nothing.
 		if e.node(kids[1]).tag == .sym && kids.len >= 4 {
@@ -1989,7 +1989,7 @@ fn (mut e Emitter) stmt(id reader.NodeId) {
 // A hyphenated, question-marked or bang-ed name is not a JavaScript identifier,
 // so it used to be refused -- which threw away most of any real program:
 // `count-down`, `even?`, `odd?`, `not-tail` and `via-cond` are five of the
-// refusals `examples/01_basics.lip` produces before reaching anything else.
+// refusals `examples/01_basics.blip` produces before reaching anything else.
 //
 // It is now MANGLED instead, and mangled in exactly one place so a definition
 // and a use of the same name always agree. The mapping is `-` to `_`, `?` to

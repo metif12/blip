@@ -1,4 +1,4 @@
-;; examples/05_pipelines.lip
+;; examples/05_pipelines.blip
 ;; Pipes, labelled arguments, structs with opacity, and macros.
 ;; The everyday layer: what lets a 300-line program be written with NO macros.
 

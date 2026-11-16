@@ -23,8 +23,8 @@ mut e := embed.new_with_config(h, embed.Config{
     max_steps: 10000
     prelude:   .none
 })!
-e.load_prelude()!                 // embedded lib/std.lip, no path needed
-e.load('prog.lip')!               // through the host, into this machine
+e.load_prelude()!                 // embedded lib/std.blip, no path needed
+e.load('prog.blip')!               // through the host, into this machine
 
 f := e.lookup('quad')!
 v := e.call(f, [blip.integer(3)])!

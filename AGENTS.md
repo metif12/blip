@@ -11,7 +11,7 @@ in `CONTRIBUTING.md`, the plan in `docs/010-roadmap.md`, history in
 - `main.v` — CLI entry. `vlib/blip/` — the implementation: `reader/`,
   `machine/`, `prims/` (hand-written plus generated `gen_*.v`, which are
   never hand-edited), `repl/`, `printer/`, `host/`.
-- `lib/std.lip` — prelude, loaded before every program. Ordinary blip.
+- `lib/std.blip` — prelude, loaded before every program. Ordinary blip.
 - `examples/` — the six spec programs. `programs/` — real programs
   (brainfuck, json), each ending with an `"<name> ok"` marker.
 - `tests/` — suites run with `v run` directly; files are `*.v`, so
@@ -19,7 +19,7 @@ in `CONTRIBUTING.md`, the plan in `docs/010-roadmap.md`, history in
 - `tools/` — `.vsh` scripts: `genprims` (prims from vlib, with `--check`),
   `check_playground` (builds, serves, and checks the playground API).
   `server.v` (playground backend) and `reader_probe.v` sit at the root.
-- `site/` — `build.lip` (the generator, run by pages.yml), `layout.html`,
+- `site/` — `build.blip` (the generator, run by pages.yml), `layout.html`,
   `content/*.md`, `assets/`; `playground.html` is served locally by root
   `server.v`. `site_out/` is generated, never edit it.
 
@@ -51,10 +51,10 @@ in `CONTRIBUTING.md`, the plan in `docs/010-roadmap.md`, history in
 
 ## Gotchas that cost sessions
 
-- `.lip` files must be BOM-free: the `write` tool adds a BOM, which the
-  reader takes as part of the first token. Seed new `.lip` files by
+- `.blip` files must be BOM-free: the `write` tool adds a BOM, which the
+  reader takes as part of the first token. Seed new `.blip` files by
   copying an existing one and editing the copy.
-- `(define ...)` never evaluates its body. To trigger a body error in a
+- `(def ...)` never evaluates its body. To trigger a body error in a
   probe, call the function.
 - `vlib/blip/prims/gen_*.v` are generated; the one-line
   `register_gen_*` call in `table()` is the only hand touchpoint.

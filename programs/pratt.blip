@@ -1,4 +1,4 @@
-;; programs/pratt.lip -- a Pratt parser for a tiny language.
+;; programs/pratt.blip -- a Pratt parser for a tiny language.
 
 (struct Num (n))
 (struct BinOp (op left right))

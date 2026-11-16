@@ -1,4 +1,4 @@
-;; programs/lint_commit.lip -- a commit-message linter.
+;; programs/lint_commit.blip -- a commit-message linter.
 
 (def (subject-ok? s)
   (and (not (string-blank? s))

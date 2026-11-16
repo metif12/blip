@@ -5,7 +5,7 @@
 // Build (windows): v -shared -cc msvc -o blip.dll clib/blip.v
 //                  lib /def:clib/blip.def /out:blip.lib /machine:x64
 //                  cl /nologo clib/example_eval.c blip.lib /Feclib_smoke.exe
-// Run from the repo root: the blip_load step reads clib/smoke_prog.lip.
+// Run from the repo root: the blip_load step reads clib/smoke_prog.blip.
 //
 // Every check prints its label and the library's answer; any failure aborts
 // non-zero, so CI only has to check the exit code and the final marker line.
@@ -34,7 +34,7 @@ int main(void) {
 	// Values accumulate across evals, like separate `blip run` files in one
 	// machine: definitions persist.
 	check_eval(ip, "(+ 1 2)", "3");
-	check_eval(ip, "(define (double x) (* 2 x))", "double");
+	check_eval(ip, "(def (double x) (* 2 x))", "double");
 	check_eval(ip, "(double 21)", "42");
 
 	// blip_call evaluates each argument as blip source, then calls by name.
@@ -67,7 +67,7 @@ int main(void) {
 	// Files load through the host into the running machine.
 	{
 		char *out = 0;
-		int rc = blip_load(ip, "clib/smoke_prog.lip", &out);
+		int rc = blip_load(ip, "clib/smoke_prog.blip", &out);
 		printf("load => [%s]\n", out);
 		assert(rc == BLIP_OK);
 		blip_free_str(out);

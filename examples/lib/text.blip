@@ -1,4 +1,4 @@
-;; lib/text.vl -- the second module examples/06_modules.lip requires.
+;; lib/text.blip -- the second module examples/06_modules.blip requires.
 
 (def DEFAULT-GREETING "Hello")
 

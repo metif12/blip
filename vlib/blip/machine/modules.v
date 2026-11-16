@@ -116,7 +116,7 @@ fn (mut m Machine) eval_require(kids []blip.NodeId) ! {
 // require_paths returns the file paths in one `require` clause.
 //
 // A clause is a string, or a form whose head is a filter and whose arguments
-// include the path: `(only-in "x.vl" a b)`, `(prefix-in p: "x.vl")`. Recursing
+// include the path: `(only-in "x.blip" a b)`, `(prefix-in p: "x.blip")`. Recursing
 // into the form and collecting every string is enough for those, and it
 // deliberately does NOT try to understand the filters -- see eval_require's
 // comment. It RETURNS the list rather than appending to one the caller passed,
@@ -178,8 +178,8 @@ pub fn (m &Machine) resolve_path(path string) string {
 }
 
 // clean_path lexically resolves `.` and `..` segments, so a require that
-// climbs out of its own directory ("../programs/markdown.lip" from
-// "site/build.lip") lands where the author meant. Lexical on purpose: no
+// climbs out of its own directory ("../programs/markdown.blip" from
+// "site/build.blip") lands where the author meant. Lexical on purpose: no
 // filesystem access, no symlink resolution, and `/` and `\` both work on
 // either platform.
 pub fn clean_path(path string) string {
@@ -213,7 +213,7 @@ pub fn clean_path(path string) string {
 // loaded remembers which paths have already been evaluated in this machine, so a
 // file required twice runs once.
 //
-// Without it, `(require "lib/text.vl")` after `(require (only-in "lib/text.vl"
+// Without it, `(require "lib/text.blip")` after `(require (only-in "lib/text.blip"
 // ...))` re-evaluates the file and every definition in it is replaced by a
 // freshly made one -- which quietly discards any `set!` a caller had made.
 fn (m &Machine) already_loaded(path string) bool {

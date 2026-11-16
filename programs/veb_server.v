@@ -72,11 +72,11 @@ pub fn (mut app App) status(mut ctx Context) veb.Result {
 
 fn main() {
 	mut m := machine.new_standalone(host.ConsoleHost{})
-	m.load('lib/std.lip') or { panic(err) }
+	m.load('lib/std.blip') or { panic(err) }
 	// Handlers render the same Markdown sources the static site uses, so
 	// served pages and deployed pages cannot drift apart.
-	m.run_str('(require "programs/markdown.lip")') or { panic(err) }
-	m.run_str('(define (render-page title md-text) (use (read-file "site/layout.html") (string-replace (string-replace read-file "{{title}}" title) "{{body}}" (md-render (string-split md-text "\n")))))') or {
+	m.run_str('(require "programs/markdown.blip")') or { panic(err) }
+	m.run_str('(def (render-page title md-text) (use (read-file "site/layout.html") (string-replace (string-replace read-file "{{title}}" title) "{{body}}" (md-render (string-split md-text "\n")))))') or {
 		panic(err)
 	}
 	m.run_str('(veb-route "/" (fn [req] (use (read-file "site/content/index.md") (render-page "blip — a Lisp dialect in V" read-file))))') or {

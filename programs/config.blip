@@ -1,4 +1,4 @@
-;; programs/config.lip -- reading configuration like a configuration language.
+;; programs/config.blip -- reading configuration like a configuration language.
 ;;
 ;; A configuration file is data with opinions. This program reads a small
 ;; key: value file from disk, validates every line, and reports what it found.
@@ -7,7 +7,7 @@
 ;; program.
 
 (def (parse-line line)
-  ;; (ok key value) or (err reason). `parse-in` from std.lip does the split;
+  ;; (ok key value) or (err reason). `parse-in` from std.blip does the split;
   ;; an empty line is not an error, it is just nothing.
   (if (string-blank? line)
     (ok nil nil)

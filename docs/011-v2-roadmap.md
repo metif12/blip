@@ -34,7 +34,7 @@ per release.
 
 ### A1. Behavior fixes (carried, unchanged in meaning)
 
-1. **Table key order** (`examples/07_config.lip`). Printer sorts keys,
+1. **Table key order** (`examples/07_config.blip`). Printer sorts keys,
    example expects insertion order. Decision for v2: insertion order
    (Janet behavior), plus an explicit `sort-table`. Printer AND emitter
    move together. Gate: `blip test` green on all examples with no comment
@@ -48,7 +48,7 @@ per release.
    re-blessed goldens.
 3. **Nested `;=>`** (§10.2, opt-in first). `blip test` checks only
    top-level forms today. Changing it turns decorative nested comments
-   (e.g. `04_errors.lip`) into failures. Gate: a nested-vs-top-level
+   (e.g. `04_errors.blip`) into failures. Gate: a nested-vs-top-level
    fixture pinning the rule, then an opt-in flag before any default flip.
 4. **Toolchain sync** (§10.4, §7.1). The pinned-compiler procedure is
    history; the stock-release workflow (`install.sh`/`install.ps1`)
@@ -67,7 +67,7 @@ spelling only.
 | `lambda`, `λ` | `fn` | tour appendix "from Racket/Scheme?" |
 | `define` | `def` | tour appendix "from Racket/Scheme?" (`define/contract` kept for now; becomes `def/contract` later, `defc` rejected: contract must read as definition) — **done**: machine errors, `check` reports, emitter refuses, struct codegen emits `def`, corpus+tests+tour use `def`, `tail_calls`/`contracts`/`emit_js` pin the removal (prim alias recipes verified working; special forms cannot be aliased back) |
 | `first` / `rest` | `car` / `cdr` | same appendix |
-| `.lip` / `.vl` loader | `.blip` only | loader errors with a migration line instead of a warning |
+| `.lip` / `.vl` loader | `.blip` only | loader errors with a migration line instead of a warning — **done**: `Machine.load` refuses `.lip`/`.vl` naming `.blip`, `resolve_module` entry is `blip.blip`, corpus renamed (18 files), `blip migrate` renames alongside rewriting (conflict errors instead of overwriting), `embedding.v` pins both refusals, `unit.v` pins the rename |
 | `do` | `begin` | same appendix (macro expansions emit `begin`) — **done**: machine errors, `check` reports, emitter refuses, `05_pipelines`/tour/`blip_in_y_min` emit `begin` |
 | `when` (bare) | `#:when` | guard appendix |
 | `case` | `match` with literals | `cond` stays (condition chains read better than `match #t`); `case` goes because literal-`match` does the same job with destructuring |
@@ -106,7 +106,7 @@ deterministic tooling) is already unique; fibers and PEG complete it.
    `Result` convention. Together they make flat fallible pipelines
    (`05_pipelines`) without nesting. Missing piece is std: move
    `map-result`/`unwrap-or`/`flatten`/`all-results`/`lazy_*` from the
-   tour into `lib/std.lip`. Gate: pipeline example with asserts on
+   tour into `lib/std.blip`. Gate: pipeline example with asserts on
    every branch (ok path, err path, miss-falls-through).
 3. **Deterministic tooling that agrees with itself.**
    `check`/`fmt`/`test`/`doc`/`lsp` share one reader position source;
@@ -143,7 +143,7 @@ deterministic tooling) is already unique; fibers and PEG complete it.
 - `build`: `emit-js` is done; `.wasm` waits on V wasm32 stdlib
   (`docs/p8-wasm.md`). Until then stabilize `build -o .js`.
 
-## Track D — stdlib expansion (`lib/std.lip`)
+## Track D — stdlib expansion (`lib/std.blip`)
 
 Today ~106 lines, mostly mock/demo: `identity`, `err-message`,
 `parse-in` (`key: value` only), `lookup-sym`/`validate` (two-member

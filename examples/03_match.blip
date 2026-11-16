@@ -1,4 +1,4 @@
-;; examples/03_match.lip
+;; examples/03_match.blip
 ;; Pattern matching. This is the feature the language exists for.
 ;;
 ;; `match` destructures one value. `match*` destructures SEVERAL AT ONCE,

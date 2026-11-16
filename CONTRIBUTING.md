@@ -57,14 +57,14 @@ so the imports spell the short name (`import blip.machine`, used as
 
 ```sh
 v -cc gcc -path 'vlib|@vlib' -o blip.exe main.v                  # the CLI
-.\blip.exe examples\01_basics.lip
+.\blip.exe examples\01_basics.blip
 
 v -cc gcc -path 'vlib|@vlib' -o tools\tail.exe tests\tail_calls.v && .\tools\tail.exe
 v -cc gcc -path 'vlib|@vlib' -o tools\nt.exe   tests\non_tail.v   && .\tools\nt.exe
 v -cc gcc -path 'vlib|@vlib' -o tools\lf.exe   tests\loop_forms.v && .\tools\lf.exe
 
 v -cc gcc -path 'vlib|@vlib' -o reader_probe.exe reader_probe.v
-.\reader_probe.exe examples\*.lip
+.\reader_probe.exe examples\*.blip
 ```
 
 All twenty-one suites must print no `FAIL` line and the reader probe must report zero
@@ -120,14 +120,14 @@ generated `src.c` around the reported line.
 ## The website
 
 The site is generated. Do not edit anything in `site_out/` — it is rebuilt
-by `site/build.lip` on every pages deploy.
+by `site/build.blip` on every pages deploy.
 
 ```sh
 v -cc gcc -path 'vlib|@vlib' -o blip.exe main.v
-.\blip.exe run site\build.lip
+.\blip.exe run site\build.blip
 ```
 
-- Page structure lives in `site/build.lip`, as blip code.
+- Page structure lives in `site/build.blip`, as blip code.
 - All user-visible text lives in `site/content/*.md`, one file per route.
 - The shared template is `site/layout.html` (`{{title}}`/`{{body}}`
   placeholders, filled with `string-replace`).

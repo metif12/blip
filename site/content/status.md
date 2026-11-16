@@ -11,8 +11,8 @@
 - **M4 — special forms, core forms, 100+ primitives.**
 - **M5 — macros.** `defmacro`, `gensym`, quasiquote, `macex1`/`macex`.
 - **M6 — modules.** `require`/`provide`, `only-in`, `prefix-in`. (`for-syntax` deferred.)
-- **M7 — standard library in blip.** `lib/std.lip`, growing.
-- **M8 — ergonomics.** `match`, `match*`, `use`, pipes, labelled args, `Result`, opaque types. Gate program: `programs/json.lip`, macro-free.
+- **M7 — standard library in blip.** `lib/std.blip`, growing.
+- **M8 — ergonomics.** `match`, `match*`, `use`, pipes, labelled args, `Result`, opaque types. Gate program: `programs/json.blip`, macro-free.
 - **M9 — tooling.** REPL with golden tests, span-carrying errors, formatter. (`assert` as doc-tests not implemented.)
 - **M10 — contracts and erased annotations.** `define/contract` checks at call time, `(x Type)` erases, `blip check` reports mismatches without running. Gate: `tests/contracts.v`.
 
@@ -34,7 +34,7 @@ Twenty-two suites run in CI with zero `FAIL` lines, plus the reader probe over e
 - **Full fiber suspension**: parking and resuming continuations. `yield` exists as an identity hook; the heap stack is already shaped for it.
 - **WASM backend**: running blip programs in the browser without a server.
 - **`for-syntax`** imports, and **`assert` as doc-tests**.
-- A growing prelude: every new `lib/std.lip` name is ordinary blip, or the feature is missing.
+- A growing prelude: every new `lib/std.blip` name is ordinary blip, or the feature is missing.
 
 ---
 

@@ -1,9 +1,9 @@
-;; site/build.lip -- generate the blip website into site_out/.
+;; site/build.blip -- generate the blip website into site_out/.
 ;;
-;; Content stays Markdown; programs/markdown.lip renders it to HTML, so the
+;; Content stays Markdown; programs/markdown.blip renders it to HTML, so the
 ;; same renderer the programs_run gate checks is the one the site ships.
 
-(require "../programs/markdown.lip")
+(require "../programs/markdown.blip")
 
 (def (render-page title md-text)
   (use (read-file "site/layout.html")

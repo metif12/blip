@@ -77,7 +77,7 @@ const cases = [
 	Case{ name: 'a stray unquote', src: ',x' },
 	Case{ name: 'a broken table literal', src: '@{:a 1 (}' },
 	// bad input met through the STANDARD prelude, because that is how a real
-	// user first meets it: with std.lip already loaded
+	// user first meets it: with std.blip already loaded
 	Case{ name: 'parse-in on garbage', src: '(parse-in "key with no value")' },
 	Case{ name: 'err-message of a non-err', src: '(err-message 5)' },
 	Case{ name: 'fold over a non-sequence', src: '(fold + 0 5)' },
@@ -96,7 +96,10 @@ const cli_cases = [
 	CliCase{ name: 'test with no file', cmdline: 'test', want_exit: 2 },
 	CliCase{ name: 'emit-js with no file', cmdline: 'emit-js', want_exit: 2 },
 	CliCase{ name: 'an unknown subcommand', cmdline: 'frobnicate', want_exit: 2 },
-	CliCase{ name: 'run of a missing file', cmdline: 'run tmp/does-not-exist.lip', want_exit: 1 },
+	CliCase{ name: 'run of a missing file', cmdline: 'run tmp/does-not-exist.blip', want_exit: 1 },
+	CliCase{ name: 'run refuses a .lip file', cmdline: 'run tmp/does-not-exist.lip', want_exit: 1 },
+	CliCase{ name: 'test refuses a .lip file', cmdline: 'test tmp/does-not-exist.lip', want_exit: 1 },
+	CliCase{ name: 'check refuses a .lip file', cmdline: 'check tmp/does-not-exist.lip', want_exit: 1 },
 ]
 
 struct Suite {
@@ -130,7 +133,7 @@ fn crashed(res os.Result) bool {
 
 // spawn_case runs one hostile source through `blip run` in a child process.
 fn (mut s Suite) spawn_case(c Case, dir string, blip_bin string) {
-	path := os.join_path(dir, 'case.lip')
+	path := os.join_path(dir, 'case.blip')
 	os.write_file(path, c.src) or {
 		s.fails++
 		println('FAIL ${c.name} => cannot write the case file: ${err.msg()}')

@@ -169,13 +169,13 @@ fn (mut s Suite) a_closure_survives_a_later_read() bool {
 
 fn (mut s Suite) load_evaluates_into_the_running_machine() bool {
 	_, mut m, _, h := pair()
-	h.give_file('lib.vl',
+	h.give_file('lib.blip',
 		'(def loaded-value 41)\n(def (loaded-fn) (+ loaded-value 1))')
 	m.run_str('(def before 1)') or {
 		s.fail('load evaluates into the running machine', 'setup: ${err.msg()}')
 		return false
 	}
-	m.load('lib.vl') or {
+	m.load('lib.blip') or {
 		s.fail('load evaluates into the running machine', err.msg())
 		return false
 	}
@@ -189,26 +189,43 @@ fn (mut s Suite) load_evaluates_into_the_running_machine() bool {
 		'loaded-fn=${text(got)} before=${text(before)}')
 }
 
-// `.vl` still loads, but the load records a deprecation pointing at `.blip`.
-// A deprecation that breaks programs is a removal, and a warning nobody can
-// read is silence, so the suite asserts the value loads AND the warning lands.
-fn (mut s Suite) vl_extension_load_warns_deprecation() bool {
+// `.vl` and `.lip` do not load in v2 (roadmap A2): the loader refuses with
+// a migration line naming `.blip`, instead of the old deprecation warning.
+// This pins the refusal and the message, not just failure.
+fn (mut s Suite) vl_extension_load_is_refused() bool {
 	_, mut m, _, h := pair()
 	h.give_file('lib.vl', '(def loaded-value 41)\n')
+	h.give_file('old.lip', '(def loaded-value 41)\n')
 	m.load('lib.vl') or {
-		s.fail('a .vl load warns deprecation', err.msg())
+		if err.msg().contains('v2 loads .blip files only') {
+			return s.record('a .vl load is refused with a migration line', true,
+				'refused naming .blip', '')
+		}
+		s.fail('a .vl load is refused with a migration line', 'wrong error: ${err.msg()}')
 		return false
 	}
-	if m.warnings.len != 1 || !m.warnings[0].contains('.blip') {
-		s.fail('a .vl load warns deprecation', 'warnings=${m.warnings}')
+	s.fail('a .vl load is refused with a migration line', 'load returned a value')
+	return false
+}
+
+fn (mut s Suite) lip_extension_load_is_refused() bool {
+	_, mut m, _, h := pair()
+	h.give_file('old.lip', '(def loaded-value 41)\n')
+	m.load('old.lip') or {
+		if err.msg().contains('v2 loads .blip files only') {
+			return s.record('a .lip load is refused with a migration line', true,
+				'refused naming .blip', '')
+		}
+		s.fail('a .lip load is refused with a migration line', 'wrong error: ${err.msg()}')
 		return false
 	}
-	return s.record('a .vl load warns deprecation', true, 'loads and records one warning naming .blip', '')
+	s.fail('a .lip load is refused with a migration line', 'load returned a value')
+	return false
 }
 
 fn (mut s Suite) a_missing_file_is_an_error() bool {
 	_, mut m, _, _ := pair()
-	m.load('missing.vl') or {
+	m.load('missing.blip') or {
 		return s.record('a missing file is an error', true,
 			'the host reported it and the host survived', '')
 	}
@@ -321,7 +338,8 @@ fn main() {
 	s.run_str_accumulates()
 	s.a_closure_survives_a_later_read()
 	s.load_evaluates_into_the_running_machine()
-	s.vl_extension_load_warns_deprecation()
+	s.vl_extension_load_is_refused()
+	s.lip_extension_load_is_refused()
 	s.a_missing_file_is_an_error()
 	s.print_goes_to_the_host_and_to_out()
 	s.output_stays_with_its_machine()

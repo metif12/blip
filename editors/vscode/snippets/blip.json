@@ -126,7 +126,7 @@
 	},
 	"require": {
 		"prefix": "require",
-		"body": ["(require \"${1:module.lip}\")"],
+		"body": ["(require \"${1:module.blip}\")"],
 		"description": "Load another file into this machine."
 	},
 	"provide": {

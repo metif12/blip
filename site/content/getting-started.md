@@ -21,7 +21,7 @@ This needs stock V 0.5.2 — the official release archive, not a master build, w
 ## First run
 
 ```
-blip run examples/01_basics.lip
+blip run examples/01_basics.blip
 ```
 
 Or start the REPL with a bare `blip` and type along with the [tour](tour.html):

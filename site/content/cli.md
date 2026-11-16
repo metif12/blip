@@ -15,21 +15,21 @@ blip:1> (double 21)
 
 REPL commands, at the start of a line: `,l PATH` loads a file into the running machine, `,r` reloads the last loaded file, `,h` prints this help, `,q` quits.
 
-**`blip run &lt;file.lip&gt; ...`** evaluates files in order, in one machine, so a definition made in the first is visible in the second. The standard library loads first. A bare filename is shorthand: `blip prog.lip` means `blip run prog.lip`.
+**`blip run &lt;file.blip&gt; ...`** evaluates files in order, in one machine, so a definition made in the first is visible in the second. The standard library loads first. A bare filename is shorthand: `blip prog.blip` means `blip run prog.blip`.
 
-**`blip test &lt;file.lip&gt; ...`** evaluates and checks the `;=>` expectations on each line: the form's value, as text, must equal what follows the arrow. Exit status is 0 when every expectation holds, so this works as a CI gate. Files without expectations are merely run.
+**`blip test &lt;file.blip&gt; ...`** evaluates and checks the `;=>` expectations on each line: the form's value, as text, must equal what follows the arrow. Exit status is 0 when every expectation holds, so this works as a CI gate. Files without expectations are merely run.
 
 ## Checking and building
 
-**`blip check &lt;file.lip&gt; ...`** reports contract and type mismatches without running anything: wrong arity, literal arguments of the wrong type, bodies contradicting declared returns, `->/c` outside `define/contract`. Unknown names are never errors. Exit status is 0 when nothing is found.
+**`blip check &lt;file.blip&gt; ...`** reports contract and type mismatches without running anything: wrong arity, literal arguments of the wrong type, bodies contradicting declared returns, `->/c` outside `define/contract`. Unknown names are never errors. Exit status is 0 when nothing is found.
 
-**`blip build &lt;file&gt; [-o out.js]`** compiles a program to a self-contained JavaScript module. **`blip emit-js &lt;file.lip&gt;`** prints the same module to stdout instead of a file.
+**`blip build &lt;file&gt; [-o out.js]`** compiles a program to a self-contained JavaScript module. **`blip emit-js &lt;file.blip&gt;`** prints the same module to stdout instead of a file.
 
 ## Working with code
 
-**`blip fmt [-w] &lt;file.lip&gt;`** pretty-prints a file; without `-w` it prints to stdout, with `-w` it writes back.
+**`blip fmt [-w] &lt;file.blip&gt;`** pretty-prints a file; without `-w` it prints to stdout, with `-w` it writes back.
 
-**`blip doc &lt;file.lip&gt;`** generates documentation from doc comments.
+**`blip doc &lt;file.blip&gt;`** generates documentation from doc comments.
 
 **`blip vet [file]`** is the linter hook. **`blip lint [file]`** checks a commit message — subject length, the blank line after the subject, body width — reading from a file or `.git/COMMIT_EDITMSG`, so it works as a git `commit-msg` hook:
 
@@ -50,7 +50,7 @@ blip run main.blip
 blip test main.blip
 ```
 
-**`blip pkg`** manages packages, which are git repositories of `.lip` files:
+**`blip pkg`** manages packages, which are git repositories of `.blip` files:
 
 ```
 blip pkg install <owner/repo>[@ref]
@@ -58,7 +58,9 @@ blip pkg list
 blip pkg remove <name>
 ```
 
-Install clones into `blip_modules/&lt;owner&gt;/&lt;repo&gt;` and records the commit in `blip.lock`. A package is reachable with `(import &lt;repo&gt;)`, which loads its `blip.lip` entry point.
+Install clones into `blip_modules/&lt;owner&gt;/&lt;repo&gt;` and records the commit in `blip.lock`. A package is reachable with `(import &lt;repo&gt;)`, which loads its `blip.blip` entry point.
+
+**`blip migrate [--check] &lt;file|dir&gt;`** rewrites v1 spellings to v2 (`def`, `fn`, `begin`, `car`/`cdr`, `match`, `if`) and renames `.lip` files to `.blip`. With `--check` nothing is written.
 
 ## About
 

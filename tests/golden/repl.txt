@@ -3,7 +3,7 @@ blip:1> blip:2> greet
 blip:1> "hello, world"
 blip:1> error: car: car expects a pair, got 1
 blip:1> "hello, again"
-blip:1> error: failed to open file "no-such-file.vl"
+blip:1> error: failed to open file "no-such-file.blip"
 blip:1> "hello, still here"
 blip:1> blip:2> "a string\nthat spans two lines"
 nil

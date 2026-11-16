@@ -79,12 +79,12 @@ fn main() {
 	}
 	mut corpus := []string{}
 	for f in os.ls('examples') or { [] } {
-		if f.ends_with('.lip') {
+		if f.ends_with('.blip') {
 			corpus << os.read_file(os.join_path('examples', f)) or { '' }
 		}
 	}
 	for f in os.ls('programs') or { [] } {
-		if f.ends_with('.lip') {
+		if f.ends_with('.blip') {
 			corpus << os.read_file(os.join_path('programs', f)) or { '' }
 		}
 	}
@@ -98,7 +98,7 @@ fn main() {
 	for i < iters {
 		base := corpus[rand.intn(corpus.len) or { 0 }]
 		input := mutate(base)
-		path := os.join_path('tmp', 'fuzz', 'case.lip')
+		path := os.join_path('tmp', 'fuzz', 'case.blip')
 		os.write_file(path, input) or { i++; continue }
 		res := os.execute('${blip_bin} run "${path}"')
 		if crashed(res) {
@@ -108,7 +108,7 @@ fn main() {
 			println(input)
 			println('--- output ---')
 			println(res.output)
-			os.write_file(os.join_path('tmp', 'fuzz', 'crash_${i}.lip'), input) or {}
+			os.write_file(os.join_path('tmp', 'fuzz', 'crash_${i}.blip'), input) or {}
 		}
 		if i % 50 == 0 {
 			println('progress: ${i}/${iters}, crashes so far: ${crashes}')
@@ -117,6 +117,6 @@ fn main() {
 	}
 	println('fuzz: ${iters} iterations, ${crashes} crash(es)')
 	if crashes > 0 {
-		println('reproducers saved under tmp/fuzz/crash_*.lip')
+		println('reproducers saved under tmp/fuzz/crash_*.blip')
 	}
 }

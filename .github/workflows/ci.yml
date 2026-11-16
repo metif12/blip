@@ -165,7 +165,7 @@ jobs:
           fi
 
       - name: Every example parses
-        run: ./reader_probe examples/*.lip
+        run: ./reader_probe examples/*.blip
 
   # Three images, one per toolchain, each fetching the stock V 0.5.2 release
   # archive. That download is the slow part, so it is a separate job that
@@ -201,13 +201,13 @@ jobs:
           done
 
       # The prelude must ship. std_path() finds it beside the binary, and the
-      # Dockerfiles copy it to /usr/local/lib/std.lip, so a program that uses
+      # Dockerfiles copy it to /usr/local/lib/std.blip, so a program that uses
       # the standard library has to run inside the image.
       - name: The image runs a real program
         run: |
           set -e
-          printf '(print (+ 1 2))\n(print (string-upcase "ok"))\n' > prog.lip
-          docker run --rm --entrypoint blip -v "$PWD/prog.lip:/w/prog.lip" \
-            blip:alpine run /w/prog.lip | tee alpine-run.txt
+          printf '(print (+ 1 2))\n(print (string-upcase "ok"))\n' > prog.blip
+          docker run --rm --entrypoint blip -v "$PWD/prog.blip:/w/prog.blip" \
+            blip:alpine run /w/prog.blip | tee alpine-run.txt
           grep -q 3 alpine-run.txt
           grep -q OK alpine-run.txt

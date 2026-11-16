@@ -1,4 +1,4 @@
-;; programs/json.lip -- JSON parse + emit in blip.
+;; programs/json.blip -- JSON parse + emit in blip.
 ;;
 ;; Second on the roadmap's program list, after Brainfuck, and the first that
 ;; earns its place through failure: every malformed input returns an `(err ...)`

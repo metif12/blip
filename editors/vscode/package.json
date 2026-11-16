@@ -42,7 +42,7 @@
 					"Blip"
 				],
 				"extensions": [
-					".lip"
+					".blip"
 				],
 				"configuration": "./language-configuration.json"
 			}
