@@ -4,6 +4,50 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### `json` is gone: migrate to `json2` on the master toolchain
+
+- Master removed the cJSON-based `json` module (`vlib/v/types/checker.v`
+  fails the import), so `vlib/blip/lsp/mod.v` goes through `v fmt -w`: import
+  becomes `json2`, `decode(T, s)` becomes `decode[T](s)`, every `encode(x)`
+  gains the classic-compatible flags. `@[json: ...]` attributes stay -- both
+  modules honor them. Gate: `tests/lsp.v`, 26 checks green, plus a `main.v`
+  build that died on the import before and links after.
+- `tools/genprims.vsh` drops its ~270-line hand-written JSON DOM for
+  `json2.decode[Any]` plus small `jmap`/`jarr`/`jstr`/`jbool` readers, and
+  `collect_sigs` is rewritten for the master AST shape: `files` hold
+  `children`, a function is `kind: fn_decl` with the name in `value` and the
+  return in `type`, params are `kind: param` children, and a method is a
+  `param` child with `op == 'dot'`. `is_pub` stays textual (the AST still
+  carries no visibility flag). Gate: `tools/genprims.vsh --check` green and
+  `tests/genprims.v` green against the master vlib -- the 8 `math-*` prims
+  regenerate byte-identical.
+
+### `.vl` is deprecated, `.blip` is the source extension
+
+- `Machine.load` still loads a `.vl` file, but records
+  `blip: <path>: .vl is deprecated and will be removed; rename to .blip`
+  in `m.warnings` instead of failing or printing into captured output.
+  `examples/lib/*.vl` are renamed to `*.blip`, `06_modules` requires them by
+  the new name, and `blip new` scaffolds `main.blip`. Removal is registered
+  here, not just intended: `.lip` programs are untouched.
+- Gate: `tests/embedding.v` (`vl_extension_load_warns_deprecation` -- loads
+  AND warns, verified failing before the `load()` entry existed) plus
+  `tests/examples_run.v` (06_modules green on the renamed files).
+
+### `λ` is an alias for `fn`, and `fn` is canonical
+
+- `((λ [x] (* x x)) 7)` is `(fn [x] ...)` with a Racket spelling: same vector
+  params, same body, one implementation (`eval_special` + `special_form` +
+  `check` + both emitter paths + the LSP keyword list route it). `lambda`
+  stays the alias for Scheme/Elisp/Steel migrants. `#(...)` was refused, not
+  postponed: `#(` already reads a bytes literal (`blip_in_y_min.md`), so a
+  Clojure-style shorthand there would break existing programs.
+- Gate: `tests/binding_forms.v` (applies, closes over scope, rest params --
+  verified failing with `unbound identifier: λ` before the `special_form`
+  entry existed). `tests/emit_js.v` shows no NEW failures with the change:
+  28 checks, the same 2 pre-existing `03_match`/`04_errors` failures as the
+  base commit, proven by running the suite stashed and unstashed.
+
 ### Reader: lexing+reading is 1.3-8x faster, output byte-identical
 
 - Hot loops index the source directly instead of calling `peek`/`next`/

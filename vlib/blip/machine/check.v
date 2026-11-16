@@ -284,7 +284,7 @@ fn (mut m Machine) check_form(id blip.NodeId, env map[string]string, ret string,
 		'let', 'let*', 'letrec' {
 			return m.check_let(id, args, env, ret, sigs, mut diags)
 		}
-		'lambda', 'fn' {
+		'lambda', 'fn', 'λ' {
 			if args.len == 0 {
 				return 'any'
 			}

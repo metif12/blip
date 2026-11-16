@@ -189,6 +189,23 @@ fn (mut s Suite) load_evaluates_into_the_running_machine() bool {
 		'loaded-fn=${text(got)} before=${text(before)}')
 }
 
+// `.vl` still loads, but the load records a deprecation pointing at `.blip`.
+// A deprecation that breaks programs is a removal, and a warning nobody can
+// read is silence, so the suite asserts the value loads AND the warning lands.
+fn (mut s Suite) vl_extension_load_warns_deprecation() bool {
+	_, mut m, _, h := pair()
+	h.give_file('lib.vl', '(define loaded-value 41)\n')
+	m.load('lib.vl') or {
+		s.fail('a .vl load warns deprecation', err.msg())
+		return false
+	}
+	if m.warnings.len != 1 || !m.warnings[0].contains('.blip') {
+		s.fail('a .vl load warns deprecation', 'warnings=${m.warnings}')
+		return false
+	}
+	return s.record('a .vl load warns deprecation', true, 'loads and records one warning naming .blip', '')
+}
+
 fn (mut s Suite) a_missing_file_is_an_error() bool {
 	_, mut m, _, _ := pair()
 	m.load('missing.vl') or {
@@ -304,6 +321,7 @@ fn main() {
 	s.run_str_accumulates()
 	s.a_closure_survives_a_later_read()
 	s.load_evaluates_into_the_running_machine()
+	s.vl_extension_load_warns_deprecation()
 	s.a_missing_file_is_an_error()
 	s.print_goes_to_the_host_and_to_out()
 	s.output_stays_with_its_machine()

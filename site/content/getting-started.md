@@ -37,8 +37,8 @@ Or scaffold a project:
 ```
 blip new myproject
 cd myproject
-blip run main.lip
-blip test main.lip
+blip run main.blip
+blip test main.blip
 ```
 
 ## The CLI, in brief

@@ -25,6 +25,7 @@
 //     and --check enforces that the checked-in copy matches.
 import os
 import strings
+import json2
 
 // ------------------------------------------------------------------ config
 
@@ -65,352 +66,102 @@ mut:
 
 // ------------------------------------------------------------------ json
 //
-// `v ast -p` JSON is read with a minimal hand-written parser, not the `json`
-// module: stock 0.5.2 has no `json2` (dynamic `Any` traversal), and classic
-// `json.decode` needs a static target type, which an AST has no use for.
-// The DOM below is the smallest thing the collector needs: objects keyed by
-// string, arrays, strings, booleans. Numbers keep their raw text; only
-// strings, booleans, and structure are ever read.
+// `v ast -p` JSON is read with `json2.decode[Any]`: dynamic `Any` traversal
+// is exactly what an AST needs, since no static target type fits it. (The
+// minimal hand-written DOM this replaced existed because stock 0.5.2 had no
+// `json2`, and classic `json.decode` needs a static target type.)
 //
-// kinds: 0=null 1=true 2=false 3=string 4=number 5=array 6=object.
-struct JNode {
-	kind int
-mut:
-	s string
-	// kids holds array items or object values; keys the object keys, so
-	// keys[i] names kids[i]. ([]string and []int are reference types, so a
-	// node keeps its own slices rather than windows into a shared array:
-	// nested values would interleave and a start/len window cannot work.)
-	kids []int
-	keys []string
+// Master AST shape, verified against the running compiler: a top-level
+// `files` array; each file's `children` hold `fn_decl` nodes with the name in
+// `value` and the return type in `type`; parameters are `children` with
+// `kind == 'param'` (name in `value`, type in `type`). A method carries its
+// receiver as a `param` child with `op == 'dot'` and is skipped, because a
+// dotted name is not a plain function of the module. `is_pub` stays textual
+// (the AST carries no visibility flag): the source itself is asked.
+
+// jget reads one object member: a missing key or a non-object reads as
+// null, so every caller treats absence the same way the old DOM's -1 index
+// did -- silently absent, never a crash.
+fn jget(v json2.Any, key string) json2.Any {
+	if v is map[string]json2.Any {
+		return v[key] or { json2.null }
+	}
+	return json2.null
 }
 
-struct JParser {
-	text string
-mut:
-	failed bool
-	pos    int
-	nodes  []JNode
+fn jmap(v json2.Any) map[string]json2.Any {
+	if v is map[string]json2.Any {
+		return v
+	}
+	return {}
 }
 
-fn (mut p JParser) add(kind int) int {
-	p.nodes << JNode{
-		kind: kind
+fn jarr(v json2.Any) []json2.Any {
+	if v is []json2.Any {
+		return v
 	}
-	return p.nodes.len - 1
+	return []
 }
 
-// add_kid appends one child with an explicit write-back: indexing a slice
-// yields a copy, so `p.nodes[id].kids << c` would grow a temporary.
-fn (mut p JParser) add_kid(id int, key string, val int) {
-	mut n := p.nodes[id]
-	n.kids << val
-	n.keys << key
-	p.nodes[id] = n
+fn jstr(m map[string]json2.Any, key string) string {
+	v := m[key] or { return '' }
+	if v is string {
+		return v
+	}
+	return ''
 }
 
-fn (mut p JParser) skip_ws() {
-	for p.pos < p.text.len && p.text[p.pos] in [` `, `\t`, `\n`, `\r`] {
-		p.pos++
+fn jbool(m map[string]json2.Any, key string) bool {
+	v := m[key] or { return false }
+	if v is bool {
+		return v
 	}
+	return false
 }
 
-fn (mut p JParser) expect(lit string) {
-	if p.text[p.pos..].starts_with(lit) {
-		p.pos += lit.len
-		return
-	}
-	p.failed = true
-}
-
-fn (mut p JParser) parse_value() int {
-	p.skip_ws()
-	if p.pos >= p.text.len {
-		p.failed = true
-		return p.add(0)
-	}
-	c := p.text[p.pos]
-	match c {
-		`{` {
-			return p.parse_object()
-		}
-		`[` {
-			return p.parse_array()
-		}
-		`"` {
-			return p.parse_string()
-		}
-		`t` {
-			p.expect('true')
-			return p.add(1)
-		}
-		`f` {
-			p.expect('false')
-			return p.add(2)
-		}
-		`n` {
-			p.expect('null')
-			return p.add(0)
-		}
-		else {
-			return p.parse_number()
-		}
-	}
-}
-
-fn (mut p JParser) parse_object() int {
-	id := p.add(6)
-	p.pos++ // {
-	p.skip_ws()
-	if p.pos < p.text.len && p.text[p.pos] == `}` {
-		p.pos++
-		return id
-	}
-	for {
-		p.skip_ws()
-		if p.pos >= p.text.len || p.text[p.pos] != `"` {
-			p.failed = true
-			return id
-		}
-		key := p.parse_string()
-		p.skip_ws()
-		if p.pos >= p.text.len || p.text[p.pos] != `:` {
-			p.failed = true
-			return id
-		}
-		p.pos++
-		val := p.parse_value()
-		p.add_kid(id, p.nodes[key].s, val)
-		p.skip_ws()
-		if p.pos >= p.text.len {
-			p.failed = true
-			return id
-		}
-		if p.text[p.pos] == `,` {
-			p.pos++
-			continue
-		}
-		if p.text[p.pos] == `}` {
-			p.pos++
-			break
-		}
-		p.failed = true
-		return id
-	}
-	return id
-}
-
-fn (mut p JParser) parse_array() int {
-	id := p.add(5)
-	p.pos++ // [
-	p.skip_ws()
-	if p.pos < p.text.len && p.text[p.pos] == `]` {
-		p.pos++
-		return id
-	}
-	for {
-		val := p.parse_value()
-		p.add_kid(id, '', val)
-		p.skip_ws()
-		if p.pos >= p.text.len {
-			p.failed = true
-			return id
-		}
-		if p.text[p.pos] == `,` {
-			p.pos++
-			continue
-		}
-		if p.text[p.pos] == `]` {
-			p.pos++
-			break
-		}
-		p.failed = true
-		return id
-	}
-	return id
-}
-
-fn (mut p JParser) parse_string() int {
-	// The caller has checked the opening quote; the stored text is unescaped,
-	// so a key lookup never sees backslashes.
-	id := p.add(3)
-	p.pos++ // "
-	mut out := []u8{}
-	for p.pos < p.text.len {
-		c := p.text[p.pos]
-		if c == `"` {
-			p.pos++
-			break
-		}
-		if c != `\\` {
-			out << c
-			p.pos++
-			continue
-		}
-		p.pos++
-		if p.pos >= p.text.len {
-			break
-		}
-		e := p.text[p.pos]
-		p.pos++
-		match e {
-			`"` {
-				out << `"`
+// collect_sigs reads every top-level fn_decl in one `v ast -p` document:
+// short name, return type string, params in order. The master AST nests
+// declarations: `files` hold `children`, and a method carries its receiver
+// as a `param` child with `op == 'dot'` -- skipped here rather than later,
+// because its dotted name would otherwise read as a plain function of the
+// module.
+fn collect_sigs(root json2.Any) []Sig {
+	mut out := []Sig{}
+	for f in jarr(jget(root, 'files')) {
+		for n in jarr(jget(f, 'children')) {
+			m := jmap(n)
+			if jstr(m, 'kind') != 'fn_decl' {
+				continue
 			}
-			`\\` {
-				out << `\\`
+			nm := jstr(m, 'value')
+			if nm == '' {
+				continue
 			}
-			`/` {
-				out << `/`
+			mut s := Sig{
+				name: nm
+				ret:  jstr(m, 'type')
 			}
-			`b` {
-				out << `\b`
-			}
-			`f` {
-				out << `\f`
-			}
-			`n` {
-				out << `\n`
-			}
-			`r` {
-				out << `\r`
-			}
-			`t` {
-				out << `\t`
-			}
-			`u` {
-				cp := p.parse_hex4()
-				if cp < 0x80 {
-					out << u8(cp)
-				} else if cp < 0x800 {
-					out << u8(0xc0 | (u32(cp) >> 6))
-					out << u8(0x80 | (u32(cp) & 0x3f))
-				} else {
-					out << u8(0xe0 | (u32(cp) >> 12))
-					out << u8(0x80 | ((u32(cp) >> 6) & 0x3f))
-					out << u8(0x80 | (u32(cp) & 0x3f))
+			mut is_method := false
+			for c in jarr(jget(n, 'children')) {
+				cm := jmap(c)
+				if jstr(cm, 'kind') != 'param' {
+					continue
+				}
+				if jstr(cm, 'op') == 'dot' {
+					is_method = true
+					break
+				}
+				s.params << Param{
+					name:   jstr(cm, 'value')
+					typ:    jstr(cm, 'type')
+					is_mut: jbool(cm, 'is_mut')
 				}
 			}
-			else {
-				out << e
+			if is_method {
+				continue
 			}
+			out << s
 		}
-	}
-	p.nodes[id].s = out.bytestr()
-	return id
-}
-
-fn (mut p JParser) parse_hex4() u32 {
-	mut cp := u32(0)
-	mut i := 0
-	for i < 4 && p.pos < p.text.len {
-		c := p.text[p.pos]
-		d := if c >= `0` && c <= `9` {
-			u32(c - `0`)
-		} else if c >= `a` && c <= `f` {
-			u32(c - `a` + 10)
-		} else if c >= `A` && c <= `F` {
-			u32(c - `A` + 10)
-		} else {
-			p.failed = true
-			return 0xfffd
-		}
-		cp = cp * 16 + d
-		p.pos++
-		i++
-	}
-	return cp
-}
-
-fn (mut p JParser) parse_number() int {
-	id := p.add(4)
-	start := p.pos
-	for p.pos < p.text.len
-		&& (p.text[p.pos].is_digit() || p.text[p.pos] in [`-`, `+`, `.`, `e`, `E`]) {
-		p.pos++
-	}
-	if p.pos == start {
-		p.failed = true
-	}
-	p.nodes[id].s = p.text[start..p.pos]
-	return id
-}
-
-fn (p &JParser) obj_get(idx int, key string) int {
-	if idx < 0 || idx >= p.nodes.len || p.nodes[idx].kind != 6 {
-		return -1
-	}
-	for i, k in p.nodes[idx].keys {
-		if k == key {
-			return p.nodes[idx].kids[i]
-		}
-	}
-	return -1
-}
-
-fn (p &JParser) obj_str(idx int, key string) string {
-	c := p.obj_get(idx, key)
-	if c < 0 || p.nodes[c].kind != 3 {
-		return ''
-	}
-	return p.nodes[c].s
-}
-
-fn (p &JParser) obj_bool(idx int, key string) bool {
-	c := p.obj_get(idx, key)
-	if c < 0 {
-		return false
-	}
-	return p.nodes[c].kind == 1
-}
-
-fn (p &JParser) arr_len(idx int) int {
-	if idx < 0 || idx >= p.nodes.len || p.nodes[idx].kind != 5 {
-		return 0
-	}
-	return p.nodes[idx].kids.len
-}
-
-fn (p &JParser) arr_at(idx int, i int) int {
-	return p.nodes[idx].kids[i]
-}
-
-// collect_sigs reads every top-level FnDecl in one `v ast -p` document:
-// short name, return type string, params in order. The 0.5.2 AST carries
-// `is_pub`, `short_name`, `return_type`, and a `params` array directly, so
-// no recursive walk is needed; a method (non-void receiver type) is skipped
-// here rather than later, because its dotted name would otherwise read as a
-// plain function of the module.
-fn collect_sigs(p &JParser) []Sig {
-	mut out := []Sig{}
-	stmts := p.obj_get(0, 'stmts')
-	for i in 0 .. p.arr_len(stmts) {
-		n := p.arr_at(stmts, i)
-		if p.obj_str(n, 'ast_type') != 'FnDecl' {
-			continue
-		}
-		recv := p.obj_get(n, 'receiver')
-		if recv >= 0 && p.obj_str(recv, 'typ') !in ['', 'void'] {
-			continue
-		}
-		mut nm := p.obj_str(n, 'short_name')
-		if nm == '' {
-			nm = p.obj_str(n, 'name')
-		}
-		mut s := Sig{
-			name: nm
-			ret:  p.obj_str(n, 'return_type')
-		}
-		ps := p.obj_get(n, 'params')
-		for j in 0 .. p.arr_len(ps) {
-			c := p.arr_at(ps, j)
-			s.params << Param{
-				name:   p.obj_str(c, 'name')
-				typ:    p.obj_str(c, 'typ')
-				is_mut: p.obj_bool(c, 'is_mut')
-			}
-		}
-		out << s
 	}
 	return out
 }
@@ -658,17 +409,12 @@ fn main() {
 				fails++
 				continue
 			}
-			mut parser := JParser{
-				text: r.output
-			}
-			root := parser.parse_value()
-			if parser.failed {
+			root := json2.decode[json2.Any](r.output) or {
 				eprintln('genprims: bad ast json for ${path}')
 				fails++
 				continue
 			}
-			_ = root
-			for s in collect_sigs(&parser) {
+			for s in collect_sigs(root) {
 				if s.name in sigs {
 					dupes << s.name
 					continue

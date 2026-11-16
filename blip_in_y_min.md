@@ -4,6 +4,12 @@ blip is a small Lisp dialect with a Racket-shaped surface, real tail calls, and
 errors as values. This file is a one-pass tour: read top to bottom, then open
 `examples/` for the runnable versions.
 
+Two spellings exist for two old ideas, and one of each pair is canonical:
+`def` (not `define`) introduces a name, and `car`/`cdr` (not `first`/`rest`)
+take a list apart. The long forms keep working -- they are how the other half
+of Lisp spells the same thing -- and the goal is one way per idea, advertised
+here.
+
 ## Comments
 
 ```lisp
@@ -37,11 +43,14 @@ Only `#f` is false: `0`, `""`, and `()` are all truthy.
 (define x 10)
 (define (add a b) (+ a b))
 
-; lambda
+; fn is the canonical form -- advertise this one
+(map (fn [x] (* x x)) [1 2 3])   ;=> [1 4 9]
+
+; lambda is the alias, for migrants from Scheme/Racket/Elisp/Steel
 (define square (lambda (x) (* x x)))
 
-; fn is the short form
-(map (fn [x] (* x x)) [1 2 3])   ;=> [1 4 9]
+; λ is the same alias, for Racket users
+(define cube (λ [x] (* x x x)))
 
 ; immediately applied
 ((fn [a b] (+ a b)) 1 2)         ;=> 3
@@ -59,7 +68,9 @@ Only `#f` is false: `0`, `""`, and `()` are all truthy.
          [odd?  (lambda (n) (if (= n 0) #f (even? (- n 1))))])
   (even? 100))                               ; recursive binding
 
-; one-binding shorthand
+; one-binding shorthand: `(let NAME VALUE body...)` binds one name with no
+; brackets. Deliberately prominent because no other Lisp spells it this way:
+; the second position is a VALUE here, but a BINDING GROUP in `(let ([a 1]) ...)`.
 (let x (+ 1 2) (* x 2))                     ;=> 6
 ```
 
@@ -122,6 +133,10 @@ Only `#f` is false: `0`, `""`, and `()` are all truthy.
      (fold + 0))            ;=> 9
 
 (-> {:a 2 :b 3} (get :a) (+ 10))   ;=> 12
+
+; the rule: `->` puts the value FIRST, `->>` puts it LAST. A bare symbol
+; is not a call, so it has nowhere to put the value -- write the call.
+; The two forms are not interchangeable.
 ```
 
 ## Pattern matching

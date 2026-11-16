@@ -84,6 +84,11 @@ pub mut:
 	src_text string
 	// loaded is the set of module paths this machine has already evaluated.
 	loaded []string
+	// warnings collects deprecation notices (loading a `.vl` file) without
+	// failing the program. A deprecation that breaks programs is a removal,
+	// and a warning nobody can read -- e.g. one printed to a captured host --
+	// is silence, so they accumulate here for the caller to report.
+	warnings []string
 	// macros names the procedures defmacro created, so macex can tell a macro from
 	// a function without guessing from its shape.
 	macros []string
@@ -221,6 +226,12 @@ pub fn (mut m Machine) run_checked(res reader.Forms) !blip.Value {
 // fresh machine would run the file perfectly and then throw away every definition
 // in it, which is the specific failure the roadmap calls out.
 pub fn (mut m Machine) load(path string) !blip.Value {
+	// `.vl` is deprecated: `.blip` is the canonical source extension and
+	// `.vl` support will be removed in a future release (see CHANGELOG).
+	// The file still loads -- a deprecation that breaks programs is a removal.
+	if path.ends_with('.vl') {
+		m.warnings << 'blip: ${path}: .vl is deprecated and will be removed; rename to .blip'
+	}
 	src := m.host.host_load(path)!
 	prev := m.source
 	prev_text := m.src_text
@@ -1909,7 +1920,7 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 
 pub fn special_form(name string) bool {
 	match name {
-		'quote', 'if', 'define', 'set!', 'lambda', 'fn', 'begin', 'let', 'let*', 'letrec', 'and',
+		'quote', 'if', 'define', 'set!', 'lambda', 'fn', 'λ', 'begin', 'let', 'let*', 'letrec', 'and',
 		'or', 'when', 'unless', 'cond', 'case', 'loop', 'dotimes', 'use', 'match', 'match*',
 		'import', 'struct', 'struct-out', 'provide', 'require', 'let-assert', 'do', 'time',
 		'assert', '->', '->>', '|>', 'as->', 'cond->', 'def', 'defmacro', 'define/contract', 'try',
@@ -2001,8 +2012,11 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 		'defined?' {
 			return m.eval_defined(kids)
 		}
-		'fn' {
-			// (fn [x] body) is (lambda (x) body): the short form every Lisp has.
+		'fn', 'λ' {
+			// (fn [x] body) is (lambda (x) body): the short, canonical form.
+			// `lambda` is the alias for migrants from Scheme/Racket/Elisp/Steel
+			// and `λ` spells the same form for Racket users. All three share
+			// one implementation and one parameter syntax (see parse_params).
 			if kids.len < 2 {
 				return error('fn needs a parameter list: (fn [x] body)')
 			}

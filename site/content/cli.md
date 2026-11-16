@@ -46,8 +46,8 @@ blip lint .git/COMMIT_EDITMSG
 ```
 blip new myproject
 cd myproject
-blip run main.lip
-blip test main.lip
+blip run main.blip
+blip test main.blip
 ```
 
 **`blip pkg`** manages packages, which are git repositories of `.lip` files:

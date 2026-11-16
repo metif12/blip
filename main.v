@@ -434,7 +434,7 @@ fn main() {
 					return
 				}
 				if out == '' {
-					out = file.replace('.lip', '.js')
+					out = file.replace('.blip', '.js').replace('.lip', '.js')
 				}
 				exit_code(build_file(file, out))
 			}
@@ -465,7 +465,7 @@ fn main() {
 				// A word that is neither a subcommand nor a file fails both ways,
 				// and saying only "cannot read" sends someone who mistyped a
 				// subcommand hunting for a file that was never theirs.
-				if !os.exists(args[0]) && !args[0].ends_with('.lip') {
+				if !os.exists(args[0]) && !args[0].ends_with('.lip') && !args[0].ends_with('.blip') {
 					eprintln('blip: ${args[0]} is neither a subcommand nor a file')
 					eprintln('run `blip help` for subcommands, or `blip run <file.lip>`')
 					exit_code(2)
@@ -672,20 +672,21 @@ fn check_files(paths []string) int {
 
 // ---- new ----------------------------------------------------------------
 
-fn main_lip(name string) string {
+fn main_blip(name string) string {
 	return '; ${name} -- a blip program.
 ;
-; Run it with:  blip run main.lip
-; Check it with: blip test main.lip
+; Run it with:  blip run main.blip
+; Check it with: blip test main.blip
 
 (define (greet who)
   (string-append "hello, " who "!"))
 
-; print writes the line and returns nothing, so the value of the form is nil.
-; The expectation below is checked by `blip test`, not by the reader.
-(print (greet "world"))   ;=> nil
+; print writes the line and returns nil -- but `blip test` compares what the
+; form PRINTED when it printed anything (see run_tests), so the expectation
+; names the printed line, not the value.
+(print (greet "world"))   ;=> "hello, world!"
 
-; A value form: this one is what the expectation compares against.
+; A value form with no expectation: merely run, not checked.
 (greet "world")
 '
 }
@@ -703,11 +704,11 @@ fn scaffold(name string) int {
 			eprintln('blip: cannot create ${name}: ${err.msg()}')
 			return 1
 		}
-		os.write_file(os.join_path(name, 'main.lip'), main_lip(name)) or {
-			eprintln('blip: cannot write main.lip: ${err.msg()}')
+		os.write_file(os.join_path(name, 'main.blip'), main_blip(name)) or {
+			eprintln('blip: cannot write main.blip: ${err.msg()}')
 			return 1
 		}
-		readme := '# ${name}\n\nA blip project.\n\n    blip run main.lip\n    blip test main.lip\n'
+		readme := '# ${name}\n\nA blip project.\n\n    blip run main.blip\n    blip test main.blip\n'
 		os.write_file(os.join_path(name, 'README.md'), readme) or {
 			eprintln('blip: cannot write README.md: ${err.msg()}')
 			return 1
@@ -717,7 +718,7 @@ fn scaffold(name string) int {
 			return 1
 		}
 		println('created ${name}/')
-		println('  main.lip')
+		println('  main.blip')
 		println('  README.md')
 		println('  .gitignore')
 		return 0

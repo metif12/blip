@@ -522,7 +522,7 @@ and the `read_forms` diagnostics share one source of positions.
    message. A real vet that walks blip source is the remaining half.
 7. `doc` -- generated from `;;` doc comments. Done; the site will want the
    same extractor when pages gain API references.
-8. `new` -- scaffolds a `main.lip` plus a test gate. Done.
+8. `new` -- scaffolds a `main.blip` plus a test gate. Done.
 9. `build` -- the JS backend is done (`blip build` emits a self-contained
    module, `emit-js` prints it). The `.wasm` target waits on the WASM
    phase: V's wasm32 target lacks the stdlib pieces blip needs (§P8).

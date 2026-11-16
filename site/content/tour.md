@@ -250,11 +250,11 @@ Everything above uses no macros at all. When a case genuinely needs one, `defmac
 
 ## Modules
 
-`provide` exports names, `require` loads a file, `only-in` imports selected names, `prefix-in` qualifies a whole module. Resolution is file-relative — `./x.vl` means next to this file — and each module loads once.
+`provide` exports names, `require` loads a file, `only-in` imports selected names, `prefix-in` qualifies a whole module. Resolution is file-relative — `./x.blip` means next to this file — and each module loads once.
 
 ```
-(require (only-in "lib/geometry.vl" Point distance))
-(require (prefix-in geo: "lib/geometry.vl"))
+(require (only-in "lib/geometry.blip" Point distance))
+(require (prefix-in geo: "lib/geometry.blip"))
 ```
 
 ## Contracts and `check`

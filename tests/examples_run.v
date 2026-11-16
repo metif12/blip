@@ -38,14 +38,14 @@ fn (mut s Suite) fail(label string, msg string) {
 // only serves files that have been put into it, so the library is read from
 // disk here and handed over.
 //
-// The module files examples/lib/*.vl are loaded too, because 06_modules
+// The module files examples/lib/*.blip are loaded too, because 06_modules
 // requires them and `require` goes through the host.
 fn run_example(path string) !string {
 	src := os.read_file(path) or {
 		return error('cannot read ${path}')
 	}
 	h := host.new_capture()
-	for f in ['lib/std.lip', 'examples/lib/geometry.vl', 'examples/lib/text.vl'] {
+	for f in ['lib/std.lip', 'examples/lib/geometry.blip', 'examples/lib/text.blip'] {
 		body := os.read_file(f) or {
 			return error('cannot read ${f}')
 		}
