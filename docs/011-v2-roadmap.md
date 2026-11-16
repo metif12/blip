@@ -293,10 +293,18 @@ packages suffice for v2; a central registry/index is a follow-up.
 
 1. **G1 version resolution.** `blip.mod` declares requirements, `pkg
    update` resolves and re-pins `blip.lock` deterministically. Gate: a
-   fixture with two conflicting requirements resolving to one pin.
+   fixture with two conflicting requirements resolving to one pin. —
+   **done**: `pkg.update` resolves the root plus workspace universe to
+   max satisfying tags (`=`, `>=`, literal), rewrites the lock sorted;
+   `tests/pkg_cli.v` pins three requesters (`>=1.0.0`, `=1.2.0`,
+   `>=1.1.0`) resolving to one `v1.2.0` pin with byte-identical locks
+   across runs.
 2. **G2 verified installs.** Checksums in the lockfile, verified on
    install; a tampered package fails loudly. Gate: a tampered-package
-   fixture failing install with a checksum error.
+   fixture failing install with a checksum error. — **done**: sha256
+   tree checksum recorded at install, re-checked by `pkg verify` and by
+   reinstalling an installed package; `tests/pkg_cli.v` pins both
+   failing on a tampered file.
 3. **G3 tool installs.** `blip install <package>` puts a runnable on
    PATH (today `pkg` only yields importable libraries). Gate: install a
    fixture tool, run it from PATH in CI.
@@ -311,7 +319,12 @@ packages suffice for v2; a central registry/index is a follow-up.
    one lockfile (`workspace` stanza), path overrides for local
    development, reproducible clean-room `pkg install` for teammates.
    Gate: a fixture workspace (two local members + one remote pin)
-   reproducing from scratch.
+   reproducing from scratch. — **done**: `collect_universe` folds
+   member manifests (requester-relative `path:` overrides) into one
+   sorted lock; `pkg install` (no args) reproduces from the lock with
+   exact-sha checkouts; `tests/pkg_cli.v` pins a two-member workspace
+   plus path dep reproducing an identical lock and running in a
+   clean room.
 6. **G6 project lifecycle.** Review/extend `blip new`, add `blip init`
    for scaffolding inside an existing directory. Gate: both produce a
    project whose `run`/`test` pass immediately.

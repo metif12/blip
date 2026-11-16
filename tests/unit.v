@@ -7,6 +7,7 @@ import blip.lsp
 import blip.machine
 import blip.manifest
 import blip.migrate
+import blip.pkg
 import blip.prims
 import blip.printer
 import blip.reader
@@ -826,6 +827,7 @@ fn main() {
 	s.lsp_api()
 	s.manifest()
 	s.modular_core()
+	s.pkg_logic()
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')
@@ -833,4 +835,159 @@ fn main() {
 		return
 	}
 	println('unit: all ${s.checks} checks passed')
+}
+
+// ---- packages: versions, checksums, workspaces (roadmap Track G) ---------
+//
+// The pure half of `blip.pkg` is pinned here; the git-and-filesystem half
+// (clone, tags, universe install) is pinned through the CLI in
+// tests/pkg_cli.v, which drives `blip pkg update/install/verify` against
+// local mirror repos with no network.
+fn (mut s Suite) pkg_logic() {
+	// Specs split owner/repo[@ref]; anything else is not a package.
+	o, r, f := pkg.parse_spec('acme/db')
+	s.record('parse_spec bare', o == 'acme' && r == 'db' && f == 'HEAD', 'acme/db')
+	o2, r2, f2 := pkg.parse_spec('acme/db@v1.2.0')
+	s.record('parse_spec ref', o2 == 'acme' && r2 == 'db' && f2 == 'v1.2.0', 'ref kept')
+	o3, _, _ := pkg.parse_spec('nodivider')
+	s.record('parse_spec rejects bare', o3 == '', 'no owner')
+	o4, _, _ := pkg.parse_spec('a/b/c')
+	s.record('parse_spec rejects deep', o4 == '', 'one slash only')
+	// Versions compare numerically, `v` transparently, short tails as zeros.
+	s.record('compare_versions orders', pkg.compare_versions('1.2.3', '1.2.10') < 0, '3 < 10')
+	s.record('compare_versions v prefix', pkg.compare_versions('v1.2.0', '1.2.0') == 0, 'v transparent')
+	s.record('compare_versions short tail', pkg.compare_versions('1.2', '1.2.0') == 0, 'tail zeros')
+	s.record('compare_versions major', pkg.compare_versions('2.0.0', '1.9.9') > 0, 'major wins')
+	// Req satisfaction: exact (with/without `=`/`v`), floors, literals.
+	s.record('satisfies exact', pkg.satisfies('1.2.0', '1.2.0'), 'bare exact')
+	s.record('satisfies =v', pkg.satisfies('v1.2.0', '=1.2.0'), '= and v mix')
+	s.record('satisfies floor', pkg.satisfies('1.2.3', '>=1.2.0') && !pkg.satisfies('1.1.9', '>=1.2.0'),
+		'floor holds')
+	s.record('satisfies branch literal', pkg.satisfies('stable', 'stable')
+		&& !pkg.satisfies('stable', 'other'), 'branches literal')
+	s.record('satisfies rejects path', !pkg.satisfies('1.2.0', 'path:../x'), 'paths resolve elsewhere')
+	// Resolution picks the max tag meeting every req, or errors naming them.
+	tags := ['v1.0.0', '1.2.0', '2.0.0']
+	best := pkg.resolve('acme/db', ['>=1.0.0', '=1.2.0'], tags) or {
+		s.record('resolve exact plus floor', false, err.msg())
+		''
+	}
+	s.record('resolve exact plus floor', best == '1.2.0', best)
+	top := pkg.resolve('acme/db', ['>=1.0.0'], tags) or { '' }
+	s.record('resolve floor takes max', top == '2.0.0', top)
+	pkg.resolve('acme/db', ['>=3.0.0'], tags) or {
+		s.record('resolve impossible errors', err.msg().contains('cannot resolve'), err.msg())
+	}
+	// Path reqs are detected with their directory.
+	ok, p := pkg.is_path_req('path:../shared')
+	s.record('is_path_req detects', ok && p == '../shared', p)
+	ok2, _ := pkg.is_path_req('1.2.0')
+	s.record('is_path_req rejects versions', !ok2, 'version is not a path')
+	// The lock round-trips through files, sorted and four-wide.
+	lockd := os.join_path(os.vtmp_dir(), 'blip_pkg_lock_probe')
+	os.rmdir_all(lockd) or {}
+	os.mkdir_all(lockd) or { s.record('pkg lock setup', false, err.msg()) }
+	pkg.write_lock(lockd, [pkg.Pin{
+		name:     'acme/db'
+		ref:      'v1.2.0'
+		sha:      'abc1234'
+		checksum: 'sum1'
+	}, pkg.Pin{
+		name:     'acme/log'
+		ref:      'v0.9.0'
+		sha:      'def5678'
+		checksum: 'sum2'
+	}]) or { s.record('pkg lock write', false, err.msg()) }
+	back := pkg.read_lock(lockd)
+	s.record('pkg lock round trips', back.len == 2 && back[0].name == 'acme/db'
+		&& back[1].checksum == 'sum2', '${back.len} pins sorted')
+	found := pkg.pin_of(back, 'acme/log') or { pkg.Pin{} }
+	s.record('pin_of finds', found.ref == 'v0.9.0', found.ref)
+	s.record('pin_of misses', if _ := pkg.pin_of(back, 'no/such') {
+		false
+	} else {
+		true
+	}, 'none for unknown')
+	os.rmdir_all(lockd) or {}
+	// Checksums judge content: identical trees hash equal, a one-byte edit
+	// fails verification naming the package.
+	csd := os.join_path(os.vtmp_dir(), 'blip_pkg_sum_probe')
+	os.rmdir_all(csd) or {}
+	os.mkdir_all(os.join_path(csd, 'pkg')) or { s.record('pkg sum setup', false, err.msg()) }
+	os.write_file(os.join_path(csd, 'pkg/blip.blip'), '(def x 1)\n') or {}
+	os.write_file(os.join_path(csd, 'pkg/a.blip'), '(def a 1)\n') or {}
+	sum := pkg.checksum_dir(os.join_path(csd, 'pkg')) or {
+		s.record('pkg checksum computes', false, err.msg())
+		''
+	}
+	s.record('pkg checksum computes', sum.len == 64, 'sha256 hex')
+	pkg.verify_dir(os.join_path(csd, 'pkg'), 'acme/db', sum) or {
+		s.record('pkg verify clean passes', false, err.msg())
+	}
+	s.record('pkg verify clean passes', true, 'untampered')
+	os.write_file(os.join_path(csd, 'pkg/a.blip'), '(def a 2)\n') or {}
+	pkg.verify_dir(os.join_path(csd, 'pkg'), 'acme/db', sum) or {
+		s.record('pkg verify tamper fails', err.msg().contains('checksum mismatch'), err.msg())
+	}
+	os.rmdir_all(csd) or {}
+	// Copies carry the tree minus history; the package URL honors mirrors.
+	cpd := os.join_path(os.vtmp_dir(), 'blip_pkg_cp_probe')
+	os.rmdir_all(cpd) or {}
+	os.mkdir_all(os.join_path(cpd, 'src/sub')) or {}
+	os.mkdir_all(os.join_path(cpd, 'src/.git')) or {}
+	os.write_file(os.join_path(cpd, 'src/blip.blip'), '(def x 1)\n') or {}
+	os.write_file(os.join_path(cpd, 'src/sub/y.blip'), '(def y 2)\n') or {}
+	os.write_file(os.join_path(cpd, 'src/.git/HEAD'), 'ref: refs/heads/main\n') or {}
+	pkg.copy_package(os.join_path(cpd, 'src'), os.join_path(cpd, 'dst')) or {
+		s.record('pkg copy carries', false, err.msg())
+	}
+	s.record('pkg copy carries', os.exists(os.join_path(cpd, 'dst/sub/y.blip'))
+		&& !os.exists(os.join_path(cpd, 'dst/.git')), 'tree without .git')
+	os.rmdir_all(cpd) or {}
+	old_mirror := os.getenv('BLIP_PKG_MIRROR')
+	os.setenv('BLIP_PKG_MIRROR', '/srv/mirror', true)
+	s.record('package_url honors mirror', pkg.package_url('acme/db') == os.join_path('/srv/mirror',
+		'acme/db'), pkg.package_url('acme/db'))
+	os.setenv('BLIP_PKG_MIRROR', old_mirror, true)
+	s.record('package_url defaults to github',
+		pkg.package_url('acme/db') == 'https://github.com/acme/db.git', 'github')
+	// The universe folds member manifests into one requester map.
+	ud := os.join_path(os.vtmp_dir(), 'blip_pkg_uni_probe')
+	os.rmdir_all(ud) or {}
+	os.mkdir_all(os.join_path(ud, 'a')) or {}
+	os.write_file(os.join_path(ud, 'blip.mod'),
+		'(module shop)\n(blip 2)\n(deps (acme/db ">=1.0.0"))\n(workspace (members a))') or {}
+	os.write_file(os.join_path(ud, 'a/blip.mod'),
+		'(module a)\n(blip 2)\n(deps (acme/db "=1.2.0"))') or {}
+	u := pkg.collect_universe(ud) or {
+		s.record('pkg universe collects', false, err.msg())
+		pkg.Universe{}
+	}
+	s.record('pkg universe collects', u.dep_names() == ['acme/db'] && u.members == ['a'],
+		u.dep_names().str())
+	if u.dep_names() == ['acme/db'] {
+		s.record('pkg universe names requesters', u.reqs['acme/db'].len == 2
+			&& u.reqs['acme/db'][0].requester == 'blip.mod'
+			&& u.reqs['acme/db'][1].requester == 'a/blip.mod', 'root plus member')
+	}
+	os.rmdir_all(ud) or {}
+	// resolve_universe on a path-only universe needs no network: the pin
+	// records the source root-relative.
+	pd := os.join_path(os.vtmp_dir(), 'blip_pkg_res_probe')
+	os.rmdir_all(pd) or {}
+	os.mkdir_all(os.join_path(pd, 'lib')) or {}
+	os.write_file(os.join_path(pd, 'lib/blip.blip'), '(def x 1)\n') or {}
+	mut pu := pkg.Universe{}
+	pu.reqs['local/x'] = [pkg.From{
+		requester: 'blip.mod'
+		req:       'path:lib'
+		dir:       pd
+	}]
+	rpins := pkg.resolve_universe(pd, pu) or {
+		s.record('pkg resolve path universe', false, err.msg())
+		[]pkg.Pin{}
+	}
+	s.record('pkg resolve path universe', rpins.len == 1 && rpins[0].ref == 'path:lib',
+		if rpins.len == 1 { rpins[0].ref } else { 'no pin' })
+	os.rmdir_all(pd) or {}
 }

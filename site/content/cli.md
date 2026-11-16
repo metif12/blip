@@ -53,10 +53,14 @@ blip test main.blip
 **`blip pkg`** manages packages, which are git repositories of `.blip` files:
 
 ```
-blip pkg install <owner/repo>[@ref]
+blip pkg install [owner/repo[@ref]]   install the lock, or one package
+blip pkg update                       re-resolve ./blip.mod to fresh pins
+blip pkg verify                       check the tree against the lock
 blip pkg list
 blip pkg remove <name>
 ```
+
+With no arguments, install reproduces the lock (exact commits, checksums verified). `update` resolves every requirement in `./blip.mod` — plus every workspace member manifest — to the newest tag all requesters accept, and rewrites `blip.lock` with the commit plus a content checksum. `verify` recomputes the tree checksums and fails loudly on tampering. Version requirements look like `(deps (acme/db "&gt;=1.0.0"))`; `(deps (shop/shared "path:../shared"))` copies a local directory in for development. `BLIP_PKG_MIRROR=&lt;dir&gt;` retargets the github URL at `&lt;dir&gt;/&lt;owner&gt;/&lt;repo&gt;`.
 
 Install clones into `blip_modules/&lt;owner&gt;/&lt;repo&gt;` and records the commit in `blip.lock`. A package is reachable with `(import &lt;repo&gt;)`, which loads its `blip.blip` entry point.
 
