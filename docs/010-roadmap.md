@@ -530,3 +530,38 @@ and the `read_forms` diagnostics share one source of positions.
 What does not transfer: flags with no meaning yet. `v` has forty; blip
 gets each one when a feature needs it, not when the table looks thin.
 
+## 10. Deferred to the next version: changes that would break programs
+
+These are recorded, not scheduled: each one changes documented behaviour or
+accepted output, so it lands behind a version bump with a migration note,
+never smuggled into a patch.
+
+1. **Table key order** (`examples/07_config.lip`): the printer sorts keys,
+   the example expects insertion order. `blip test` reports 5 mismatches
+   today. Fixing it means choosing one order for the printer AND the emitter
+   -- every golden transcript with a table moves. Gate when it lands:
+   `blip test` green on all examples with no comment edits.
+2. **Checking nested `;=>`**: `blip test` documents that only top-level forms
+   are checked. Actually checking nested forms would turn today's decorative
+   comments (e.g. the stale bare-output notes in `04_errors.lip`) into
+   failures overnight. Gate: a nested-vs-top-level fixture proving the rule
+   before it changes.
+3. **Verbatim `print` plus `println`** (deferred from the working tree to
+   protect downstream programs): `print` writes its joined arguments with no
+   trailing newline, `println` is the old `print` (same joining, then the
+   line ends), `display` goes fully verbatim (bare + no newline, the Scheme
+   spelling). Migration for existing programs: replace every line-ending
+   `print` with `println`; `blip test` comparisons catch the rest, since
+   they compare printed output. Then the Brainfuck "Hello World" becomes one
+   line and every transcript fixture moves with it. Gate:
+   `tests/embedding.v` (verbatim/line-ending/raw), `tests/emit_js.v` (both
+   engines agree), the `programs_run` hello-world check, and re-blessed
+   goldens. A complete implementation was built and verified in-tree and
+   then reverted to avoid breaking downstream programs.
+4. **Syncing against a new V (§7.1)**: written for the pinned-compiler era
+   (`V_COMMIT` bumps, source builds). The stock-release workflow
+   (`install.sh`/`install.ps1` download the archive) needs its own procedure
+   here; until then the section above is history, not instructions. Same for
+   the two stale "pinned toolchain" notes in `site/content/getting-started.md`
+   and the CI comment about building the pinned compiler from source.
+

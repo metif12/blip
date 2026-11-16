@@ -4,6 +4,19 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### Verbatim `print` plus `println` (deferred, not landed)
+
+`print` writes its joined arguments with no trailing newline and `println`
+is the old `print` (same joining, then the line ends); `display` goes fully
+verbatim. Deferred -- not implemented -- because every downstream program
+that relies on one-line-per-`print` would change output: it lands behind a
+version bump with a migration note (`println` for every line-ending print;
+`blip test` comparisons catch the rest). A complete implementation was built
+and verified in-tree (both engines agreeing, golden re-blessed) and then
+reverted to avoid breaking downstream programs; redo from the roadmap item,
+not from memory. Gate (when it lands): `tests/embedding.v`,
+`tests/emit_js.v`, `tests/programs_run.v`, `tests/repl_golden.v`.
+
 ### `json` is gone: migrate to `json2` on the master toolchain
 
 - Master removed the cJSON-based `json` module (`vlib/v/types/checker.v`

@@ -102,7 +102,9 @@ blip somefile.lip is a shorthand for blip run somefile.lip.')
 
 A ;=> expected comment on the same line as a form is an expectation: the form is
 evaluated and its value is compared, as text, against what follows the arrow. A
-mismatch is reported with the line, the value and the expectation.
+mismatch is reported with the line, the value and the expectation. Only
+top-level forms are checked: a ;=> nested inside a body is documentation,
+not a test.
 
   (define (double x) (* 2 x))
   (double 21)   ;=> 42

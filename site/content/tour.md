@@ -192,6 +192,12 @@ Literals in pattern position are the self-evaluating ones: numbers, strings, key
 
 `let assert` is the deliberately partial cousin: a pattern you are certain about, with a loud failure naming the pattern when you are wrong.
 
+## Printing
+
+`print` joins its arguments with spaces and ends the line; strings print
+with their quotes and `display` shows them bare. (A verbatim `print` plus
+`println` is proposed for the next version; see the roadmap.)
+
 ## Errors are values, `use` keeps them flat
 
 `(ok v)` and `(err 'why)` are ordinary values with a small combinator set (`map-result`, `unwrap-or`, `flatten-result`, `all-results`, and lazy variants that never run the thunk unless needed). `use` binds a call's results and runs the body at the same indentation; if any step is an error, the body is skipped and the error is the value.

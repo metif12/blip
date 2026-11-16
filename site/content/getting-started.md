@@ -4,7 +4,7 @@ Install blip, run your first program, scaffold a project. Five minutes, three co
 
 ## Install
 
-The one-liner clones blip and its pinned V toolchain into `~/.blip`. macOS and Linux:
+The one-liner clones blip and its stock V 0.5.2 release toolchain into `~/.blip`. macOS and Linux:
 
 ```
 curl -fsSL https://metif12.github.io/blip/install.sh | bash

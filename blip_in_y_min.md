@@ -251,12 +251,12 @@ Only `#f` is false: `0`, `""`, and `()` are all truthy.
 (provide (struct-out Point) distance greeting DEFAULT-GREETING)
 
 ; importing
-(require (only-in "lib/geometry.vl" Point distance))
-(require (prefix-in geo: "lib/geometry.vl"))
-(require "lib/text.vl")
+(require (only-in "lib/geometry.blip" Point distance))
+(require (prefix-in geo: "lib/geometry.blip"))
+(require "lib/text.blip")
 ```
 
-Resolution is file-relative: `"./x.vl"` means next to this file.
+Resolution is file-relative: `"./x.blip"` means next to this file.
 
 ## Running
 
