@@ -200,8 +200,25 @@ fn main() {
 	s.record('G5 clean-room runs', run2.exit_code == 0
 		&& run2.output.contains('1.2.0+0.9.0+shared'), snippet(run2.output))
 
-	// G2: tamper, then verify and reinstall fail loudly.
+	// G7: env and why against the pristine work tree.
 	os.chdir(work) or {}
+	env := os.execute('${blip_bin} env')
+	mut norm := env.output.replace('\r', '').replace('\\', '/').replace(work.replace('\\',
+		'/'), '<work>').replace(mirror.replace('\\', '/'), '<mirror>').trim_space()
+	want_env := 'blip.version 0.1.0\nblip.dir <work>\nblip.manifest <work>/blip.mod\nblip.module shop\nblip.workspace client,server\nblip.lock <work>/blip.lock\nblip.modules <work>/blip_modules\nblip.bin <work>/.blip/bin\nblip.mirror <mirror>'
+	s.record('G7 env golden', env.exit_code == 0 && norm == want_env, snippet(norm))
+	why := os.execute('${blip_bin} pkg why acme/db')
+	want_why := 'acme/db v1.2.0\n  blip.mod wants >=1.0.0\n  client/blip.mod wants =1.2.0\n  server/blip.mod wants >=1.1.0'
+	s.record('G7 why names requesters', why.exit_code == 0
+		&& why.output.replace('\r', '').trim_space() == want_why, snippet(why.output))
+	why2 := os.execute('${blip_bin} pkg why shop/shared')
+	s.record('G7 why covers path deps', why2.exit_code == 0
+		&& why2.output.contains('server/blip.mod wants path:../shared'), snippet(why2.output))
+	why3 := os.execute('${blip_bin} pkg why nope/nothing')
+	s.record('G7 why refuses unknown', why3.exit_code == 1
+		&& why3.output.contains('no manifest requires'), snippet(why3.output))
+
+	// G2: tamper, then verify and reinstall fail loudly.
 	os.write_file('blip_modules/acme/db/blip.blip', db_src + '; tampered\n') or {}
 	bad_ver := os.execute('${blip_bin} pkg verify')
 	s.record('G2 verify fails on tamper', bad_ver.exit_code == 1

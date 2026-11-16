@@ -697,6 +697,77 @@ pub fn install_one(root string, spec string) !Pin {
 }
 
 // remove_one deletes an installed package and drops its lock line,
+// InstalledTool is one runnable `install` linked: its name, its file in
+// the package, and the two wrappers (POSIX sh, Windows batch) that put it
+// on PATH as `blip run <file>`.
+pub struct InstalledTool {
+pub:
+	name string
+	file string
+	sh   string
+	bat  string
+}
+
+// install_tool installs a remote package and links its tools into
+// root/.blip/bin (Track G3). The package lists them in its blip.mod
+// `(tools (name "file.blip") ...)` stanza; with no stanza, a root
+// `tool.blip` is the default single tool named after the repo. Each tool
+// becomes two wrappers around `blip run`, so the same install works on
+// POSIX and Windows shells. An existing wrapper is an error, not an
+// overwrite -- two packages claiming one name must be resolved by hand.
+pub fn install_tool(root string, spec string) ![]InstalledTool {
+	pin := install_one(root, spec)!
+	_, repo, _ := parse_spec(spec)
+	pkgdir := os.join_path(os.join_path(os.join_path(root, 'blip_modules'), os.dir(pin.name)),
+		os.file_name(pin.name))
+	mod_src := os.read_file(os.join_path(pkgdir, 'blip.mod')) or { '' }
+	mut tools := []manifest.Tool{}
+	if mod_src != '' {
+		m := manifest.parse(mod_src)!
+		tools = m.tools
+	}
+	if tools.len == 0 {
+		if os.exists(os.join_path(pkgdir, 'tool.blip')) {
+			tools << manifest.Tool{
+				name: repo
+				file: 'tool.blip'
+			}
+		} else {
+			return error('blip: ${pin.name} declares no tools (no (tools ...) stanza, no tool.blip)')
+		}
+	}
+	bindir := os.join_path(os.join_path(root, '.blip'), 'bin')
+	os.mkdir_all(bindir)!
+	mut out := []InstalledTool{}
+	for t in tools {
+		if t.name.contains('/') || t.name.contains('\\') || t.name.contains('..')
+			|| t.name == '' {
+			return error("blip: tool name '${t.name}' is not installable")
+		}
+		target := os.join_path(pkgdir, t.file)
+		if !os.exists(target) || !target.ends_with('.blip') {
+			return error("blip: tool '${t.name}' points at missing ${t.file}")
+		}
+		sh := os.join_path(bindir, t.name)
+		bat := os.join_path(bindir, t.name + '.bat')
+		if os.exists(sh) || os.exists(bat) {
+			return error("blip: tool '${t.name}' is already installed")
+		}
+		abs := os.real_path(target)
+		os.write_file(sh, '#!/bin/sh\nexec blip run "${abs}" "$@"\n')!
+		os.chmod(sh, 0o755) or {}
+		os.write_file(bat, '@echo off\r\nblip run "${abs}" %*\r\n')!
+		out << InstalledTool{
+			name: t.name
+			file: t.file
+			sh:   sh
+			bat:  bat
+		}
+	}
+	return out
+}
+
+// remove_one deletes an installed package and drops its lock line,
 // pruning the emptied owner dir like before.
 pub fn remove_one(root string, spec string) !string {
 	owner, repo, _ := parse_spec(spec)

@@ -626,6 +626,28 @@ fn (mut s Suite) manifest() {
 		&& lined.feature_line('env') == 3, 'fs=${lined.feature_line('fs')} env=${lined.feature_line('env')}')
 	s.record('manifest missing feature has no line', lined.feature_line('fibers') == 0
 		&& m.feature_line('fs') == 0, 'absent is 0')
+	// Tools map runnable names to files (G3): absent by default, strict
+	// in shape, duplicates rejected like features.
+	s.record('manifest tools default empty', m.tools.len == 0, 'no tools')
+	tooled := manifest.parse('(module m)\n(blip 2)\n(tools (greet "tool.blip") (serve "cmd/serve.blip"))') or {
+		s.record('manifest tools parse', false, err.msg())
+		return
+	}
+	s.record('manifest tools parse', tooled.tools.len == 2 && tooled.tools[0].name == 'greet'
+		&& tooled.tools[0].file == 'tool.blip' && tooled.tools[1].file == 'cmd/serve.blip',
+		tooled.tools.str())
+	for c in [
+		'(module m)\n(blip 2)\n(tools greet)',
+		'(module m)\n(blip 2)\n(tools (greet))',
+		'(module m)\n(blip 2)\n(tools (greet "a" "b"))',
+		'(module m)\n(blip 2)\n(tools (a "x") (a "y"))',
+	] {
+		manifest.parse(c) or {
+			s.record('manifest rejects bad tools', true, 'rejected: ${err.msg()}')
+			continue
+		}
+		s.record('manifest rejects bad tools', false, 'accepted: ${c}')
+	}
 	// Coverage pins for long-standing public helpers the api_coverage gate
 	// requires to be named in the corpus (they predate E2a and would
 	// otherwise keep the gate red).

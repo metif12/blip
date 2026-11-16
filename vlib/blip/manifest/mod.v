@@ -29,6 +29,14 @@ pub:
 	req  string
 }
 
+// Tool maps a runnable name to its file inside the package. `blip install`
+// (Track G3) links each one onto PATH as a wrapper around `blip run`.
+pub struct Tool {
+pub:
+	name string
+	file string
+}
+
 pub struct Manifest {
 pub mut:
 	name          string
@@ -36,6 +44,7 @@ pub mut:
 	features      map[string]bool
 	feature_lines map[string]int
 	deps          []Dep
+	tools         []Tool
 	workspace     []string
 }
 
@@ -86,8 +95,8 @@ pub fn parse(src string) !Manifest {
 		}
 		head := res.arena.node(kids[0]).value
 		if head != 'module' && head != 'blip' && head != 'features' && head != 'deps'
-			&& head != 'workspace' {
-			return error("blip.mod:${d.line}:${d.col}: unknown stanza '${head}' (module, blip, features, deps, workspace)")
+			&& head != 'tools' && head != 'workspace' {
+			return error("blip.mod:${d.line}:${d.col}: unknown stanza '${head}' (module, blip, features, deps, tools, workspace)")
 		}
 		if head in seen {
 			return error("blip.mod:${d.line}:${d.col}: duplicate '${head}' stanza")
@@ -105,6 +114,9 @@ pub fn parse(src string) !Manifest {
 			}
 			'deps' {
 				m.deps = parse_deps(&res.arena, id, kids)!
+			}
+			'tools' {
+				m.tools = parse_tools(&res.arena, id, kids)!
 			}
 			'workspace' {
 				m.workspace = parse_workspace(&res.arena, id, kids)!
@@ -177,6 +189,31 @@ fn parse_deps(a &reader.Arena, id reader.NodeId, kids []reader.NodeId) ![]Dep {
 		out << Dep{
 			name: a.node(entry[0]).value
 			req:  a.node(entry[1]).value
+		}
+	}
+	return out
+}
+
+// parse_tools reads `(tools (name "file.blip") ...)`: each entry maps the
+// runnable's installed name to its file inside the package. A duplicate
+// tool name is an error, like a duplicate feature.
+fn parse_tools(a &reader.Arena, id reader.NodeId, kids []reader.NodeId) ![]Tool {
+	mut out := []Tool{}
+	for k in kids[1..] {
+		entry := a.kids(k)
+		if a.node(k).tag != .list || entry.len != 2 || a.node(entry[0]).tag != .sym
+			|| a.node(entry[1]).tag != .str {
+			return error("${at(a, k)}: a tool is (name \"file.blip\")")
+		}
+		name := a.node(entry[0]).value
+		for t in out {
+			if t.name == name {
+				return error("${at(a, k)}: duplicate tool '${name}'")
+			}
+		}
+		out << Tool{
+			name: name
+			file: a.node(entry[1]).value
 		}
 	}
 	return out

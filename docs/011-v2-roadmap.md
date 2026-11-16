@@ -217,11 +217,13 @@ and composing the implementation from modules. All three share one
 (blip 2)                    ; required: the manifest/toolchain version
 (features (fibers #f))      ; optional: capability switches, default on
 (deps (owner/repo "1.2.3")) ; optional: version requirements (G1)
+(tools (greet "tool.blip")) ; optional: runnable tools for install (G3)
 (workspace (members a b))   ; optional: local members (G5)
 ```
 
 Rules: unknown stanzas are errors (a manifest must be exact; typos must
-fail, not silently pass). `features` names are validated when the
+fail, not silently pass; the known set is module, blip, features, deps,
+tools, workspace). `features` names are validated when the
 capability exists (E2); version strings are validated on resolution (G1).
 `blip.manifest` parses and validates; nothing evaluates the manifest.
 
@@ -307,7 +309,11 @@ packages suffice for v2; a central registry/index is a follow-up.
    failing on a tampered file.
 3. **G3 tool installs.** `blip install <package>` puts a runnable on
    PATH (today `pkg` only yields importable libraries). Gate: install a
-   fixture tool, run it from PATH in CI.
+   fixture tool, run it from PATH in CI. — **done**: `pkg.install_tool`
+   links each declared tool (or a root `tool.blip` default) into
+   `.blip/bin/` as POSIX + batch wrappers around `blip run`;
+   `tests/project.v` installs a fixture package and runs its tool from
+   a PATH containing only the bin dir (plus the blip home).
 4. **G4 toolchain self-management.** blip installs and manages itself:
    version switching and virtualenv-style isolation via `blip pkg`
    (per-project pins, shims resolving to the pinned version). Needs a
@@ -327,10 +333,18 @@ packages suffice for v2; a central registry/index is a follow-up.
    clean room.
 6. **G6 project lifecycle.** Review/extend `blip new`, add `blip init`
    for scaffolding inside an existing directory. Gate: both produce a
-   project whose `run`/`test` pass immediately.
+   project whose `run`/`test` pass immediately. — **done**: `new`
+   writes `main.blip` + `README.md` + `.gitignore` + `blip.mod` and
+   refuses existing dirs; `init [name]` tops up the current dir without
+   clobbering and defaults the module to the directory name;
+   `tests/project.v` pins both producing projects whose `run` passes
+   and `test` reports expectations passed.
 7. **G7 introspection.** `blip env` (go-style: paths, versions,
    toolchain, active workspace) and `blip pkg why <package>` (who
-   depends on it). Gate: golden-output fixtures.
+   depends on it). Gate: golden-output fixtures. — **done**: `env`
+   prints stable-order `key value` facts without evaluating anything;
+   `pkg why` shows the locked pin plus every requester and req;
+   `tests/pkg_cli.v` pins both against exact goldens.
 
 Deliberately out of v2: a `scripts` stanza (`.blip` files already run;
 it would duplicate them).

@@ -32,6 +32,9 @@ import strings
 //   blip vet [file]           same as lint, the linter hook
 //   blip lsp                  serve the language server over stdio
 //   blip new <name>           scaffold a project
+//   blip init [name]          scaffold inside the current directory
+//   blip install <repo>       install a package's tools onto PATH
+//   blip env                  print project facts (versions, paths)
 //   blip pkg <sub>            install, list and remove packages
 //   blip version | help       about, and about a command
 //
@@ -64,6 +67,9 @@ usage:
   blip lsp                  serve the language server over stdio
   blip migrate [--check] <file|dir>  rewrite v1 spellings to v2 (`def`, `fn`, `begin`...)
   blip new <name>           scaffold a project
+  blip init [name]          scaffold inside the current directory
+  blip install <repo>       install package tools onto PATH
+  blip env                  print project facts (versions, paths)
   blip pkg install [repo]      install the lock, or a package from GitHub
   blip pkg update               re-resolve ./blip.mod to fresh pins
   blip pkg verify               check the tree against the lock
@@ -160,6 +166,33 @@ when it is not, so it works as a git commit-msg hook:
 The rules live in programs/lint_commit.blip, which is also runnable on its
 own: blip run programs/lint_commit.blip')
 		}
+		'new', 'init' {
+			println('blip new <name> / blip init [name] -- scaffold a project
+
+`new` creates <name>/ with main.blip (which runs and tests clean),
+README.md, .gitignore, and blip.mod, and refuses when the directory
+exists. `init` writes the same files into the current directory without
+touching what is there, taking the name from the directory when none is
+given -- the way to turn an existing folder into a project. Both end in
+a project whose `blip run main.blip` and `blip test main.blip` pass.')
+		}
+		'install' {
+			println('blip install <owner/repo>[@ref] -- install a package tools onto PATH
+
+Installs the package like `pkg install`, then links every tool it
+declares into .blip/bin/ as a wrapper around `blip run`. The package
+lists them in its blip.mod `(tools (name "file.blip") ...)` stanza; with
+no stanza, a root tool.blip is the default tool, named after the repo.
+Add .blip/bin to PATH once and every installed tool is a command.')
+		}
+		'env' {
+			println('blip env -- print project facts
+
+One `key value` per line, in stable order: the blip version, the project
+directory, the manifest (or none), the module, the lock, the modules and
+bin directories, the package mirror, and the workspace members. Nothing
+is evaluated; this is safe anywhere, project or not.')
+		}
 		'pkg' {
 			println('blip pkg -- package management
 
@@ -168,6 +201,7 @@ own: blip run programs/lint_commit.blip')
   blip pkg verify                      check the tree against the lock
   blip pkg list                        what is installed, and from where
   blip pkg remove <name>               delete an installed package
+  blip pkg why <name>                  who depends on it, and what each asked for
 
 A package is a git repository holding .blip files. install clones it into
 blip_modules/<owner>/<repo>, records it in blip.lock with the commit that was
@@ -552,6 +586,23 @@ fn main() {
 				}
 				exit_code(scaffold(args[1]))
 			}
+			'init' {
+				name := if args.len >= 2 { args[1] } else { os.file_name(os.getwd()) }
+				println('initializing ${os.getwd()}/')
+				exit_code(scaffold_into('.', name))
+			}
+			'install' {
+				if args.len < 2 {
+					eprintln('blip: install needs <owner/repo>[@ref]')
+					eprintln('run `blip help install` for usage')
+					exit_code(2)
+					return
+				}
+				exit_code(install_tool(args[1]))
+			}
+			'env' {
+				exit_code(env_cmd())
+			}
 			'pkg' {
 				exit_code(pkg_command(args[1..]))
 			}
@@ -793,7 +844,7 @@ fn check_files(paths []string) int {
 	}
 }
 
-// ---- new ----------------------------------------------------------------
+// ---- new / init ------------------------------------------------------------
 
 fn main_blip(name string) string {
 	return '; ${name} -- a blip program.
@@ -814,6 +865,64 @@ fn main_blip(name string) string {
 '
 }
 
+// clean_module_name keeps a directory name usable as a `(module ...)`
+// symbol: letters, digits, `-` and `_` survive, spaces become `-`, the
+// rest is dropped. An empty result means the name said nothing at all,
+// so it becomes `app`.
+fn clean_module_name(raw string) string {
+	mut sb := []u8{}
+	for c in raw.bytes() {
+		if (c >= `a` && c <= `z`) || (c >= `A` && c <= `Z`) || (c >= `0` && c <= `9`)
+			|| c == `-` || c == `_` {
+			sb << c
+		} else if c == ` ` {
+			sb << `-`
+		}
+	}
+	if sb.len == 0 {
+		return 'app'
+	}
+	return sb.bytestr()
+}
+
+// scaffold_into writes the missing project files into dir without touching
+// what is there: `new` starts from an absent dir, `init` tops up an
+// existing one, and neither ever overwrites a file the user owns.
+fn scaffold_into(dir string, name string) int {
+	$if wasm32 {
+		println('blip: scaffold not available in wasm build')
+		return 1
+	} $else {
+		mod := clean_module_name(name)
+		files := {
+			'main.blip':  main_blip(name)
+			'README.md':  '# ${name}\n\nA blip project.\n\n    blip run main.blip\n    blip test main.blip\n'
+			'.gitignore': 'blip\n*.exe\nblip_modules/\n'
+			'blip.mod':   '; ${name} -- blip module manifest.\n(module ${mod})\n(blip 2)\n'
+		}
+		mut made := 0
+		mut names := files.keys()
+		names.sort()
+		for f in names {
+			path := os.join_path(dir, f)
+			if os.exists(path) {
+				println('  kept ${f}')
+				continue
+			}
+			os.write_file(path, files[f]) or {
+				eprintln('blip: cannot write ${f}: ${err.msg()}')
+				return 1
+			}
+			println('  created ${f}')
+			made++
+		}
+		if made == 0 {
+			println('${dir} is already a blip project')
+		}
+		return 0
+	}
+}
+
 fn scaffold(name string) int {
 	$if wasm32 {
 		println('blip: new not available in wasm build')
@@ -827,23 +936,74 @@ fn scaffold(name string) int {
 			eprintln('blip: cannot create ${name}: ${err.msg()}')
 			return 1
 		}
-		os.write_file(os.join_path(name, 'main.blip'), main_blip(name)) or {
-			eprintln('blip: cannot write main.blip: ${err.msg()}')
-			return 1
-		}
-		readme := '# ${name}\n\nA blip project.\n\n    blip run main.blip\n    blip test main.blip\n'
-		os.write_file(os.join_path(name, 'README.md'), readme) or {
-			eprintln('blip: cannot write README.md: ${err.msg()}')
-			return 1
-		}
-		os.write_file(os.join_path(name, '.gitignore'), 'blip\n*.exe\nblip_modules/\n') or {
-			eprintln('blip: cannot write .gitignore: ${err.msg()}')
-			return 1
-		}
 		println('created ${name}/')
-		println('  main.blip')
-		println('  README.md')
-		println('  .gitignore')
+		return scaffold_into(name, name)
+	}
+}
+
+// ---- install / env --------------------------------------------------------
+
+// install_tool installs a package's runnable tools onto PATH (Track G3):
+// the package lands in blip_modules/ like any other, and each tool becomes
+// a wrapper in .blip/bin/ around `blip run`. Add that dir to PATH once and
+// every installed tool is a command.
+fn install_tool(spec string) int {
+	$if wasm32 {
+		println('blip: install not available in wasm build')
+		return 1
+	} $else {
+		tools := pkg.install_tool('.', spec) or {
+			eprintln(err.msg())
+			return 1
+		}
+		for t in tools {
+			println('installed ${t.name} -> ${t.sh}')
+		}
+		println('add .blip/bin to PATH to run them')
+		return 0
+	}
+}
+
+// env_cmd prints the project facts go-style, one `key value` per line
+// (Track G7): versions, paths, mirror, workspace. Stable order, so the
+// golden test can compare it line for line after normalizing the root.
+fn env_cmd() int {
+	$if wasm32 {
+		println('blip: env not available in wasm build')
+		return 1
+	} $else {
+		root := os.getwd()
+		println('blip.version ${version}')
+		println('blip.dir ${root}')
+		mod_path := os.join_path(root, 'blip.mod')
+		if !os.exists(mod_path) {
+			println('blip.manifest none')
+			println('blip.module none')
+		} else {
+			println('blip.manifest ${mod_path}')
+			src := os.read_file(mod_path) or { '' }
+			m := manifest.parse(src) or {
+				println('blip.module (unreadable: ${err.msg()})')
+				println('blip.workspace none')
+				println('blip.lock ${os.join_path(root, lock_name)}')
+				println('blip.modules ${os.join_path(root, modules_dir)}')
+				println('blip.bin ${os.join_path(os.join_path(root, '.blip'), 'bin')}')
+				mirror := os.getenv('BLIP_PKG_MIRROR')
+				println('blip.mirror ${if mirror == '' { 'default (github)' } else { mirror }}')
+				return 0
+			}
+			println('blip.module ${m.name}')
+			if m.workspace.len == 0 {
+				println('blip.workspace none')
+			} else {
+				println('blip.workspace ${m.workspace.join(',')}')
+			}
+		}
+		println('blip.lock ${os.join_path(root, lock_name)}')
+		println('blip.modules ${os.join_path(root, modules_dir)}')
+		println('blip.bin ${os.join_path(os.join_path(root, '.blip'), 'bin')}')
+		mirror := os.getenv('BLIP_PKG_MIRROR')
+		println('blip.mirror ${if mirror == '' { 'default (github)' } else { mirror }}')
 		return 0
 	}
 }
@@ -1092,6 +1252,7 @@ fn pkg_command(args []string) int {
 			eprintln('  blip pkg verify                 check the tree against the lock')
 			eprintln('  blip pkg list                   what is installed')
 			eprintln('  blip pkg remove <name>          remove a package')
+			eprintln('  blip pkg why <name>             who depends on it')
 			return 2
 		}
 		sub := args[0]
@@ -1119,6 +1280,13 @@ fn pkg_command(args []string) int {
 					return 2
 				}
 				return pkg_remove(args[1])
+			}
+			'why' {
+				if args.len < 2 {
+					eprintln('blip: pkg why needs <owner/repo>')
+					return 2
+				}
+				return pkg_why(args[1])
 			}
 			else {
 				eprintln('blip: unknown pkg subcommand `${sub}`')
@@ -1236,6 +1404,45 @@ fn pkg_remove(spec string) int {
 			return 1
 		}
 		println('removed ${name}')
+		return 0
+	}
+}
+
+// pkg_why reports who depends on a package (Track G7): the locked pin if
+// there is one, then every manifest that requests it and what each asked
+// for. A name nobody requests is an error, not an empty answer, because an
+// empty answer reads as "nothing" and hides a typo.
+fn pkg_why(spec string) int {
+	$if wasm32 {
+		println('blip: pkg not available in wasm build')
+		return 1
+	} $else {
+		u := pkg.collect_universe('.') or {
+			eprintln(err.msg())
+			return 1
+		}
+		mut name := spec
+		if name !in u.reqs {
+			mut hits := []string{}
+			for n in u.dep_names() {
+				if os.file_name(n) == spec {
+					hits << n
+				}
+			}
+			if hits.len != 1 {
+				eprintln('blip: no manifest requires ${spec}')
+				return 1
+			}
+			name = hits[0]
+		}
+		if p := pkg.pin_of(pkg.read_lock('.'), name) {
+			println('${name} ${p.ref}')
+		} else {
+			println(name)
+		}
+		for f in u.reqs[name] {
+			println('  ${f.requester} wants ${f.req}')
+		}
 		return 0
 	}
 }

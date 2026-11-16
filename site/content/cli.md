@@ -41,7 +41,10 @@ blip lint .git/COMMIT_EDITMSG
 
 ## Projects and packages
 
-**`blip new &lt;name&gt;`** scaffolds a project:
+**`blip new &lt;name&gt;`** scaffolds a project: `main.blip` (which runs and
+tests clean), `README.md`, `.gitignore`, and `blip.mod`. **`blip init
+[name]`** writes the same files into the current directory without touching
+what is there. Both end in a project whose `run`/`test` pass immediately.
 
 ```
 blip new myproject
@@ -49,6 +52,13 @@ cd myproject
 blip run main.blip
 blip test main.blip
 ```
+
+**`blip install &lt;owner/repo&gt;[@ref]`** installs a package's tools onto
+PATH: each tool becomes a wrapper in `.blip/bin/` around `blip run`. The
+package lists them in its `blip.mod` `(tools (name "file.blip"))` stanza; with
+no stanza, a root `tool.blip` is the default. **`blip env`** prints project
+facts go-style, one `key value` per line. **`blip pkg why &lt;name&gt;`**
+reports who depends on a package and what each requester asked for.
 
 **`blip pkg`** manages packages, which are git repositories of `.blip` files:
 
