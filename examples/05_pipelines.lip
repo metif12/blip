@@ -121,7 +121,7 @@
 
 ;; --- and a genuinely macro-shaped problem: an assert with no cost when on ---
 (defmacro debug-check (test)
-  `(when *debug* (print "check" ',test)))
+  `(if *debug* (begin (print "check" ',test))))
 
 ;; =====================================================================
 ;; a program that uses none of the above macros

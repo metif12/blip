@@ -145,7 +145,7 @@ million-deep countdown is a loop, not a crash:
 ; `if` is an expression: it answers, not just branches
 (if (< n 2) n (* n (fact (- n 1))))
 
-(when #t (print "when"))
+(if #t (begin (print "when")))
 (unless #f (print "unless"))
 
 (cond [(= x 1) 'one]

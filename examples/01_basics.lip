@@ -91,8 +91,7 @@
 ;; so 100000 here is roughly forty minutes. That is the whole reason the number
 ;; below is 2000 and not 100000.
 (define (not-tail n)
-  (when (> n 0)
-    (not-tail (- n 1)))
+  (if (> n 0) (begin (not-tail (- n 1))))
   'done)
 
 (not-tail 2000)    ;=> done
@@ -114,7 +113,7 @@
   (even? 100))                        ; recursive binding
 
 ;; --- control flow ---
-(when #t (print "when"))
+(if #t (begin (print "when")))
 (unless #f (print "unless"))
 
 (cond [(= 1 2) 'no]

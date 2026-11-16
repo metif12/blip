@@ -394,10 +394,14 @@ fn (mut m Machine) check_form(id blip.NodeId, env map[string]string, ret string,
 			}
 			return 'any'
 		}
-		'and', 'or', 'when', 'unless', '->', '->>', '|>', 'as->', 'cond->', 'use', 'defined?' {
+		'and', 'or', 'unless', '->', '->>', '|>', 'as->', 'cond->', 'use', 'defined?' {
 			for a in args {
 				m.check_form(a, env, ret, sigs, mut diags)
 			}
+			return 'any'
+		}
+		'when' {
+			m.check_diag(id, '`when` was removed in v2; use `(if c (begin body...))`', mut diags)
 			return 'any'
 		}
 		'struct', 'struct-out', 'defmacro', 'macex', 'macex1', 'require', 'provide', 'import',
@@ -414,12 +418,13 @@ fn (mut m Machine) check_form(id blip.NodeId, env map[string]string, ret string,
 	}
 }
 
-// is_when_guard reports whether id is a match guard keyword. Both
-// spellings are accepted: the reader keeps `#:when`, and either way the
-// checker only needs to know the next form is code.
-fn (m &Machine) is_when_guard(id blip.NodeId) bool {
+// is_when_guard reports whether id is a match guard keyword. Only `#:when`
+// is accepted: the bare `:when` spelling went away with v2 (roadmap A2),
+// the same release that removed statement `when`. The machine only ever
+// read `#:when` here, so this aligns the checker with it.
+	fn (m &Machine) is_when_guard(id blip.NodeId) bool {
 	d := m.arena.node(id)
-	return d.tag == .kw && (d.value == '#:when' || d.value == 'when')
+	return d.tag == .kw && d.value == '#:when'
 }
 
 // check_let checks a let-family form: inits are checked, literal-typed inits

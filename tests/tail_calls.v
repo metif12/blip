@@ -76,8 +76,21 @@ fn main() {
 		(fib 20)', '6765')
 
 	// 6. derived forms give the right answers
-	check('when', '(when #t 1)', '1')
-	check('when-false', '(when #f 1)', 'nil')
+	{
+		// `when` is gone in v2 (roadmap A2): the machine refuses with a
+		// migration message, and this pins the message, not just failure.
+		res_when := reader.read_all('(when #t 1)')
+		mut m_when := machine.new_machine(&res_when.arena)
+		if _ := m_when.run(res_when.forms) {
+			println('FAIL when-removed: expected a removal error, ran clean')
+		} else {
+			if err.msg().contains('removed in v2') {
+				println('ok   when-removed => removed in v2')
+			} else {
+				println('FAIL when-removed: wrong error: ${err.msg()}')
+			}
+		}
+	}
 	check('unless', '(unless #f 2)', '2')
 	check('cond-arrow', '(cond [(= 1 2) => (fn [] 0)] [else 7])', '7')
 	{

@@ -378,11 +378,15 @@ fn (mut e Emitter) special(name string, id reader.NodeId, kids []reader.NodeId) 
 	// is what the statement path did -- produced `cond([...], [else, null])`,
 	// which is not JavaScript and not an error either: the file failed to parse
 	// at `else`, far from the form that caused it.
-	for derived in ['cond', 'when', 'unless', 'and', 'or'] {
+	for derived in ['cond', 'unless', 'and', 'or'] {
 		if name == derived {
 			e.emit('${e.value(id)};')
 			return true
 		}
+	}
+	if name == 'when' {
+		e.refuse('`when` was removed in v2; use `(if c (begin body...))`')
+		return true
 	}
 	if name == 'case' {
 		e.refuse('`case` was removed in v2; use `match` with literal patterns')
@@ -1217,9 +1221,9 @@ fn (mut e Emitter) expression_form(name string, kids []reader.NodeId) ?string {
 	if name == 'cond' {
 		return e.cond_expr(kids)
 	}
-	if name == 'when' && kids.len >= 2 {
-		body := e.seq_values(kids[2..]).join(', ')
-		return '(blip_truthy(${e.test_of(kids[1])}) ? (${body}) : null)'
+	if name == 'when' {
+		e.refuse('`when` was removed in v2; use `(if c (begin body...))`')
+		return 'null'
 	}
 	if name == 'unless' && kids.len >= 2 {
 		body := e.seq_values(kids[2..]).join(', ')

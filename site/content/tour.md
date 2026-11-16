@@ -94,7 +94,7 @@ Bindings destructure, in `let` and in parameter position:
 `if` plus `when`/`unless` for one branch, `cond` for many, `case` for value dispatch. `and`/`or` return the deciding value, not a boolean.
 
 ```
-(when #t (print "when"))
+(if #t (begin (print "when")))
 (unless #f (print "unless"))
 
 (cond [(= 1 2) 'no]

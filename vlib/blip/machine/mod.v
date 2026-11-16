@@ -2096,12 +2096,10 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 			m.goto(m.transform_letrec(kids))
 		}
 		'when' {
-			if kids.len < 2 {
-				return error('when needs a test: (when test body...)')
-			}
-			// (when c body...) => (if c (begin body...))
-			body := m.node_of('begin', kids[1..])
-			m.goto(m.node_of('if', [kids[1], body, m.nil_node()]))
+			// Removed in v2 (roadmap A2): statement `when` is gone; `#:when`
+			// guards are unaffected. Recipe: (when c body...)
+			// becomes (if c (begin body...)).
+			return error('`when` was removed in v2; use `(if c (begin body...))`')
 		}
 		'unless' {
 			if kids.len < 2 {
