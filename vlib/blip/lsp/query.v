@@ -217,7 +217,7 @@ fn occurrences(text string, word string) []Position {
 }
 
 fn special_forms() []string {
-	return ['define', 'def', 'if', 'lambda', 'fn', 'λ', 'let', 'let*', 'letrec', 'begin', 'quote',
+	return ['define', 'def', 'if', 'fn', 'let', 'let*', 'letrec', 'begin', 'quote',
 		'quasiquote', 'unquote', 'unquote-splice', 'set!', 'and', 'or', 'cond', 'while',
 		'match', 'define-syntax', 'syntax-rules', 'let-syntax', 'letrec-syntax']
 }

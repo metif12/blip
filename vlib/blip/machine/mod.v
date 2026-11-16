@@ -2012,16 +2012,22 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 			return
 		}
 		'lambda' {
-			return m.eval_lambda(kids)
+			// Removed in v2 (roadmap A2): `lambda` was `fn` under a
+			// longer name. Recipe: (lambda (x) body) becomes (fn [x] body).
+			return error('`lambda` was removed in v2; use `(fn [x] body)`')
 		}
 		'defined?' {
 			return m.eval_defined(kids)
 		}
-		'fn', 'λ' {
-			// (fn [x] body) is (lambda (x) body): the short, canonical form.
-			// `lambda` is the alias for migrants from Scheme/Racket/Elisp/Steel
-			// and `λ` spells the same form for Racket users. All three share
-			// one implementation and one parameter syntax (see parse_params).
+		'λ' {
+			// Removed in v2 (roadmap A2) with `lambda`: the canonical
+			// spelling is `fn`. Recipe: (λ [x] body) becomes (fn [x] body).
+			return error('`λ` was removed in v2; use `(fn [x] body)`')
+		}
+		'fn' {
+			// The one function form: `(fn [x] body)`. Internal transforms
+			// build the same shape with a list parameter node, which this
+			// path accepts exactly as the old `lambda` path did.
 			if kids.len < 2 {
 				return error('fn needs a parameter list: (fn [x] body)')
 			}
@@ -2742,12 +2748,12 @@ pub fn (mut m Machine) parse_params(plist []blip.NodeId, who string) !ParamSpec 
 
 fn (mut m Machine) eval_lambda(kids []blip.NodeId) ! {
 	if kids.len < 2 {
-		return error('lambda needs a parameter list')
+		return error('fn needs a parameter list')
 	}
 	plist := m.arena.kids(kids[1])
-	spec := m.parse_params(plist, 'lambda')!
+	spec := m.parse_params(plist, 'fn')!
 	body := m.apply_destructures(spec, m.make_begin(kids[2..]))
-	m.val = m.make_closure(spec, body, m.env, 'lambda')
+	m.val = m.make_closure(spec, body, m.env, 'fn')
 	m.ret()
 }
 

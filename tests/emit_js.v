@@ -214,11 +214,6 @@ fn main() {
 
 	s.check('a lambda applied', '(print ((fn [x] (* x x)) 7))')
 
-	// `λ` is the same form as `fn`, so both engines must agree on it exactly
-	// as they do on `fn`. If either side routes it differently, this is the
-	// check that goes red.
-	s.check('a λ applied', '(print ((λ [x] (* x x)) 7))')
-
 	// Threading. Each of these is prims and machine forms only, so the blip
 	// side runs without the standard library -- which matters because
 	// blip_output does not load it.

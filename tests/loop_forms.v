@@ -30,7 +30,7 @@ fn main() {
 	check('loop-outer-set', '(define s 0)(loop i 0 (< i 5) (set! s (+ s i))) s', '10')
 	check('loop-big', '(define s 0)(loop i 0 (< i 20000) (set! s (+ s i))) s', '199990000')
 	check('dotimes', '(define s 0)(dotimes i 5 (set! s (+ s i))) s', '10')
-	check('letrec', '(letrec ([e (lambda (n) (if (= n 0) #t (o (- n 1))))] [o (lambda (n) (if (= n 0) #f (e (- n 1))))]) (e 10))', '#t')
+	check('letrec', '(letrec ([e (fn [n] (if (= n 0) #t (o (- n 1))))] [o (fn [n] (if (= n 0) #f (e (- n 1))))]) (e 10))', '#t')
 	check('letrec-shadow', '(letrec ([x 1]) (let ([x 2]) x))', '2')
 	check('letrec-no-leak', '(define x 9)(letrec ([x 1]) x)', '1')
 }

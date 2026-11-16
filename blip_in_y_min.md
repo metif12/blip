@@ -77,14 +77,11 @@ it). They print differently because they mean different things.
 (def x 10)
 (def (add a b) (+ a b))
 
-; fn is the canonical form -- see docs/canonical-forms.md for the aliases
+; fn is the one form in v2: (lambda (x) ...) and (λ [x] ...) were removed,
+; so write every closure this way: (fn [x] ...) takes the same vector params.
 (map (fn [x] (* x x)) [1 2 3])   ;=> [1 4 9]
-
-; lambda is the alias, for migrants from Scheme/Racket/Elisp/Steel
-(def square (lambda (x) (* x x)))
-
-; λ is the same alias, for Racket users
-(def cube (λ [x] (* x x x)))
+(def square (fn [x] (* x x)))
+(def cube (fn [x] (* x x x)))
 
 ; immediately applied
 ((fn [a b] (+ a b)) 1 2)         ;=> 3

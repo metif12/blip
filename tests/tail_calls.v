@@ -108,6 +108,20 @@ fn main() {
 			}
 		}
 	}
+	{
+		// `lambda` and `λ` are gone in v2 (roadmap A2): one form, `fn`.
+		res_lam := reader.read_all('(lambda (x) x)')
+		mut m_lam := machine.new_machine(&res_lam.arena)
+		if _ := m_lam.run(res_lam.forms) {
+			println('FAIL lambda-removed: expected a removal error, ran clean')
+		} else {
+			if err.msg().contains('removed in v2') {
+				println('ok   lambda-removed => removed in v2')
+			} else {
+				println('FAIL lambda-removed: wrong error: ${err.msg()}')
+			}
+		}
+	}
 	check('loop', '(loop i 0 (< i 5) (print i)) 7', '7')
 	check('dotimes', '(dotimes i 3 (print i)) 8', '8')
 	check('and-short', '(and 1 #f 3)', '#f')
@@ -121,7 +135,7 @@ fn main() {
 	check('keyword-call', '(:a {:a 1})', '1')
 	check('letstar', '(let* ([a 1] [b (+ a 1)]) b)', '2')
 	check('rest-param', '(define (f a . r) r) (f 1 2 3)', '(2 3)')
-	check('letrec', '(letrec ([e (lambda (n) (if (= n 0) #t (o (- n 1))))] [o (lambda (n) (if (= n 0) #f (e (- n 1))))]) (e 10))', '#t')
+	check('letrec', '(letrec ([e (fn [n] (if (= n 0) #t (o (- n 1))))] [o (fn [n] (if (= n 0) #f (e (- n 1))))]) (e 10))', '#t')
 
 	// 2000, not 20000. The recursive call sits inside `or`, so one pending
 	// continuation per level is live for the whole descent and the environment

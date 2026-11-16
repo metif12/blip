@@ -139,10 +139,10 @@ fn main() {
 	// ---- letrec -------------------------------------------------------
 	s.check('letrec single', '(letrec ([a 1]) a)', '1')
 	s.check('letrec self reference',
-		'(letrec ([f (lambda (n) (if (= n 0) 1 (* n (f (- n 1)))))]) (f 5))', '120')
+		'(letrec ([f (fn [n] (if (= n 0) 1 (* n (f (- n 1)))))]) (f 5))', '120')
 	s.check('letrec mutual',
-		'(letrec ([e (lambda (n) (if (= n 0) #t (o (- n 1))))]
-		          [o (lambda (n) (if (= n 0) #f (e (- n 1))))])
+		'(letrec ([e (fn [n] (if (= n 0) #t (o (- n 1))))]
+		          [o (fn [n] (if (= n 0) #f (e (- n 1))))])
 		   (e 20))', '#t')
 	// A letrec value may refer to a LATER name -- that is why letrec is not
 	// defined in terms of let -- but the initialisations run left to right, so a
@@ -151,7 +151,7 @@ fn main() {
 	s.check('letrec forward reference sees the placeholder',
 		'(letrec ([a b] [b 42]) a)', 'nil')
 	s.check('letrec forward reference still works self-referentially',
-		'(letrec ([a (lambda () a)]) (a))', '#<closure>')
+		'(letrec ([a (fn [] a)]) (a))', '#<closure>')
 
 	s.check('letrec empty', '(letrec () 3)', '3')
 
@@ -202,12 +202,9 @@ fn main() {
 	s.check('rest alone', '(define (f . r) r) (f 1 2 3)', '(1 2 3)')
 	s.check('rest in a lambda', '((fn [a . r] r) 1 2 3)', '(2 3)')
 	s.check('rest in a let-bound lambda', '(let ([f (fn (a . r) (list a r))]) (f 1 2 3))', '(1 (2 3))')
-	// `λ` is the same form as `fn`, for Racket users: same vector params,
-	// same body, same implementation. It is an alias, not a second closure
-	// type, so it is tested where `fn` is tested rather than in its own file.
-	s.check('λ applies like fn', '((λ [x] (* x x)) 7)', '49')
-	s.check('λ closes over its scope', '(define (mk) (let ([n 41]) (λ [] (+ n 1)))) (define g (mk)) (g)', '42')
-	s.check('λ takes rest params', '((λ [a . r] r) 1 2 3)', '(2 3)')
+	// `λ` was removed in v2 with `lambda` (roadmap A2): same form, same
+	// implementation, and the canonical spelling is `fn`.
+	s.check_err('λ removed', '((λ [x] (* x x)) 7)', 'removed in v2')
 	// The rest list is a real list, so it composes with the rest of the library.
 	s.check('rest is a list', '(define (f . r) (cdr r)) (f 1 2 3)', '(2 3)')
 	// `rest` is an ordinary name unless a dot introduces it. A magic-name

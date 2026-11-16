@@ -288,7 +288,11 @@ fn (mut m Machine) check_form(id blip.NodeId, env map[string]string, ret string,
 		'let', 'let*', 'letrec' {
 			return m.check_let(id, args, env, ret, sigs, mut diags)
 		}
-		'lambda', 'fn', 'λ' {
+		'lambda', 'λ' {
+			m.check_diag(id, '`lambda` was removed in v2; use `(fn [x] body)`', mut diags)
+			return 'any'
+		}
+		'fn' {
 			if args.len == 0 {
 				return 'any'
 			}

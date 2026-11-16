@@ -209,7 +209,7 @@ pub fn (mut m Machine) transform_let(kids []blip.NodeId) !blip.NodeId {
 		}
 	}
 	inner := m.nest_lets(dgroups, kids[2..])
-	lam := m.node_of('lambda', [m.list_of(params), inner])
+	lam := m.node_of('fn', [m.list_of(params), inner])
 	return m.call_node(lam, args)
 }
 
@@ -248,7 +248,7 @@ fn (mut m Machine) transform_named_let(kids []blip.NodeId) blip.NodeId {
 		vars << m.binding_name(pair)
 		inits << m.binding_value(pair)
 	}
-	lam := m.node_of('lambda', [m.list_of(vars), m.make_begin(kids[3..])])
+	lam := m.node_of('fn', [m.list_of(vars), m.make_begin(kids[3..])])
 	bind := m.list_of([m.list_of([name, lam])])
 	proc := m.node_of('letrec', [bind, name])
 	return m.call_node(proc, inits)
@@ -269,7 +269,7 @@ fn (mut m Machine) nest_lets(groups []Group, body []blip.NodeId) blip.NodeId {
 		return m.make_begin(body)
 	}
 	g := groups[0]
-	lam := m.node_of('lambda', [m.list_of(g.params), m.nest_lets(groups[1..], body)])
+	lam := m.node_of('fn', [m.list_of(g.params), m.nest_lets(groups[1..], body)])
 	return m.call_node(lam, g.args)
 }
 
@@ -489,7 +489,7 @@ pub fn (mut m Machine) transform_letrec(kids []blip.NodeId) blip.NodeId {
 		stmts << kids[bi]
 		bi++
 	}
-	lam := m.node_of('lambda', [m.list_of(params), m.make_begin(stmts)])
+	lam := m.node_of('fn', [m.list_of(params), m.make_begin(stmts)])
 	return m.call_node(lam, holes)
 }
 
@@ -525,7 +525,7 @@ fn (mut m Machine) cond_from(items []blip.NodeId) blip.NodeId {
 		body := m.node_of('if', [t, t, m.nil_node()])
 		// The lambda's PARAMETER list is (t); the binding form (t test) is what
 		// goes through `let`.
-		lam := m.node_of('lambda', [m.list_of([t]), body])
+		lam := m.node_of('fn', [m.list_of([t]), body])
 		return m.call_node(lam, [clause[0]])
 	}
 	// The `=>` marker is the SECOND element of the clause: a clause is
@@ -539,7 +539,7 @@ fn (mut m Machine) cond_from(items []blip.NodeId) blip.NodeId {
 		body := m.node_of('if', [clause[0], m.call_node(f, []blip.NodeId{}), rest])
 		// The lambda's PARAMETER list is (f). The binding form (f proc) is what
 		// goes through `let`, not what a lambda takes.
-		lam := m.node_of('lambda', [m.list_of([f]), body])
+		lam := m.node_of('fn', [m.list_of([f]), body])
 		return m.call_node(lam, [clause[2]])
 	}
 	rest := m.cond_from(items[1..])
@@ -640,7 +640,7 @@ pub fn (mut m Machine) transform_loop(kids []blip.NodeId) blip.NodeId {
 
 	// (lambda (name) (if test body nil))
 	inner := m.node_of('if', [test, body, m.nil_node()])
-	lam := m.node_of('lambda', [m.list_of([name]), inner])
+	lam := m.node_of('fn', [m.list_of([name]), inner])
 
 	// (letrec ([f lam]) (f init))
 	bindform := m.list_of([fnname, lam])

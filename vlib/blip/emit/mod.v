@@ -351,7 +351,11 @@ fn (mut e Emitter) special(name string, id reader.NodeId, kids []reader.NodeId) 
 		e.refuse('define/contract')
 		return true
 	}
-	if name == 'lambda' || name == 'fn' || name == 'λ' {
+	if name == 'lambda' || name == 'λ' {
+		e.refuse('`lambda` was removed in v2; use `(fn [x] body)`')
+		return true
+	}
+	if name == 'fn' {
 		e.named_function('', e.kids(kids[1]), kids[2..])
 		return true
 	}
@@ -1074,7 +1078,7 @@ fn (mut e Emitter) expression_form(name string, kids []reader.NodeId) ?string {
 		// quoted form as source produces.
 		return e.data(kids[1])
 	}
-	if (name == 'fn' || name == 'lambda' || name == 'λ') && kids.len >= 2 {
+	if name == 'fn' && kids.len >= 2 {
 		params := e.kids(kids[1])
 		mut ps := []string{}
 		for p in params {
