@@ -5,6 +5,7 @@ import blip
 import blip.host
 import blip.lsp
 import blip.machine
+import blip.migrate
 import blip.prims
 import blip.printer
 import blip.reader
@@ -393,6 +394,21 @@ fn (mut s Suite) machine_nodes() {
 	dt := m.arena.read_forms('(dotimes i 3 i)')
 	n7 := m.transform_dotimes(m.arena.kids(dt.forms[0])) or { blip.NodeId(0) }
 	s.record('transform_dotimes returns a node', n7 > 0, 'node ${n7}')
+
+	// migrate rewrites v1 spellings to v2 canonical forms. Each case pins
+	// the exact output text: a rename that drifts silently is the failure
+	// this gate exists to catch.
+	mm_def := migrate.migrate_source('(define x 1)') or { migrate.MigrateResult{} }
+	s.record('migrate renames define to def', mm_def.text == '(def x 1)', mm_def.text)
+	mm_lam := migrate.migrate_source('(lambda (x) (+ x 1))') or { migrate.MigrateResult{} }
+	s.record('migrate turns lambda params into a vector', mm_lam.text == '(fn [x] (+ x 1))', mm_lam.text)
+	mm_case := migrate.migrate_source('(case 5 [(1 2) 10] [else 0])') or {
+		migrate.MigrateResult{}
+	}
+	s.record('migrate expands case to match', mm_case.text == '(match 5 [1 10] [2 10] [_ 0])',
+		mm_case.text)
+	mm_when := migrate.migrate_source('(when c (f))') or { migrate.MigrateResult{} }
+	s.record('migrate turns when into if', mm_when.text == '(if c (begin (f)) nil)', mm_when.text)
 
 	// A binding whose pattern is a LIST rather than a name is what makes it
 	// destructuring. `(cons a b)` is the shape `destructuring` accepts -- it

@@ -8,6 +8,7 @@ import blip.emit
 import blip.host
 import blip.lsp
 import blip.machine
+import blip.migrate
 import blip.printer
 import blip.reader
 import blip.repl
@@ -390,6 +391,28 @@ fn main() {
 					return
 				}
 				exit_code(fmt_file(file, write))
+			}
+			'migrate' {
+				mut target := ''
+				mut check_only := false
+				for a in args[1..] {
+					if a == '--check' {
+						check_only = true
+					} else if target == '' {
+						target = a
+					} else {
+						eprintln('blip: migrate takes one path: `blip migrate [--check] <file|dir>`')
+						exit_code(2)
+						return
+					}
+				}
+				if target == '' {
+					eprintln('blip: migrate needs a file or directory')
+					eprintln('usage: blip migrate [--check] <file.lip|dir>')
+					exit_code(2)
+					return
+				}
+				exit_code(migrate_cmd(target, check_only))
 			}
 			'doc' {
 				if args.len < 2 {
@@ -814,6 +837,46 @@ fn doc_file(path string) int {
 
 // fmt_file pretty-prints a blip source file. With write=true it overwrites
 // the file; otherwise it prints to stdout.
+// ---- migrate -------------------------------------------------------------
+
+// migrate_cmd runs `blip migrate [--check] <file|dir>`: every .lip/.blip
+// file is rewritten in place unless --check is set (report-only, exit 1 if
+// anything would change). blip.mod stamping and version enforcement land
+// with the module-manifest change, next.
+fn migrate_cmd(target string, check_only bool) int {
+	$if wasm32 {
+		println('blip: migrate not available in wasm build')
+		return 1
+	} $else {
+		reports := migrate.migrate_path(target, check_only) or {
+			eprintln(err.msg())
+			return 1
+		}
+		mut changed := 0
+		mut code := 0
+		for r in reports {
+			for w in r.warnings {
+				println('${r.path}: ${w}')
+			}
+			if r.changed {
+				changed++
+				if check_only {
+					println('${r.path}: would migrate')
+				} else {
+					println('${r.path}: migrated')
+				}
+			}
+		}
+		if check_only && changed > 0 {
+			code = 1
+		}
+		if reports.len == 0 {
+			println('blip migrate: nothing to migrate under ${target}')
+		}
+		return code
+	}
+}
+
 fn fmt_file(path string, write bool) int {
 	$if wasm32 {
 		println('blip: fmt not available in wasm build')
