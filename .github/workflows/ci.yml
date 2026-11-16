@@ -167,8 +167,8 @@ jobs:
       - name: Every example parses
         run: ./reader_probe examples/*.lip
 
-  # Three images, one per toolchain, each building the pinned V compiler from
-  # source. That is slow -- V bootstraps itself -- so it is a separate job that
+  # Three images, one per toolchain, each fetching the stock V 0.5.2 release
+  # archive. That download is the slow part, so it is a separate job that
   # runs in parallel and is not gated behind the test job, because a change to
   # the build should be visible here before it is merged rather than after.
   #

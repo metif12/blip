@@ -564,4 +564,13 @@ never smuggled into a patch.
    here; until then the section above is history, not instructions. Same for
    the two stale "pinned toolchain" notes in `site/content/getting-started.md`
    and the CI comment about building the pinned compiler from source.
+5. **`match*` multi-pattern clauses miss**: `transform_match_star`
+   (`vlib/blip/machine/transform.v`) builds the `match` pattern from ALL
+   clause children instead of from the pattern list's children, so the body
+   becomes an extra pattern and every multi-pattern clause misses
+   (`(match* (list 1 2) [(a b) (+ a b)])` answers nil). Notably,
+   `examples/03_match.lip` carries zero assertions over `match*` -- only
+   `;=>` comments, which `blip test` ignores -- so nothing turned red.
+   Gate: assert-backed `match*` cases covering literal, binding, and mixed
+   patterns, green, before any tour example claims a `match*` answer.
 

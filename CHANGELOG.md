@@ -4,6 +4,26 @@ Recent changes and the work behind them, newest first. Each entry names its
 gate: a change without a test that fails without it does not land. The plan
 lives in `docs/010-roadmap.md`; this file is the record.
 
+### Docs: canonical forms, a beginner tour, and a `match*` finding
+
+- New `docs/canonical-forms.md`: one advertised spelling per idea (`fn`,
+  `def`, `car`/`cdr`, `.blip`), an explicit compatibility list
+  (`lambda`/`λ`, `define`, `first`/`rest`, `.lip`, deprecated `.vl`), and
+  the deliberate non-aliases (`print` vs `display`, `->` vs `->>`,
+  `=` vs `eq?`) plus the open `keep`-vs-`filter` question.
+- `blip_in_y_min.md` rewritten for newcomers: a Lisp-first section
+  (S-expressions, prefix notation, quoting), canonical spellings
+  throughout, more worked examples (closures, recursion, threading),
+  seven example programs (not six), and a pointer to the canonical doc.
+- Finding, not a fix: `match*` multi-pattern clauses miss where the
+  equivalent `match` hits -- `transform_match_star` folds the body into
+  the pattern list. Recorded as roadmap §10 item 5 with the root cause
+  and gate; the tour shows the shape without claiming an answer.
+- Gate: every new tour claim was run through `blip run` in a probe file
+  before being written (sum, adder closure, `fact`, `vector-append`,
+  threading, labelled args); `03_match` keeps zero `match*` asserts,
+  which is exactly the gap item 5 names.
+
 ### Verbatim `print` plus `println` (deferred, not landed)
 
 `print` writes its joined arguments with no trailing newline and `println`
