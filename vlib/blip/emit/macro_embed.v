@@ -16,11 +16,11 @@
 
 module emit
 
-import blip
-import blip.host
-import blip.machine
-import blip.printer
-import blip.reader
+import vlib.blip
+import vlib.blip.host
+import vlib.blip.machine
+import vlib.blip.printer
+import vlib.blip.reader
 
 // is_defmacro_form reports whether `id` is a (defmacro ...) form.
 fn is_defmacro_form(a &reader.Arena, id reader.NodeId) bool {
@@ -36,7 +36,7 @@ fn is_defmacro_form(a &reader.Arena, id reader.NodeId) bool {
 pub fn expand_macro_at_embed(src string, h host.Host) !string {
 	mut m := machine.new_standalone(h)
 	expanded := m.run_str(src)!
-	_ = m.value_to_datum(expanded)!
+	_ = blip.value_to_datum(mut m, expanded)!
 	return 'embedded-machine macro expansion: pure-shape converted (complex deferred)'
 }
 
@@ -45,11 +45,11 @@ fn is_macro_value(m machine.Machine, v blip.Value) bool {
 	if v.tag != .pair {
 		return false
 	}
-	head := (v.as_pair() or { return false }).car
+	head := v.as_pair().car
 	if head.tag != .symbol {
 		return false
 	}
-	name := head.as_string() or { return false }
+	name := head.as_string()
 	return name in m.macros
 }
 
@@ -63,15 +63,15 @@ fn is_registered_macro(m machine.Machine, name string) bool {
 fn expand_value(mut m machine.Machine, v blip.Value) !blip.Value {
 	// Explicit expansion request: run it through the machine.
 	if v.tag == .pair {
-		car := (v.as_pair() or { return error(err.msg()) }).car
+		car := v.as_pair().car
 		if car.tag == .symbol {
-			name := car.as_string() or { return error(err.msg()) }
+			name := car.as_string()
 			if name == 'macex' || name == 'macex1' {
-				cdr := (v.as_pair() or { return error(err.msg()) }).cdr
+				cdr := v.as_pair().cdr
 				if cdr.tag != .pair {
 					return error('macex needs a form')
 				}
-				arg_txt := printer.write((cdr.as_pair() or { return error(err.msg()) }).car)
+				arg_txt := printer.write(cdr.as_pair().car)
 				expanded := m.run_str('(${name} ${arg_txt})')!
 				return expand_value(mut m, expanded)
 			}
@@ -96,12 +96,12 @@ fn expand_value(mut m machine.Machine, v blip.Value) !blip.Value {
 	}
 	match v.tag {
 		.pair {
-			car := expand_value(mut m, (v.as_pair() or { return error(err.msg()) }).car)!
-			cdr := expand_value(mut m, (v.as_pair() or { return error(err.msg()) }).cdr)!
+			car := expand_value(mut m, v.as_pair().car)!
+			cdr := expand_value(mut m, v.as_pair().cdr)!
 			return blip.cons(car, cdr)
 		}
 		.vector {
-			vec := v.as_vector() or { return error(err.msg()) }
+			vec := v.as_vector()
 			mut elems := []blip.Value{}
 			for e in vec.data {
 				elems << expand_value(mut m, e)!
@@ -116,11 +116,7 @@ fn expand_value(mut m machine.Machine, v blip.Value) !blip.Value {
 
 // expand_form expands one reader form. Returns the original id unchanged
 // when nothing needed expanding, so ordinary programs produce no churn.
-// The arena is `mut` because expansion appends re-read forms to it --
-// V 0.5.2 enforces a mut receiver at cross-module call sites only when the
-// callee visibly mutates, so an immutable `a` here compiled until
-// read_source grew its ensure_cap reservation, then broke three call sites.
-fn expand_form(mut m machine.Machine, mut a reader.Arena, id reader.NodeId) !reader.NodeId {
+fn expand_form(mut m machine.Machine, a &reader.Arena, id reader.NodeId) !reader.NodeId {
 	d := a.node(id)
 	if d.tag != .list {
 		return id
@@ -170,7 +166,7 @@ fn expand_form(mut m machine.Machine, mut a reader.Arena, id reader.NodeId) !rea
 	mut changed := false
 	for i := 0; i < kids.len; i++ {
 		k := kids[i]
-		nid := expand_form(mut m, mut a, k)!
+		nid := expand_form(mut m, a, k)!
 		if nid != k {
 			changed = true
 		}

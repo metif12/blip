@@ -5,7 +5,7 @@ on:
     branches: [main]
     paths:
       - 'site/**'
-      - 'main.v'
+      - 'blip.v'
       - 'vlib/blip/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
@@ -24,7 +24,8 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     env:
-      V_VERSION: 0.5.2
+      V_COMMIT: 74be97a2d7bd1fce4150abc749a2e64b21d9d082
+      VC_COMMIT: 0027130e9850c9946fa2c21e9004f13d8e593595
       V_MACOS_V3_NO_FALLBACK: '1'
     steps:
       - uses: actions/checkout@v4
@@ -32,23 +33,27 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: v
-          key: v-${{ env.V_VERSION }}-${{ runner.os }}
+          key: v-${{ env.V_COMMIT }}-${{ runner.os }}-v2
 
-      - name: Install V if needed
+      - name: Build V if needed
         run: |
           set -e
           if [ ! -x v/v ]; then
-            curl -sSL -o v.zip "https://github.com/vlang/v/releases/download/${V_VERSION}/v_linux.zip"
-            rm -rf v_dl && mkdir v_dl
-            unzip -q v.zip -d v_dl
-            rm -rf v && mv v_dl/v v && rm -rf v_dl v.zip
-            [ -x ./v/v ] || { echo "::error::no ./v/v produced"; exit 1; }
+            git init -q v && cd v
+            git remote add origin https://github.com/vlang/v.git
+            git fetch -q --depth 1 origin "$V_COMMIT"
+            git checkout -q FETCH_HEAD
+            git clone -q https://github.com/vlang/vc vc
+            git -C vc fetch -q --depth 1 origin "$VC_COMMIT"
+            git -C vc checkout -q FETCH_HEAD
+            make -f Makefile v VFLAGS="-d use_bundled_libgc"
+            [ -x ./v ] || { echo "::error::no ./v produced"; exit 1; }
           fi
           echo "$GITHUB_WORKSPACE/v" >> "$GITHUB_PATH"
 
       - name: Build blip
         run: |
-          v -cc gcc -path 'vlib|@vlib' -o blip main.v
+          v -cc gcc -d use_bundled_libgc -o blip blip.v
           [ -x ./blip ] || { echo "::error::no ./blip produced"; exit 1; }
           echo "$GITHUB_WORKSPACE" >> "$GITHUB_PATH"
 
@@ -59,19 +64,18 @@ jobs:
 
       - name: Check the output is complete
         run: |
-          for p in index about getting-started tour cli embedding status; do
-            test -s site_out/$p.html || { echo "::error::missing site_out/$p.html"; exit 1; }
-          done
+          test -s site_out/index.html
+          test -s site_out/about.html
+          test -s site_out/getting-started.html
           pages=$(find site_out -name '*.html' | wc -l)
           echo "generated $pages pages"
-          test "$pages" -ge 7
+          test "$pages" -ge 3
 
       - name: Assemble site
         run: |
           cp -r site/assets site_out/assets
           cp README.md site_out/README.md 2>/dev/null || true
           cp site/install.sh site/install.ps1 site_out/ 2>/dev/null || true
-          cp site/playground.html site_out/playground.html
           chmod +x site_out/install.sh 2>/dev/null || true
           test -f site_out/index.html
 

@@ -3,15 +3,15 @@ module main
 $if !wasm32 {
 	import os
 }
-import blip
-import blip.emit
-import blip.host
-import blip.lsp
-import blip.machine
-import blip.printer
-import blip.reader
-import blip.repl
-import strings
+
+import vlib.blip
+import vlib.blip.emit
+import vlib.blip.host
+import vlib.blip.lsp
+import vlib.blip.machine
+import vlib.blip.printer
+import vlib.blip.reader
+import vlib.blip.repl
 
 // blip: a Lisp dialect implemented in V.
 //
@@ -20,7 +20,6 @@ import strings
 //   blip run <file.lip> ...   evaluate files, in order, in one machine
 //   blip <file.lip>           shorthand for `run`
 //   blip test <file.lip> ...  evaluate and check the `;=>` expectations
-//   blip check <file.lip> ... report contract/type mismatches without running
 //   blip emit-js <file.lip>   compile a file to a JavaScript module on stdout
 //   blip build <file> [-o out.js]  compile a file to a self-contained .js module
 //   blip fmt [-w] <file.lip>  pretty-print (normalize) a file, write back with -w
@@ -51,7 +50,6 @@ usage:
   blip run <file.lip> ...   evaluate files in order, in one machine
   blip <file.lip>           shorthand for `blip run`
   blip test <file.lip> ...  evaluate and check the `;=>` expectations
-  blip check <file.lip> ... report contract/type mismatches without running
   blip emit-js <file.lip>   compile a file to a JavaScript module on stdout
   blip build <file> [-o out.js]  compile a file to a self-contained .js module
   blip fmt [-w] <file.lip>  pretty-print (normalize) a file, write back with -w
@@ -102,33 +100,13 @@ blip somefile.lip is a shorthand for blip run somefile.lip.')
 
 A ;=> expected comment on the same line as a form is an expectation: the form is
 evaluated and its value is compared, as text, against what follows the arrow. A
-mismatch is reported with the line, the value and the expectation. Only
-top-level forms are checked: a ;=> nested inside a body is documentation,
-not a test.
+mismatch is reported with the line, the value and the expectation.
 
   (define (double x) (* 2 x))
   (double 21)   ;=> 42
 
 Exit status is 0 when every expectation held and 1 when any did not, so this
 works as a test gate from CI. Files without expectations are merely run.')
-		}
-		'check' {
-			println('blip check <file.lip> ... -- report mismatches without running
-
-The static checker for erased annotations (M10). Functions defined with
-annotated `define` -- (define (add (x int) (y int)) int ...) -- have their
-call sites judged: wrong arity and literal arguments of the wrong type are
-reported as file:line:col: message, one per mismatch. So is a body whose
-known type contradicts a declared return, and a ->/c outside
-define/contract.
-
-Anything the checker has no signature for -- unannotated functions, the
-prelude, macros -- is unknown, and unknown unifies with everything. A file
-that passes is not proven correct; a file that fails names a real
-mismatch. Nothing is evaluated, so checking a hostile file is safe.
-
-Exit status is 0 when nothing was found and 1 when any diagnostic was
-reported.')
 		}
 		'lsp' {
 			println('blip lsp -- serve the language server
@@ -190,17 +168,14 @@ Prints the version and the compiler it was built with.')
 //
 // It is loaded into the same machine as the program, so a program can rebind any
 // of it and the change is visible to a later file.
-// resource_path finds a file shipped beside the binary: the standard library
-// or a program. Both live next to the executable (`lib/std.lip`,
-// `programs/<name>`), with one directory up as the fallback for running from
-// source layouts. One helper, not two copies of the same probe.
-fn resource_path(rel string) string {
+fn std_path() string {
 	$if wasm32 {
-		return rel
+		return 'lib/std.lip'
 	} $else {
 		exe := os.executable()
 		dir := os.dir(exe)
-		for candidate in [os.join_path(dir, rel), os.join_path(os.dir(dir), rel)] {
+		for candidate in [os.join_path(dir, 'lib${os.path_separator}std.lip'),
+			os.join_path(os.dir(dir), 'lib${os.path_separator}std.lip')] {
 			if os.exists(candidate) {
 				return candidate
 			}
@@ -209,21 +184,20 @@ fn resource_path(rel string) string {
 	}
 }
 
-// std_path is the standard library, loaded before every program.
-//
-// A language with a prelude is a language where print and string-upcase are names
-// rather than something every file has to require first. The examples assume it:
-// a call to parse-in is a call, and making every reader scroll past a require for
-// it would be the wrong default.
-//
-// It is loaded into the same machine as the program, so a program can rebind any
-// of it and the change is visible to a later file.
-fn std_path() string {
-	return resource_path('lib${os.path_separator}std.lip')
-}
-
 fn programs_path(name string) string {
-	return resource_path('programs${os.path_separator}${name}')
+	$if wasm32 {
+		return 'programs/' + name
+	} $else {
+		exe := os.executable()
+		dir := os.dir(exe)
+		for candidate in [os.join_path(dir, 'programs${os.path_separator}${name}'),
+			os.join_path(os.dir(dir), 'programs${os.path_separator}${name}')] {
+			if os.exists(candidate) {
+				return candidate
+			}
+		}
+		return ''
+	}
 }
 
 fn run_files(paths []string) int {
@@ -272,8 +246,13 @@ fn emit_js(paths []string) int {
 	} $else {
 		mut code := 0
 		for path in paths {
-			res := compile_one(path) or {
-				eprintln(err.msg())
+			src := os.read_file(path) or {
+				eprintln('blip: cannot read ${path}')
+				code = 1
+				continue
+			}
+			res := emit.compile_program(src) or {
+				eprintln('blip: ${path}: ${err.msg()}')
 				code = 1
 				continue
 			}
@@ -335,14 +314,6 @@ fn main() {
 				}
 				exit_code(run_tests(args[1..]))
 			}
-			'check' {
-				if args.len < 2 {
-					eprintln('blip: check needs a file')
-					eprintln('run `blip help check` for usage')
-					exit_code(2)
-				}
-				exit_code(check_files(args[1..]))
-			}
 			'emit-js' {
 				if args.len < 2 {
 					eprintln('blip: emit-js needs a file')
@@ -354,7 +325,26 @@ fn main() {
 			'lsp' {
 				lsp.serve()
 			}
-			'lint', 'vet' {
+			'lint' {
+				mut file := 'COMMIT_EDITMSG'
+				if args.len >= 2 {
+					file = args[1]
+				}
+				if !os.exists(file) {
+					eprintln('blip: cannot read ${file}')
+					exit_code(2)
+					return
+				}
+				os.setenv('BLIP_LINT_FILE', file, true)
+				prog := programs_path('lint_commit.lip')
+				if prog == '' {
+					eprintln('blip: cannot find programs/lint_commit.lip')
+					exit_code(2)
+					return
+				}
+				exit_code(run_files([prog]))
+			}
+			'vet' {
 				mut file := 'COMMIT_EDITMSG'
 				if args.len >= 2 {
 					file = args[1]
@@ -436,7 +426,7 @@ fn main() {
 					return
 				}
 				if out == '' {
-					out = file.replace('.blip', '.js').replace('.lip', '.js')
+					out = file.replace('.lip', '.js')
 				}
 				exit_code(build_file(file, out))
 			}
@@ -467,7 +457,7 @@ fn main() {
 				// A word that is neither a subcommand nor a file fails both ways,
 				// and saying only "cannot read" sends someone who mistyped a
 				// subcommand hunting for a file that was never theirs.
-				if !os.exists(args[0]) && !args[0].ends_with('.lip') && !args[0].ends_with('.blip') {
+				if !os.exists(args[0]) && !args[0].ends_with('.lip') {
 					eprintln('blip: ${args[0]} is neither a subcommand nor a file')
 					eprintln('run `blip help` for subcommands, or `blip run <file.lip>`')
 					exit_code(2)
@@ -587,7 +577,7 @@ fn run_tests(paths []string) int {
 				m.load(std) or { eprintln('blip: cannot load the standard library: ${err.msg()}') }
 			}
 			m.source = path
-			forms := m.arena.read_source(src, path)
+			forms := m.arena.read_forms(src)
 			lines := src.split('\n')
 			for id in forms.forms {
 				d := m.arena.node(id)
@@ -629,66 +619,22 @@ fn run_tests(paths []string) int {
 	}
 }
 
-// ---- check ---------------------------------------------------------------
-
-// check_files runs `blip check` over files: parse each one, run the static
-// checker for erased annotations, and report every mismatch as
-// `path:line:col: message`. Nothing is evaluated, so checking is safe on
-// files that would misbehave at run time. Unknown names are not errors --
-// the checker judges only what it has signatures for -- so a reader
-// diagnostic is the one hard failure: without a parse there is nothing to
-// check against.
-fn check_files(paths []string) int {
-	$if wasm32 {
-		println('blip: check not available in wasm build')
-		return 1
-	} $else {
-		mut fails := 0
-		for path in paths {
-			src := os.read_file(path) or {
-				eprintln('blip: cannot read ${path}')
-				fails++
-				continue
-			}
-			h := host.new_capture()
-			mut m := machine.new_standalone(h)
-			forms := m.arena.read_source(src, path)
-			if forms.diags.len > 0 {
-				d := forms.diags[0]
-				println('${path}:${d.line}:${d.col}: syntax: ${d.msg}')
-				fails++
-				continue
-			}
-			for dg in m.check_source(forms.forms) {
-				println('${path}:${dg.line}:${dg.col}: ${dg.msg}')
-				fails++
-			}
-		}
-		if fails > 0 {
-			eprintln('blip check: ${fails} problem(s)')
-			return 1
-		}
-		return 0
-	}
-}
-
 // ---- new ----------------------------------------------------------------
 
-fn main_blip(name string) string {
+fn main_lip(name string) string {
 	return '; ${name} -- a blip program.
 ;
-; Run it with:  blip run main.blip
-; Check it with: blip test main.blip
+; Run it with:  blip run main.lip
+; Check it with: blip test main.lip
 
 (define (greet who)
   (string-append "hello, " who "!"))
 
-; print writes the line and returns nil -- but `blip test` compares what the
-; form PRINTED when it printed anything (see run_tests), so the expectation
-; names the printed line, not the value.
-(print (greet "world"))   ;=> "hello, world!"
+; print writes the line and returns nothing, so the value of the form is nil.
+; The expectation below is checked by `blip test`, not by the reader.
+(print (greet "world"))   ;=> nil
 
-; A value form with no expectation: merely run, not checked.
+; A value form: this one is what the expectation compares against.
 (greet "world")
 '
 }
@@ -706,11 +652,11 @@ fn scaffold(name string) int {
 			eprintln('blip: cannot create ${name}: ${err.msg()}')
 			return 1
 		}
-		os.write_file(os.join_path(name, 'main.blip'), main_blip(name)) or {
-			eprintln('blip: cannot write main.blip: ${err.msg()}')
+		os.write_file(os.join_path(name, 'main.lip'), main_lip(name)) or {
+			eprintln('blip: cannot write main.lip: ${err.msg()}')
 			return 1
 		}
-		readme := '# ${name}\n\nA blip project.\n\n    blip run main.blip\n    blip test main.blip\n'
+		readme := '# ${name}\n\nA blip project.\n\n    blip run main.lip\n    blip test main.lip\n'
 		os.write_file(os.join_path(name, 'README.md'), readme) or {
 			eprintln('blip: cannot write README.md: ${err.msg()}')
 			return 1
@@ -720,7 +666,7 @@ fn scaffold(name string) int {
 			return 1
 		}
 		println('created ${name}/')
-		println('  main.blip')
+		println('  main.lip')
 		println('  README.md')
 		println('  .gitignore')
 		return 0
@@ -750,8 +696,7 @@ fn doc_file(path string) int {
 				continue
 			}
 			// A definition line: flush the accumulated doc as an entry.
-			is_def := trimmed.starts_with('(define') || trimmed.starts_with('(def ')
-				|| trimmed.starts_with('(defmacro') || trimmed.starts_with('(struct')
+			is_def := trimmed.starts_with('(define') || trimmed.starts_with('(def ') || trimmed.starts_with('(defmacro') || trimmed.starts_with('(struct')
 			if is_def {
 				// Extract the name: second token after the opening paren.
 				mut name := ''
@@ -829,15 +774,14 @@ fn fmt_file(path string, write bool) int {
 			eprintln('${path}:${d.line}:${d.col}: ${d.msg}')
 			return 1
 		}
-		mut sb := strings.new_builder(res.forms.len * 64)
+		mut out := ''
 		for i, id in res.forms {
 			if i > 0 {
-				sb.write_string('\n\n')
+				out += '\n\n'
 			}
-			sb.write_string(printer.pp_form(res.arena, id, 0))
+			out += pp_form(res.arena, id, 0)
 		}
-		sb.write_string('\n')
-		out := sb.str()
+		out += '\n'
 		if write {
 			os.write_file(path, out) or {
 				eprintln('blip: cannot write ${path}: ${err.msg()}')
@@ -850,20 +794,137 @@ fn fmt_file(path string, write bool) int {
 	}
 }
 
+fn pp_form(a &reader.Arena, id reader.NodeId, depth int) string {
+	d := a.node(id)
+	match d.tag {
+		.nil { return 'nil' }
+		.bool { return if d.i == 1 { '#t' } else { '#f' } }
+		.int { return d.i.str() }
+		.float { return d.f.str() }
+		.str { return quote_string(d.value) }
+		.sym { return d.value }
+		.kw { return ':' + d.value }
+		.list {
+			kids := a.kids(id)
+			if kids.len == 0 {
+				return '()'
+			}
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1)
+				ki++
+			}
+			line := '(' + parts.join(' ') + ')'
+			if line.len <= 80 {
+				return line
+			}
+			mut s := '('
+			for i, p in parts {
+				if i == 0 {
+					s += p
+				} else {
+					s += '\n' + '  '.repeat(depth + 1) + p
+				}
+			}
+			s += ')'
+			return s
+		}
+		.vector {
+			kids := a.kids(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1)
+				ki++
+			}
+			return '[' + parts.join(' ') + ']'
+		}
+		.table {
+			kids := a.kids(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1) + ' ' + pp_form(a, kids[ki + 1], depth + 1)
+				ki += 2
+			}
+			return '{' + parts.join(' ') + '}'
+		}
+		.array {
+			kids := a.kids(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1)
+				ki++
+			}
+			return '@[' + parts.join(' ') + ']'
+		}
+		.bytes {
+			kids := a.kids(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1)
+				ki++
+			}
+			return '#(' + parts.join(' ') + ')'
+		}
+		.quoted {
+			kids := a.kids(id)
+			if kids.len == 0 {
+				return "'()"
+			}
+			return "'" + pp_form(a, kids[0], depth)
+		}
+		.quasi {
+			kids := a.kids(id)
+			if kids.len == 0 {
+				return '`()'
+			}
+			return '`' + pp_form(a, kids[0], depth)
+		}
+		.unquote {
+			kids := a.kids(id)
+			if kids.len == 0 {
+				return ',()'
+			}
+			return ',' + pp_form(a, kids[0], depth)
+		}
+		.unquote_splice {
+			kids := a.kids(id)
+			if kids.len == 0 {
+				return ',@()'
+			}
+			return ',@' + pp_form(a, kids[0], depth)
+		}
+		else {
+			return '#<datum>'
+		}
+	}
+}
+
+fn quote_string(s string) string {
+	mut sb := '"'
+	for ch in s.runes() {
+		match ch {
+			`"` { sb += '\\"' }
+			`\\` { sb += '\\\\' }
+			`\n` { sb += '\\n' }
+			`\r` { sb += '\\r' }
+			`\t` { sb += '\\t' }
+			else { sb += ch.str() }
+		}
+	}
+	sb += '"'
+	return sb
+}
+
 // ---- doc -----------------------------------------------------------------
 
 // doc_file extracts `;;` doc comments preceding definitions and prints them
 // as Markdown.
 // ---- build ---------------------------------------------------------------
-
-// compile_one reads one file and returns its compilation result. The refusal
-// rule lives with the caller: `build` treats a blocked form as a hard error,
-// while `emit-js` prints the partial module and reports the refusal alongside
-// it, so a refusal is visible rather than a silent `undefined`.
-fn compile_one(path string) !emit.Result {
-	src := os.read_file(path) or { return error('blip: cannot read ${path}') }
-	return emit.compile_program(src) or { return error('blip: ${path}: ${err.msg()}') }
-}
 
 // build_file compiles a blip program to a JavaScript module and writes it
 // to out. This is the first half of `blip build`: a single self-contained
@@ -873,8 +934,12 @@ fn build_file(input string, out string) int {
 		println('blip: build not available in wasm build')
 		return 1
 	} $else {
-		res := compile_one(input) or {
-			eprintln(err.msg())
+		src := os.read_file(input) or {
+			eprintln('blip: cannot read ${input}: ${err.msg()}')
+			return 1
+		}
+		res := emit.compile_program(src) or {
+			eprintln('blip: ${input}: ${err.msg()}')
 			return 1
 		}
 		if res.blocked.len > 0 {

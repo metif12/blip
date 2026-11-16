@@ -4,8 +4,8 @@ Thanks for looking. This file is short on ceremony and specific about the things
 that will otherwise waste your afternoon.
 
 blip is early. The reader and the machine run real programs, tail calls are
-real, and the seven programs in `examples/` are the specification the
-interpreter is written against. Three documented things do not work yet, and they are named
+real, and the six programs in `examples/` are the specification the interpreter
+is written against. Three documented things do not work yet, and they are named
 in the README, in `tests/tail_calls.v`, and in `docs/010-roadmap.md` rather than
 quietly missing.
 
@@ -31,12 +31,11 @@ every half-finished interpreter is the thing people install.
 
 ## Build and test
 
-Requires stock V 0.5.2: the official release archive
-(`https://github.com/vlang/v/releases/tag/0.5.2`, reports itself as
-`V 0.5.2 7647ce1`). Not vlang/v master, which reports the same version
-string for other commits while resolving project modules differently --
-see section 7.1a of `docs/010-roadmap.md`. The `V_VERSION` in
-`.github/workflows/ci.yml` names the release.
+Requires V 0.5.2, specifically **vlang/v main at the commit pinned in
+`.github/workflows/ci.yml`**. That is not pedantry — the `0.5.2` release build
+resolves `vlib.blip.*` against V's own standard library and reports every module
+in this repository as an unknown function, for files that exist and compile
+locally. See section 7.1a of `docs/010-roadmap.md`.
 
 On Linux, `v` defaults to its experimental V3 compiler and silently falls back
 to the established one, which resolves modules differently again. If you get a
@@ -49,33 +48,26 @@ export V_MACOS_V3_NO_FALLBACK=1
 Always pass `-cc gcc`. The default C backend fails on this checkout, and CI uses
 the same flag so the two cannot drift apart.
 
-Always pass `-path 'vlib|@vlib'` (quotes for the shell you use). It points
-the compiler at this repo's own `vlib/` for `import blip.*`, with the
-standard library behind it. Stock V has no project-local `vlib.` lookup,
-so the imports spell the short name (`import blip.machine`, used as
-`machine.…`) and the path supplies the directory.
-
 ```sh
-v -cc gcc -path 'vlib|@vlib' -o blip.exe main.v                  # the CLI
+v -cc gcc -o blip.exe blip.v                  # the CLI
 .\blip.exe examples\01_basics.lip
 
-v -cc gcc -path 'vlib|@vlib' -o tools\tail.exe tests\tail_calls.v && .\tools\tail.exe
-v -cc gcc -path 'vlib|@vlib' -o tools\nt.exe   tests\non_tail.v   && .\tools\nt.exe
-v -cc gcc -path 'vlib|@vlib' -o tools\lf.exe   tests\loop_forms.v && .\tools\lf.exe
+v -cc gcc -o tools\tail.exe tests\tail_calls.v && .\tools\tail.exe
+v -cc gcc -o tools\nt.exe   tests\non_tail.v   && .\tools\nt.exe
+v -cc gcc -o tools\lf.exe   tests\loop_forms.v && .\tools\lf.exe
 
-v -cc gcc -path 'vlib|@vlib' -o reader_probe.exe reader_probe.v
+v -cc gcc -o reader_probe.exe reader_probe.v
 .\reader_probe.exe examples\*.lip
 ```
 
-All twenty-one suites must print no `FAIL` line and the reader probe must report zero
+All seventeen suites must print no `FAIL` line and the reader probe must report zero
 diagnostics. The runners do not set a non-zero exit code yet, which is why CI
 greps for `FAIL`.
 
-The twenty-one are: `tail_calls`, `non_tail`, `loop_forms`, `binding_forms`,
+The seventeen are: `tail_calls`, `non_tail`, `loop_forms`, `binding_forms`,
 `embedding`, `repl_golden`, `examples_run`, `programs_run`, `genprims`,
-`unit`, `api_coverage`, `emit_js`, `lsp`, `hostile`, `multi_use`,
-`value_to_datum`, `macros_gate`, `fibers`, `veb_bridge`, `embed_api`,
-`provenance`. (`CONTRIBUTING.md` said nine, then eleven, then twelve for
+`unit`, `emit_js`, `lsp`, `hostile`, `multi_use`, `value_to_datum`,
+`macros_gate`. (`CONTRIBUTING.md` said nine, then eleven, then twelve for
 a while after the rest were already in CI, which is the kind of drift this
 line exists to stop. The live list is the one in `.github/workflows/ci.yml`
 — if the two disagree, `ci.yml` wins.)
@@ -123,7 +115,7 @@ The site is generated. Do not edit anything in `site_out/` — it is rebuilt
 by `site/build.lip` on every pages deploy.
 
 ```sh
-v -cc gcc -path 'vlib|@vlib' -o blip.exe main.v
+v -cc gcc -o blip.exe blip.v
 .\blip.exe run site\build.lip
 ```
 

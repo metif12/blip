@@ -16,8 +16,8 @@ module main
 // if a future program does.
 
 import os
-import blip.host
-import blip.machine
+import vlib.blip.host
+import vlib.blip.machine
 
 struct Suite {
 mut:
@@ -71,35 +71,10 @@ fn (mut s Suite) check_program(label string, path string, want string) {
 	println('ok   ${label}')
 }
 
-// hello_world_output pins what the Brainfuck hello-world program prints:
-// the characters in order. Newlines are stripped before comparing, so the
-// check survives whatever newline policy `display` has -- one per character
-// today, none tomorrow -- while still catching a mistyped program or a
-// broken `.` command, which is what an output gate is for.
-fn (mut s Suite) hello_world_output() {
-	out := run_program('programs/brainfuck.lip') or {
-		s.fail('brainfuck hello world', err.msg())
-		return
-	}
-	// `display` shows runes as `#\H`, so those markers are stripped as well.
-	// Runes print as `#\H`, with names for the non-printing ones (`#\space`,
-	// `#\newline`), so those markers are stripped as well. What remains must
-	// be the greeting in order: a mistyped program or a broken `.` command
-	// cannot produce it, while a future printer that shows runes bare keeps
-	// this green.
-	flat := out.replace('\n', '').replace('\r', '').replace('#\\space', ' ').replace('#\\newline', '').replace('#\\', '')
-	if !flat.contains('Hello World') {
-		s.fail('brainfuck hello world', 'no Hello World in output:\n${out}')
-		return
-	}
-	println('ok   brainfuck hello world')
-}
-
 fn main() {
 	mut s := Suite{}
 
 	s.check_program('brainfuck', 'programs/brainfuck.lip', 'brainfuck ok')
-	s.hello_world_output()
 	s.check_program('json', 'programs/json.lip', 'json ok')
 	s.check_program('config', 'programs/config.lip', 'config ok')
 	s.check_program('csv_to_table', 'programs/csv_to_table.lip', 'csv ok')

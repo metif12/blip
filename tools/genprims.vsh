@@ -23,9 +23,10 @@
 //     proven paths, and untested template branches do not ship.
 //   * Generated files are never hand-edited. The header says how to regen,
 //     and --check enforces that the checked-in copy matches.
+
+import json2
 import os
 import strings
-import json2
 
 // ------------------------------------------------------------------ config
 
@@ -33,16 +34,16 @@ import json2
 // upstream reorganization fails here with a filename instead of silently
 // binding nothing) and the function names to take from them.
 struct GenTarget {
-	mod_name string
-	files    []string
-	fns      []string
+	module string
+	files  []string
+	fns    []string
 }
 
 const allowlist = [
 	GenTarget{
-		mod_name: 'math'
-		files:    ['floor.v', 'sin.v', 'log.v', 'exp.v', 'factorial.v']
-		fns:      ['floor', 'sin', 'cos', 'log', 'log10', 'log2', 'factorial', 'exp']
+		module: 'math'
+		files:  ['floor.v', 'sin.v', 'log.v', 'exp.v', 'factorial.v']
+		fns:    ['floor', 'sin', 'cos', 'log', 'log10', 'log2', 'factorial', 'exp']
 	},
 ]
 
@@ -64,104 +65,67 @@ mut:
 	params []Param
 }
 
-// ------------------------------------------------------------------ json
-//
-// `v ast -p` JSON is read with `json2.decode[Any]`: dynamic `Any` traversal
-// is exactly what an AST needs, since no static target type fits it. (The
-// minimal hand-written DOM this replaced existed because stock 0.5.2 had no
-// `json2`, and classic `json.decode` needs a static target type.)
-//
-// Master AST shape, verified against the running compiler: a top-level
-// `files` array; each file's `children` hold `fn_decl` nodes with the name in
-// `value` and the return type in `type`; parameters are `children` with
-// `kind == 'param'` (name in `value`, type in `type`). A method carries its
-// receiver as a `param` child with `op == 'dot'` and is skipped, because a
-// dotted name is not a plain function of the module. `is_pub` stays textual
-// (the AST carries no visibility flag): the source itself is asked.
-
-// jget reads one object member: a missing key or a non-object reads as
-// null, so every caller treats absence the same way the old DOM's -1 index
-// did -- silently absent, never a crash.
-fn jget(v json2.Any, key string) json2.Any {
-	if v is map[string]json2.Any {
-		return v[key] or { json2.null }
-	}
-	return json2.null
+fn node_map(n json2.Any) map[string]json2.Any {
+	return n.as_map()
 }
 
-fn jmap(v json2.Any) map[string]json2.Any {
-	if v is map[string]json2.Any {
-		return v
-	}
-	return {}
+fn child_list(n json2.Any) []json2.Any {
+	m := node_map(n)
+	return (m['children'] or { json2.Any('') }).as_array()
 }
 
-fn jarr(v json2.Any) []json2.Any {
-	if v is []json2.Any {
-		return v
-	}
-	return []
+fn field_str(n json2.Any, field string) string {
+	m := node_map(n)
+	return (m[field] or { json2.Any('') }).str()
 }
 
-fn jstr(m map[string]json2.Any, key string) string {
-	v := m[key] or { return '' }
-	if v is string {
-		return v
-	}
-	return ''
+fn field_bool(n json2.Any, field string) bool {
+	m := node_map(n)
+	return (m[field] or { json2.Any(false) }).bool()
 }
 
-fn jbool(m map[string]json2.Any, key string) bool {
-	v := m[key] or { return false }
-	if v is bool {
-		return v
-	}
-	return false
-}
+// collect_sigs returns every fn_decl in one `v ast -p` document: name,
+// params in order, return type string. Bodies are ignored by construction --
+// only `param` children are read.
 
-// collect_sigs reads every top-level fn_decl in one `v ast -p` document:
-// short name, return type string, params in order. The master AST nests
-// declarations: `files` hold `children`, and a method carries its receiver
-// as a `param` child with `op == 'dot'` -- skipped here rather than later,
-// because its dotted name would otherwise read as a plain function of the
-// module.
-fn collect_sigs(root json2.Any) []Sig {
-	mut out := []Sig{}
-	for f in jarr(jget(root, 'files')) {
-		for n in jarr(jget(f, 'children')) {
-			m := jmap(n)
-			if jstr(m, 'kind') != 'fn_decl' {
-				continue
-			}
-			nm := jstr(m, 'value')
-			if nm == '' {
-				continue
-			}
-			mut s := Sig{
-				name: nm
-				ret:  jstr(m, 'type')
-			}
-			mut is_method := false
-			for c in jarr(jget(n, 'children')) {
-				cm := jmap(c)
-				if jstr(cm, 'kind') != 'param' {
-					continue
-				}
-				if jstr(cm, 'op') == 'dot' {
-					is_method = true
-					break
-				}
-				s.params << Param{
-					name:   jstr(cm, 'value')
-					typ:    jstr(cm, 'type')
-					is_mut: jbool(cm, 'is_mut')
-				}
-			}
-			if is_method {
-				continue
-			}
-			out << s
+fn collect_fns(n json2.Any, mut out []Sig, depth int) {
+	if depth > 50 {
+		return
+	}
+	m := node_map(n)
+	kind := (m['kind'] or { json2.Any('') }).str()
+	if kind == 'fn_decl' {
+		mut s := Sig{
+			name:   field_str(n, 'value')
+			ret:    field_str(n, 'type')
+			params: []
 		}
+		for c in child_list(n) {
+			if field_str(c, 'kind') != 'param' {
+				continue
+			}
+			s.params << Param{
+				name:   field_str(c, 'value')
+				typ:    field_str(c, 'type')
+				is_mut: field_bool(c, 'is_mut')
+			}
+		}
+		out << s
+	}
+	children := m['children'] or { json2.Any('') }
+	if children.str() == '' {
+		return
+	}
+	for c in children.as_array() {
+		collect_fns(c, mut out, depth + 1)
+	}
+}
+
+fn collect_sigs(doc json2.Any) []Sig {
+	mut out := []Sig{}
+	files := (doc.as_map()['files'] or { json2.Any('') }).as_array()
+	for f in files {
+		collect_fns(f, mut out, 0)
 	}
 	return out
 }
@@ -260,13 +224,13 @@ struct Emitted {
 	body     string
 }
 
-fn emit_fn(mod_name string, s Sig) Emitted {
-	pname := '${mod_name}-' + kebab(s.name)
+fn emit_fn(module string, s Sig) Emitted {
+	pname := '${module}-' + kebab(s.name)
 	decls, cargs := extract_lines(pname, s.params)
-	call := '${mod_name}.${s.name}(${cargs})'
+	call := '${module}.${s.name}(${cargs})'
 	mut sb := strings.new_builder(512)
-	sb.write_string('// ${pname} wraps ${mod_name}.${s.name}(${param_text(s)}) ${s.ret}.\n')
-	sb.write_string('fn prim_gen_${mod_name}_${s.name}(args []blip.Value) !blip.Value {\n')
+	sb.write_string('// ${pname} wraps ${module}.${s.name}(${param_text(s)}) ${s.ret}.\n')
+	sb.write_string('fn prim_gen_${module}_${s.name}(args []blip.Value) !blip.Value {\n')
 	sb.write_string('\tif args.len != ${s.params.len} {\n')
 	sb.write_string("\t\treturn error('${pname} expects ${s.params.len} argument(s), got \${args.len}')\n")
 	sb.write_string('\t}\n')
@@ -276,7 +240,7 @@ fn emit_fn(mod_name string, s Sig) Emitted {
 	return Emitted{
 		pname:    pname
 		vname:    s.name
-		sig_text: '${mod_name}.${s.name}(${param_text(s)}) ${s.ret}'
+		sig_text: '${module}.${s.name}(${param_text(s)}) ${s.ret}'
 		body:     sb.str()
 	}
 }
@@ -394,27 +358,27 @@ fn main() {
 	mut generated := map[string]string{}
 
 	for target in allowlist {
-		if only_module != '' && target.mod_name != only_module {
+		if only_module != '' && target.module != only_module {
 			continue
 		}
 		mut sigs := map[string]Sig{}
 		mut dupes := []string{}
 		for file in target.files {
-			path := os.join_path(vlib, target.mod_name) + os.path_separator + file
-			r := os.execute('"${@VEXE}" ast -p ${path}')
+			path := os.join_path(vlib, target.module) + os.path_separator + file
+			r := os.execute('"${@VEXE}" -w ast -p ${path}')
 			if r.exit_code != 0 && r.output.trim_space() == '' {
-				eprintln('genprims: v ast failed on ${target.mod_name}/${file}:')
+				eprintln('genprims: v ast failed on ${target.module}/${file}:')
 				eprintln(r.output)
 				eprintln('genprims: file moved upstream? update the allowlist files')
 				fails++
 				continue
 			}
-			root := json2.decode[json2.Any](r.output) or {
-				eprintln('genprims: bad ast json for ${path}')
+			doc := json2.decode[json2.Any](r.output) or {
+				eprintln('genprims: bad ast json for ${path}: ${err.msg()}')
 				fails++
 				continue
 			}
-			for s in collect_sigs(root) {
+			for s in collect_sigs(doc) {
 				if s.name in sigs {
 					dupes << s.name
 					continue
@@ -423,7 +387,7 @@ fn main() {
 			}
 		}
 		for d in dupes {
-			eprintln('genprims: ${target.mod_name}.${d} defined twice in the listed files; disambiguate the file list')
+			eprintln('genprims: ${target.module}.${d} defined twice in the listed files; disambiguate the file list')
 			fails++
 		}
 		mut fns := []Emitted{}
@@ -460,19 +424,19 @@ fn main() {
 			// Visibility is textual: the AST reports no pub flag, so the
 			// source itself is asked below. A private fn compiles nowhere
 			// as math.name from another module.
-			fns << emit_fn(target.mod_name, s)
+			fns << emit_fn(target.module, s)
 		}
 		// pub + collision checks need file sources; re-read cheaply.
 		mut pub_src := ''
 		for file in target.files {
-			pub_src += os.read_file(os.join_path(vlib, target.mod_name) + os.path_separator + file) or {
+			pub_src += os.read_file(os.join_path(vlib, target.module) + os.path_separator + file) or {
 				''
 			}
 		}
 		mut kept := []Emitted{}
 		for e in fns {
 			if !is_pub(pub_src, e.vname) {
-				eprintln('genprims: ${target.mod_name}.${e.vname} is not pub upstream; drop it from the allowlist')
+				eprintln('genprims: ${target.module}.${e.vname} is not pub upstream; drop it from the allowlist')
 				fails++
 				continue
 			}
@@ -493,21 +457,21 @@ fn main() {
 			return 0
 		})
 		mut sb := strings.new_builder(4096)
-		sb.write_string('// Code generated by tools/genprims.vsh from vlib/${target.mod_name} at ${ver}.\n')
+		sb.write_string('// Code generated by tools/genprims.vsh from vlib/${target.module} at ${ver}.\n')
 		sb.write_string('// DO NOT EDIT: rerun `v run tools/genprims.vsh` instead.\n')
-		sb.write_string('// Wired into the table by one line in table(): register_gen_${target.mod_name}(mut p).\n')
-		sb.write_string('module prims\n\nimport math\nimport blip\nimport blip.printer\n\n')
+		sb.write_string('// Wired into the table by one line in table(): register_gen_${target.module}(mut p).\n')
+		sb.write_string('module prims\n\nimport math\nimport vlib.blip\nimport vlib.blip.printer\n\n')
 		for e in kept {
 			sb.write_string(e.body + '\n')
 		}
-		sb.write_string('fn register_gen_${target.mod_name}(mut p map[string]blip.PrimFn) {\n')
+		sb.write_string('fn register_gen_${target.module}(mut p map[string]blip.PrimFn) {\n')
 		for e in kept {
-			sb.write_string("\tp['${e.pname}'] = prim_gen_${target.mod_name}_${e.vname}\n")
+			sb.write_string("\tp['${e.pname}'] = prim_gen_${target.module}_${e.vname}\n")
 		}
 		sb.write_string('}\n')
-		generated['vlib/blip/prims/gen_${target.mod_name}.v'] = sb.str()
+		generated['vlib/blip/prims/gen_${target.module}.v'] = sb.str()
 
-		println('== ${target.mod_name}: ${kept.len} prims, ${skipped.len} skipped, ${missing.len} missing')
+		println('== ${target.module}: ${kept.len} prims, ${skipped.len} skipped, ${missing.len} missing')
 		for e in kept {
 			println('   + ${e.pname}  (${e.sig_text})')
 		}
@@ -515,7 +479,7 @@ fn main() {
 			println('   - ${s}')
 		}
 		for m in missing {
-			eprintln('genprims: ${target.mod_name}.${m} not found in the AST; renamed upstream?')
+			eprintln('genprims: ${target.module}.${m} not found in the AST; renamed upstream?')
 			fails++
 		}
 		// Curation aid: convertible fns nobody allowlisted, so the sync

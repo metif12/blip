@@ -31,10 +31,10 @@ module main
  * the note in tests/tail_calls.v) and hide the actual assertion.
  */
 
-import blip
-import blip.machine
-import blip.printer
-import blip.reader
+import vlib.blip
+import vlib.blip.machine
+import vlib.blip.printer
+import vlib.blip.reader
 
 // Suite exists only because V script mode requires every definition to precede
 // every statement, so a module-level `mut fails := 0` would push the functions
@@ -202,12 +202,6 @@ fn main() {
 	s.check('rest alone', '(define (f . r) r) (f 1 2 3)', '(1 2 3)')
 	s.check('rest in a lambda', '((fn [a . r] r) 1 2 3)', '(2 3)')
 	s.check('rest in a let-bound lambda', '(let ([f (fn (a . r) (list a r))]) (f 1 2 3))', '(1 (2 3))')
-	// `λ` is the same form as `fn`, for Racket users: same vector params,
-	// same body, same implementation. It is an alias, not a second closure
-	// type, so it is tested where `fn` is tested rather than in its own file.
-	s.check('λ applies like fn', '((λ [x] (* x x)) 7)', '49')
-	s.check('λ closes over its scope', '(define (mk) (let ([n 41]) (λ [] (+ n 1)))) (define g (mk)) (g)', '42')
-	s.check('λ takes rest params', '((λ [a . r] r) 1 2 3)', '(2 3)')
 	// The rest list is a real list, so it composes with the rest of the library.
 	s.check('rest is a list', '(define (f . r) (cdr r)) (f 1 2 3)', '(2 3)')
 	// `rest` is an ordinary name unless a dot introduces it. A magic-name

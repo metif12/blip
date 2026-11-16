@@ -20,6 +20,7 @@ module blip
 //     rejected as "cannot be assigned outside unsafe". So environments are
 //     referenced by i32 index into an arena, which sidesteps the question and
 //     matches how the datum arena already works.
+
 import strconv
 
 @[flag]
@@ -81,14 +82,9 @@ pub fn (p &StringPayload) payload_tag() Tag {
 	return p.tag
 }
 
-// Pair, Vector and Table are @[heap]: their mutators run through a `&T`
-// receiver, and the compiler only permits the `mut` copy that makes the
-// write legal when the struct is heap-allocated (see below).
-@[heap]
 pub struct Pair {
 pub:
 	tag Tag
-pub mut:
 	car Value
 	cdr Value
 }
@@ -97,11 +93,9 @@ pub fn (p &Pair) payload_tag() Tag {
 	return p.tag
 }
 
-@[heap]
 pub struct Vector {
 pub:
-	tag Tag
-pub mut:
+	tag  Tag
 	data []Value
 }
 
@@ -111,11 +105,9 @@ pub fn (v &Vector) payload_tag() Tag {
 
 // Table is an immutable string-keyed map. A buffer uses the same payload with a
 // different tag, so `get`/`put` serve both and mutability is visible in the tag.
-@[heap]
 pub struct Table {
 pub:
-	tag Tag
-pub mut:
+	tag    Tag
 	values map[string]Value
 }
 
@@ -212,57 +204,56 @@ pub fn (t &Table) has(k string) bool {
 	return k in t.values
 }
 
-// Mutators take `&Vector`/`&Table`. A `&T` receiver is immutable in V, so the
-// write goes through a `mut` copy of the reference inside `unsafe` (allowed
-// because the payloads are heap structs). They live here rather than in
-// prims because the struct is declared here, and prims cannot reach
+// Mutators take `&Vector`/`&Table` and need `unsafe`, because a `&T` receiver is
+// immutable in V and these deliberately mutate the shared payload. They live here
+// rather than in prims because the struct is declared here, and prims cannot reach
 // through an immutable reference to a field of another module's struct.
+//
+// `mut v Vector` is NOT accepted as an alternative on V 0.5.2 for a receiver that
+// is only ever obtained from a `&Vector`: the checker rejects the pair of methods
+// with "use (mut v Vector) or (v &Vector) instead of (mut v &Vector)" and then
+// rejects the mutation itself. The `unsafe` is the shape that compiles.
 pub fn (v &Vector) set_at(i int, val Value) {
 	unsafe {
-		mut w := v
-		w.data[i] = val
+		v.data[i] = val
 	}
 }
 
 pub fn (v &Vector) push(val Value) {
 	unsafe {
-		mut w := v
 		// `.clone()` and not a straight assignment: V treats `mut d := v.data` on an
 		// immutable receiver as aliasing, and rejects it. Cloning is CORRECT here
 		// rather than a copy that breaks sharing, because every accessor reads
 		// `v.data` again -- nothing else holds the old slice descriptor.
-		mut d := w.data.clone()
+		mut d := v.data.clone()
 		d << val
-		w.data = d
+		v.data = d
 	}
 }
 
 pub fn (v &Vector) pop() Value {
 	unsafe {
-		mut w := v
-		mut d := w.data.clone()
+		mut d := v.data.clone()
 		last := d[d.len - 1]
 		d = d[..d.len - 1]
-		w.data = d
+		v.data = d
 		return last
 	}
 }
 
 pub fn (t &Table) set_at(k string, val Value) {
 	unsafe {
-		mut tt := t
-		mut m := tt.values
+		mut m := t.values
 		m[k] = val
-		tt.values = m
+		t.values = m
 	}
 }
 
 pub fn (t &Table) delete_at(k string) {
 	unsafe {
-		mut tt := t
-		mut m := tt.values
+		mut m := t.values
 		m.delete(k)
-		tt.values = m
+		t.values = m
 	}
 }
 
@@ -275,39 +266,6 @@ pub mut:
 	i       i64
 	f       f64
 	payload Payload
-	// Origin travels with the value, independently of its payload and equality.
-	origin SourceLocation
-}
-
-// SourceLocation identifies the expression that produced a value. Lines and
-// columns are 1-based; offsets are a half-open range of UTF-8 bytes. A zero
-// line means unknown (for example a value supplied by a host).
-pub struct SourceLocation {
-pub:
-	file  string
-	line  int
-	col   int
-	start int
-	end   int
-}
-
-pub fn (v Value) source_location() ?SourceLocation {
-	if v.origin.line == 0 {
-		return none
-	}
-	return v.origin
-}
-
-// with_origin preserves an existing origin: looking up a setting keeps its
-// defining expression rather than replacing it with the lookup location.
-pub fn (v Value) with_origin(origin SourceLocation) Value {
-	if v.origin.line > 0 || origin.line == 0 {
-		return v
-	}
-	return Value{
-		...v
-		origin: origin
-	}
 }
 
 // ---- constructors ----------------------------------------------------------
@@ -455,136 +413,75 @@ pub fn buffer(m map[string]Value) Value {
 	}
 }
 
-// ---- erased annotations (M10) ------------------------------------------------
-//
-// `(define (add (x int) (y int)) int ...)` annotates without checking at run
-// time: the machine erases every annotation, and `blip check` is the
-// separate command that reports mismatches. The vocabulary lives here so the
-// machine (which erases), the emitter (which erases), and the checker (which
-// verifies) cannot disagree on what names a type.
-//
-// `any` is the top type: an unannotated parameter, an unknown literal, or a
-// call the checker has no signature for. It unifies with everything, which is
-// what keeps the checker quiet rather than wrong.
-pub const type_names = ['int', 'float', 'string', 'bool', 'any']
-
-pub fn is_type_name(s string) bool {
-	return s in type_names
-}
-
-// type_compatible reports whether a value known to have type `have` may flow
-// into a position declared `want`. Unknown on either side is agreement, not
-// conflict: the checker only speaks when both sides are known and differ.
-pub fn type_compatible(have string, want string) bool {
-	if have == 'any' || want == 'any' {
-		return true
-	}
-	return have == want
-}
-
 // ---- accessors -------------------------------------------------------------
 //
-// Every accessor type-checks, and reports the mismatch as a returned error
-// naming the accessor and the tag it met ("as_table: called on a integer,
-// not a table"). The error composes with `or`: prims and machine paths
-// propagate it, and the user sees an ordinary blip error -- never a dead
-// process. That is the whole contract with hostile input: a config file that
-// says something wrong must be answerable as an error.
-//
-// An earlier revision did this with a RECOVERABLE panic caught in the drive
-// loop's defer/recover net (V asserts are not catchable -- the process dies
-// with the printout and no defer can intercept). The 0.5.2 release has no
-// recover, so the check lives in the return type instead: every call site
-// ends in `or`, and the net is gone. Sites the tag-match above already
-// proves safe still spell the `or` out, with a panic naming the invariant;
-// if one ever fires it is a logic bug, and loud is correct.
-//
-// The payload itself is recovered with a smart cast, not `as`: stock 0.5.2
-// miscompiles `iface as &T` for an interface holding a `&T` (the cast
-// panics with "cannot cast `unknown`", while dispatch on the same value
-// works), and only `as T` -- a copy -- succeeds. The smart cast keeps the
-// live pointer, so in-place writers (push, set_at, with_tree_origin) still
-// reach the shared struct.
+// Every accessor type-checks, and does so with a RECOVERABLE panic rather
+// than an `assert`: V asserts are not catchable -- the process dies with the
+// printout and no defer can intercept -- while `panic(...)` unwinds to the
+// machine's drive loop, from which a wrong call reaches the user as an
+// ordinary error naming the accessor and the tag it met ("internal error:
+// as_table: called on a integer, not a table"). The distinction matters for
+// the configuration use case, where a program that says "wrong type" and
+// keeps going is usable and one that aborts is not.
 
 fn tag_name(t Tag) string {
 	return '${t}'.replace('Tag.', '')
 }
 
 @[inline]
-pub fn (v Value) as_int() !i64 {
+pub fn (v Value) as_int() i64 {
 	if v.tag != .integer && v.tag != .rune {
-		return error('as_int: called on a ${tag_name(v.tag)}, not an integer')
+		panic('as_int: called on a ${tag_name(v.tag)}, not an integer')
 	}
 	return v.i
 }
 
 @[inline]
-pub fn (v Value) as_float() !f64 {
+pub fn (v Value) as_float() f64 {
 	if v.tag != .float {
-		return error('as_float: called on a ${tag_name(v.tag)}, not a float')
+		panic('as_float: called on a ${tag_name(v.tag)}, not a float')
 	}
 	return v.f
 }
 
 @[inline]
-pub fn (v Value) as_bool() !bool {
+pub fn (v Value) as_bool() bool {
 	if v.tag != .boolean {
-		return error('as_bool: called on a ${tag_name(v.tag)}, not a boolean')
+		panic('as_bool: called on a ${tag_name(v.tag)}, not a boolean')
 	}
 	return v.i != 0
 }
 
-// string_payload recovers the string payload without `as`: narrowing to a
-// `&T` and touching the result in the same branch miscompiles on stock
-// 0.5.2 (an extra indirection in the generated C), while returning the
-// narrowed value through a helper keeps the live pointer intact.
-fn string_payload(p Payload) !&StringPayload {
-	if p is &StringPayload {
-		return p
-	}
-	return error('payload is not a string')
-}
-
 @[inline]
-pub fn (v Value) as_string() !string {
+pub fn (v Value) as_string() string {
 	if v.tag !in [.string, .symbol, .keyword, .primitive] {
-		return error('as_string: called on a ${tag_name(v.tag)}, not a string')
+		panic('as_string: called on a ${tag_name(v.tag)}, not a string')
 	}
-	sp := string_payload(v.payload) or { return error('as_string: payload is not a string') }
-	return sp.s
+	return (v.payload as &StringPayload).s
 }
 
 @[inline]
-pub fn (v Value) as_pair() !&Pair {
+pub fn (v Value) as_pair() &Pair {
 	if v.tag != .pair {
-		return error('as_pair: called on a ${tag_name(v.tag)}, not a pair')
+		panic('as_pair: called on a ${tag_name(v.tag)}, not a pair')
 	}
-	if v.payload is &Pair {
-		return v.payload
-	}
-	return error('as_pair: payload is not a pair')
+	return v.payload as &Pair
 }
 
 @[inline]
-pub fn (v Value) as_vector() !&Vector {
+pub fn (v Value) as_vector() &Vector {
 	if v.tag != .vector && v.tag != .array {
-		return error('as_vector: called on a ${tag_name(v.tag)}, not a vector')
+		panic('as_vector: called on a ${tag_name(v.tag)}, not a vector')
 	}
-	if v.payload is &Vector {
-		return v.payload
-	}
-	return error('as_vector: payload is not a vector')
+	return v.payload as &Vector
 }
 
 @[inline]
-pub fn (v Value) as_table() !&Table {
+pub fn (v Value) as_table() &Table {
 	if v.tag != .table && v.tag != .buffer {
-		return error('as_table: called on a ${tag_name(v.tag)}, not a table')
+		panic('as_table: called on a ${tag_name(v.tag)}, not a table')
 	}
-	if v.payload is &Table {
-		return v.payload
-	}
-	return error('as_table: payload is not a table')
+	return v.payload as &Table
 }
 
 pub fn struct_value(name string, fields []string, vals map[string]Value) Value {
@@ -599,14 +496,11 @@ pub fn struct_value(name string, fields []string, vals map[string]Value) Value {
 }
 
 @[inline]
-pub fn (v Value) as_struct() !&StructVal {
+pub fn (v Value) as_struct() &StructVal {
 	if v.tag != .struct_ {
-		return error('as_struct: called on a ${tag_name(v.tag)}, not a struct')
+		panic('as_struct: called on a ${tag_name(v.tag)}, not a struct')
 	}
-	if v.payload is &StructVal {
-		return v.payload
-	}
-	return error('as_struct: payload is not a struct')
+	return v.payload as &StructVal
 }
 
 // Only `#f` is false -- as in R5RS and Clojure. `0`, `""`, `nil`, `()` and
@@ -646,21 +540,11 @@ pub mut:
 	// set are O(1) in the frame size instead of a linear scan. Kept in sync
 	// with names/vals by define and set; never mutated by readers.
 	index map[string]int
-	// linear marks call frames: 1-3 params where a map allocation + N hashed
-	// inserts per call costs more than a linear scan per lookup. Lookup,
-	// define and set branch on this and never touch index for such frames,
-	// so behavior is identical with no map involved at all.
-	linear bool
 }
 
 pub struct EnvArena {
 pub mut:
 	frames []Env
-	// version bumps on every define/set, so a single-entry lookup cache can
-	// validate with one integer compare instead of re-walking the chain.
-	// It wraps on overflow; a wrap only causes a spurious miss, never a
-	// wrong hit, because the cached generation must match exactly.
-	version u64
 }
 
 pub fn (mut ea EnvArena) new_env(parent EnvId) EnvId {
@@ -669,25 +553,6 @@ pub fn (mut ea EnvArena) new_env(parent EnvId) EnvId {
 		names:  []string{}
 		vals:   []Value{}
 		index:  map[string]int{}
-	}
-	return EnvId(ea.frames.len - 1)
-}
-
-// new_frame builds a call frame in one shot: names/vals cloned pre-sized, no
-// map allocated, version bumped once. Call frames are marked linear (see Env):
-// 1-3 params where hashing costs more than scanning. Behavior is identical to
-// new_env + N defines: same names, same values, and the version is only ever
-// compared for equality by the lookup cache, so one bump invalidates exactly
-// like N bumps. The slices are cloned so the frame never aliases the
-// closure's params or the caller's args.
-pub fn (mut ea EnvArena) new_frame(parent EnvId, names []string, vals []Value) EnvId {
-	ea.version++
-	ea.frames << Env{
-		parent: parent
-		names:  names.clone()
-		vals:   vals.clone()
-		index:  map[string]int{}
-		linear: true
 	}
 	return EnvId(ea.frames.len - 1)
 }
@@ -701,19 +566,6 @@ pub fn (ea &EnvArena) get(id EnvId) &Env {
 
 pub fn (mut ea EnvArena) define(id EnvId, name string, val Value) {
 	mut frame := ea.get(id)
-	ea.version++
-	if frame.linear {
-		// Call frames stay map-free: scan, update in place or append.
-		for i := 0; i < frame.names.len; i++ {
-			if frame.names[i] == name {
-				frame.vals[i] = val
-				return
-			}
-		}
-		frame.names << name
-		frame.vals << val
-		return
-	}
 	if name in frame.index {
 		idx := frame.index[name]
 		frame.vals[idx] = val
@@ -728,13 +580,7 @@ pub fn (mut ea EnvArena) lookup(id EnvId, name string) ?Value {
 	mut cur := id
 	for cur != no_env {
 		frame := ea.get(cur)
-		if frame.linear {
-			for i := frame.names.len - 1; i >= 0; i-- {
-				if frame.names[i] == name {
-					return frame.vals[i]
-				}
-			}
-		} else if name in frame.index {
+		if name in frame.index {
 			idx := frame.index[name]
 			return frame.vals[idx]
 		}
@@ -749,18 +595,9 @@ pub fn (mut ea EnvArena) set(id EnvId, name string, val Value) bool {
 	mut cur := id
 	for cur != no_env {
 		mut frame := ea.get(cur)
-		if frame.linear {
-			for i := 0; i < frame.names.len; i++ {
-				if frame.names[i] == name {
-					frame.vals[i] = val
-					ea.version++
-					return true
-				}
-			}
-		} else if name in frame.index {
+		if name in frame.index {
 			idx := frame.index[name]
 			frame.vals[idx] = val
-			ea.version++
 			return true
 		}
 		cur = frame.parent
@@ -860,14 +697,11 @@ pub fn labelled(params []string, body NodeId, env EnvId, name string, opt_from i
 }
 
 @[inline]
-pub fn (v Value) as_closure() !&Closure {
+pub fn (v Value) as_closure() &Closure {
 	if v.tag != .closure {
-		return error('as_closure: called on a ${tag_name(v.tag)}, not a closure')
+		panic('as_closure: called on a ${tag_name(v.tag)}, not a closure')
 	}
-	if v.payload is &Closure {
-		return v.payload
-	}
-	return error('as_closure: payload is not a closure')
+	return v.payload as &Closure
 }
 
 // PrimFn takes only its arguments, deliberately: if it took the machine, this

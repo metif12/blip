@@ -40,8 +40,7 @@ A V function `veb_handler(req veb.Request) veb.Response` that:
 4. Converts the response Value back to a veb.Response.
 5. Parks the fiber again.
 
-The bridge lives in `vlib/blip/machine/veb_bridge.v` (implemented there; the
-earlier draft said `vlib/blip/host/veb_bridge.v`). It needs:
+The bridge lives in `vlib/blip/host/veb_bridge.v` (new). It needs:
 - `veb_to_value(req)` — V request -> blip.Value (a table of fields)
 - `value_to_veb(resp)` — blip.Value -> V response
 - `parked_fiber` — the machine + fiber handle the bridge resumes
@@ -66,10 +65,10 @@ bridge function for that path.
 
 1. Fiber support in the machine (suspend/resume) — gated by a new test
    `tests/fibers.v` that proves a `yield` round-trips a value.
-2. `veb_to_value` / `value_to_veb` in machine/veb_bridge.v.
+2. `veb_to_value` / `value_to_veb` in host/veb_bridge.v.
 3. `veb-route` primitive + a parked machine.
 4. A tiny V server example that routes one request through blip. (Done:
-   `programs/veb_server.v` routes seven pages through blip handlers.)
+   `programs/veb_server.v` routes three pages through blip handlers.)
 5. The site itself served by blip handlers (replaces the static `build.lip`
    output for dynamic content).
 

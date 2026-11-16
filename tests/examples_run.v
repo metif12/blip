@@ -4,9 +4,9 @@ module main
 //
 // The examples are the specification. Each one ends with a marker line --
 // "basics ok", "data ok", "match ok", "errors ok", "pipelines ok",
-// "modules ok", "config ok" -- and the `;=>` comments along the way record what each form
+// "modules ok" -- and the `;=>` comments along the way record what each form
 // is supposed to produce. This file runs them and asserts the markers, which
-// is the cheapest gate that catches a regression in any of the seven.
+// is the cheapest gate that catches a regression in any of the six.
 //
 // The output is captured through the machine's own `out` slice rather than
 // through the host, so the test does not depend on stdout being line-buffered
@@ -17,9 +17,9 @@ module main
 // suite is that each example stands alone.
 
 import os
-import blip
-import blip.host
-import blip.machine
+import vlib.blip
+import vlib.blip.host
+import vlib.blip.machine
 
 struct Suite {
 mut:
@@ -38,14 +38,14 @@ fn (mut s Suite) fail(label string, msg string) {
 // only serves files that have been put into it, so the library is read from
 // disk here and handed over.
 //
-// The module files examples/lib/*.blip are loaded too, because 06_modules
+// The module files examples/lib/*.vl are loaded too, because 06_modules
 // requires them and `require` goes through the host.
 fn run_example(path string) !string {
 	src := os.read_file(path) or {
 		return error('cannot read ${path}')
 	}
 	h := host.new_capture()
-	for f in ['lib/std.lip', 'examples/lib/geometry.blip', 'examples/lib/text.blip'] {
+	for f in ['lib/std.lip', 'examples/lib/geometry.vl', 'examples/lib/text.vl'] {
 		body := os.read_file(f) or {
 			return error('cannot read ${f}')
 		}
@@ -83,9 +83,9 @@ fn (mut s Suite) check_example(label string, path string, want string) {
 fn main() {
 	mut s := Suite{}
 
-	// The seven examples, in the order they are meant to be read. Each one builds
+	// The six examples, in the order they are meant to be read. Each one builds
 	// on the previous: 01 is the language, 02 is data, 03 is match, 04 is
-	// errors, 05 is macros and pipes, 06 is modules, 07 is config.
+	// errors, 05 is macros and pipes, 06 is modules.
 	s.check_example('01_basics', 'examples/01_basics.lip', 'basics ok')
 	s.check_example('02_data', 'examples/02_data.lip', 'data ok')
 	s.check_example('03_match', 'examples/03_match.lip', 'match ok')

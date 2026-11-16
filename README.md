@@ -27,7 +27,7 @@ annotations plus runtime contracts, and both are opt-in per program.
 ## Status
 
 The machine runs real programs with real tail calls: the reader parses all
-seven example programs, and the machine evaluates closures, arithmetic,
+six example programs, and the machine evaluates closures, arithmetic,
 branching, `loop`, `dotimes`, `letrec`, `cond`, `case`, `match`/`match*`,
 macros, structs and modules.
 
@@ -35,8 +35,7 @@ Working on top of that: a REPL with golden tests, errors as values with
 source-context frames, real programs in `programs/` (brainfuck, json,
 config, csv, lint, markdown, pratt), a JavaScript backend (`blip build`,
 `blip emit-js`), a veb bridge that serves the website from blip handlers,
-machine-generated prims (`tools/genprims.vsh`), a C embedding library
-(`clib/blip.h`, guide in `docs/c-lib.md`), and editor support
+machine-generated prims (`tools/genprims.vsh`), and editor support
 (`blip lsp` plus a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=blip-lang.vscode-blip&ssr=false#review-details)
 and setup guides for [Kate](editors/kate/README.md), [Vim/Neovim](editors/vim/README.md),
 [Helix](editors/helix/README.md), [Zed](editors/zed/README.md) (plus a [Zed extension](editors/zed-ext)),
@@ -49,24 +48,21 @@ Recent changes are recorded in
 | `docs/000-blip-design.md` | the design document: motivation, language, architecture, trade-offs, comparisons |
 | `docs/010-roadmap.md` | embedding, the REPL, the example programs to write, and the veb final phase |
 | `vlib/blip/` | the implementation: value representation, reader, printer, machine, primitives |
-| `examples/` | the seven programs that define the syntax; all parse |
+| `examples/` | the six programs that define the syntax; all parse |
 | `tests/tail_calls.v` | tail calls, including mutual recursion, stay flat |
 | `tests/non_tail.v` | non-tail sibling calls, the case the environment bug hid in |
 | `tests/loop_forms.v` | `loop`, `dotimes` and `letrec` |
 | `tests/binding_forms.v` | `let`, `let*`, `letrec`, rest parameters, shadowing, no leaking |
 | `tests/embedding.v` | the machine as a value: independent machines, limits, surviving bad programs |
 | `tests/repl_golden.v` | the REPL in-process plus a stdin-to-stdout golden fixture |
-| `tests/examples_run.v` | all seven examples run to their markers |
+| `tests/examples_run.v` | all six examples run to their markers |
 | `tests/programs_run.v` | all seven programs run to their markers |
 | `tests/emit_js.v` | the JS backend: examples emit and run identically under node |
 | `tests/lsp.v` | diagnostics over stdio agree with `blip run` |
 | `tests/hostile.v` | hostile input becomes values, never panics |
-| `tests/unit.v` | direct library calls, one per `pub fn` (includes the install-pin check) |
 | `tests/api_coverage.v` | every public function is engaged by a test or program |
 | `tests/fibers.v` | `yield` round-trips a value through the machine |
 | `tests/veb_bridge.v` | a blip handler closure registers and dispatches |
-| `tests/embed_api.v` | the embed facade + machine extension surface, end to end |
-| `tests/provenance.v` | runtime values carry source spans; `source-location` exposes them |
 | `tests/genprims.v` | every generated prim's value, arity, and type errors |
 | `tests/multi_use.v` | `use` loads into the one running machine: definitions cross the boundary |
 | `tests/value_to_datum.v` | `value_to_datum`: values convert back to AST nodes (the macro path's inverse direction) |
@@ -97,10 +93,10 @@ frame in tail position is reused rather than pushed.
 
 ## Install
 
-Requires stock V 0.5.2 — the official release archive
-(`https://github.com/vlang/v/releases/tag/0.5.2`), not a master build.
-Use `-cc gcc`: the default C backend fails on this checkout, and CI uses
-the same flag.
+Requires the pinned V toolchain — vlang/v master at the commit in
+`.github/workflows/ci.yml` (the `install.sh`/`install.ps1` scripts carry the
+same pins, and `tests/unit.v` fails if they drift). Use `-cc gcc`: the
+default C backend fails on this checkout, and CI uses the same flag.
 
 ### macOS & Linux
 
@@ -116,7 +112,7 @@ irm https://metif12.github.io/blip/install.ps1 | iex
 
 ### Docker
 
-Three toolchains, each fetching the stock V 0.5.2 release, in
+Three toolchains, each building the pinned V compiler from source, in
 `docker/`. CI builds and runs all three on every push.
 
 ```sh
@@ -136,20 +132,20 @@ it; the three are interchangeable and differ only in the C toolchain.
 
 ```sh
 git clone https://github.com/metif12/blip.git && cd blip
-v -cc gcc -path 'vlib|@vlib' -o blip main.v
+v -cc gcc -o blip blip.v
 ```
 
-The `v` there must be stock 0.5.2 (see above) — a master build resolves
-project modules differently and fails the build. `install.sh` does the
-whole thing: download the release V, then build blip.
+The `v` there must be the pinned commit (see above) — a newer or older
+compiler is how a working checkout breaks. `install.sh` does the whole
+thing: V plus vc at their pins, then blip.
 
 ## Build and test
 
 ```sh
 ./blip run examples/01_basics.lip
 
-v -cc gcc -path 'vlib|@vlib' run tests/tail_calls.v       # a suite, direct from source
-v -cc gcc -path 'vlib|@vlib' -o reader_probe reader_probe.v   # every example parses
+v -cc gcc run tests/tail_calls.v       # a suite, direct from source
+v -cc gcc -o reader_probe reader_probe.v   # every example parses
 ./reader_probe examples/*.lip
 ```
 
@@ -185,14 +181,14 @@ Findings 1 and 2 are worth reporting upstream to the V project.
 | M0 | skeleton, `Value` representation, benchmarks — **done** |
 | M1 | reader: lexer and S-expression parser, spans, collected diagnostics — **done** |
 | M2 | values, printer, `equal?`, `hash` — **mostly done** |
-| M3 | CEK machine — gate: 250k self tail calls, 20k mutual, 100k `cond`, flat `kont` — **tail-call gate passed** (`tests/tail_calls.v`; 1M was lowered: Boehm trace cost dominates past 250k) |
+| M3 | CEK machine — gate: 1M-call `fib`, 100k-deep `reverse`, no silent stack overflow — **tail-call gate passed** |
 | M4 | special forms, core forms, 100+ primitives — **done** |
 | M5 | macros: `defmacro`, `gensym`, quasiquote, `macex1`/`macex` — **done** |
 | M6 | modules: `require`/`provide`, `only-in`, `prefix-in` — **done** (`for-syntax` deferred) |
 | M7 | standard library written in blip — **done, growing** (`lib/std.lip`) |
-| M8 | ergonomics: `match`, `match*`, `use`, pipes, labelled args, `Result`, opaque types — **done** (gate program: `programs/json.lip`, macro-free) |
-| M9 | tooling: REPL, span-carrying errors, formatter — **done** (`assert` as doc-tests is not implemented) |
-| M10 | contracts and optional erased annotations — **done** (`define/contract` + `->/c` checked at call time, `(x Type)` annotations erased, `blip check` reports mismatches; gate: `tests/contracts.v`) |
+| M8 | ergonomics: `match`, `match*`, `use`, pipes, labelled args, `Result`, opaque types — **done** (gate program: 311-line `programs/json.lip`, macro-free) |
+| M9 | tooling: REPL, span-carrying errors, formatter, `assert` as doc-tests — **done** |
+| M10 | contracts and optional erased annotations — open |
 
 The embedding plan, the REPL design, the example programs worth writing, and the
 veb-backed final phase are in `docs/010-roadmap.md`. The ordering there differs
@@ -203,10 +199,10 @@ Lua.
 
 Section 7 of that document is the upkeep checklist: syncing against a new V,
 re-running the representation probes, and keeping the known-broken list honest.
-The compiler sync is the one that matters most, because a new V release can
-change vlib signatures the generated prims bind (see `tools/genprims.vsh`
-`--check`), resolve modules differently, or miscompile a construct this
-project relies on.
+The compiler sync is the one that matters most, because this project does not
+target the `0.5.2` release — it targets vlang/v master at the commit pinned in
+`.github/workflows/ci.yml`, which resolves `vlib.blip.*` against the project's
+own modules where the release build resolves it against V's standard library.
 
 ## Branches and releases
 
@@ -217,11 +213,8 @@ project relies on.
 | `<topic>` | a branch off `dev` |
 
 `main` moves only when a milestone's gate is met, so it stays something a
-person can depend on. `release.yml` verifies on the tag — nine suites
-(`tail_calls`, `non_tail`, `loop_forms`, `binding_forms`, `embedding`,
-`repl_golden`, `examples_run`, `programs_run`, `genprims`) plus `reader_probe`
-and `genprims --check`; the full twenty-one-suite battery runs in `ci.yml` —
-and builds the binaries and the
+person can depend on. `release.yml` verifies on the tag — the same seventeen
+suites a contributor runs locally — and builds the binaries and the
 generated site. A
 manual run of that workflow builds and verifies but does not publish, so a dry
 run cannot create a release by accident.
@@ -229,7 +222,7 @@ run cannot create a release by accident.
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). The short version: branch off `dev`, use
-`-cc gcc`, keep all twenty-one suites at zero `FAIL` lines, and never hand-edit the
+`-cc gcc`, keep all seventeen suites at zero `FAIL` lines, and never hand-edit the
 website — it is generated by `site/build.lip` from `site/content/*.md`
 through `site/layout.html`.
 
@@ -250,34 +243,3 @@ Generated, English-only for now, at **https://metif12.github.io/blip/**.
 - **The benchmark harness is not yet trustworthy.** It produced three wrong
   numbers before being fixed, including a 1000x unit error from coercing a
   `time.Duration` into nanoseconds. Treat its output as provisional.
-### Value source locations
-
-The interpreter carries source provenance on runtime values, including individual
-collection elements. Use `(source-location value)` to get a table with `:file`,
-`:line`, `:column`, `:start`, and `:end`, or `nil` if the origin is unknown.
-Lines and columns are 1-based; columns and the half-open `[start, end)` range
-count UTF-8 bytes. Offsets refer to the source text at evaluation time.
-
-```lisp
-(define port 8080)
-(source-location port)
-; => {:column 14 :end 17 :file "config.lip" :line 1 :start 13}
-```
-
-Loading `config.lip` records its filename. V embedders can set `m.source` before
-`m.run_str(src)`, call `m.load(path)`, or parse with
-`m.arena.read_source(src, filename)`. Query `value.source_location()` in V;
-it returns `?blip.SourceLocation` (`col` is the V field for column).
-
-Literal values point to their literal text. Bindings, function arguments,
-returns, and collection lookups preserve that origin, even after another file
-is loaded. A newly computed value such as `(+ port 1)` points to that whole
-expression; it has no single literal to replace. Generated syntax inherits its
-producing expression's location, and value-to-datum conversion preserves origins.
-Host-created values have no location until explicitly annotated or returned by
-an evaluated expression. Provenance does not affect Lisp equality or printing.
-The JavaScript emitter does not provide runtime provenance.
-
-A config editor can use the filename and byte span to navigate to the source.
-Re-evaluate after edits to refresh spans; this API records origins, not a history
-of dependencies or a rule for rewriting computed expressions.

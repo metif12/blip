@@ -1,9 +1,9 @@
 module main
 
-import blip
-import blip.machine
-import blip.printer
-import blip.reader
+import vlib.blip
+import vlib.blip.machine
+import vlib.blip.printer
+import vlib.blip.reader
 
 fn check(label string, src string, want string) {
 	res := reader.read_all(src)

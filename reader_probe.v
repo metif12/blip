@@ -10,8 +10,8 @@ module main
 // explicit stack is not worse here -- it is what the CEK machine will do anyway.
 
 import os
-import blip
-import blip.reader
+import vlib.blip
+import vlib.blip.reader
 
 struct Frame {
 	id    reader.NodeId
