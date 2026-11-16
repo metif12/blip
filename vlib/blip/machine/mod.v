@@ -2110,10 +2110,10 @@ fn (mut m Machine) eval_special(name string, id blip.NodeId, kids []blip.NodeId)
 			m.goto(m.transform_cond(kids))
 		}
 		'case' {
-			if kids.len < 2 {
-				return error('case needs a subject: (case x [(1) one] ...)')
-			}
-			m.goto(m.transform_case(kids))
+			// Removed in v2 (roadmap A2): literal-`match` does the same job
+			// with destructuring. Recipe: (case X [(a b) v] ...)
+			// becomes (match X [(list a b) v] ...).
+			return error('`case` was removed in v2; use `match` with literal patterns')
 		}
 		'loop' {
 			if kids.len < 2 {

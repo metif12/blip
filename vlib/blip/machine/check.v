@@ -354,20 +354,7 @@ fn (mut m Machine) check_form(id blip.NodeId, env map[string]string, ret string,
 			return 'any'
 		}
 		'case' {
-			if args.len == 0 {
-				return 'any'
-			}
-			m.check_form(args[0], env, ret, sigs, mut diags)
-			for c in args[1..] {
-				if m.arena.node(c).tag != .list {
-					continue
-				}
-				ck := m.arena.kids(c)
-				// ck[0] is the datum list -- data, not a call.
-				for b in ck[1..] {
-					m.check_form(b, env, ret, sigs, mut diags)
-				}
-			}
+			m.check_diag(id, '`case` was removed in v2; use `match` with literal patterns', mut diags)
 			return 'any'
 		}
 		'match', 'match*' {

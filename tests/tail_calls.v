@@ -80,7 +80,21 @@ fn main() {
 	check('when-false', '(when #f 1)', 'nil')
 	check('unless', '(unless #f 2)', '2')
 	check('cond-arrow', '(cond [(= 1 2) => (fn [] 0)] [else 7])', '7')
-	check('case', '(case 5 [(1 2) 10] [(4 5 6) 20] [else 30])', '20')
+	{
+		// `case` is gone in v2 (roadmap A2): the machine refuses with a
+		// migration message, and this pins the message, not just failure.
+		res_case := reader.read_all('(case 5 [(1 2) 10])')
+		mut m_case := machine.new_machine(&res_case.arena)
+		if _ := m_case.run(res_case.forms) {
+			println('FAIL case-removed: expected a removal error, ran clean')
+		} else {
+			if err.msg().contains('removed in v2') {
+				println('ok   case-removed => removed in v2')
+			} else {
+				println('FAIL case-removed: wrong error: ${err.msg()}')
+			}
+		}
+	}
 	check('loop', '(loop i 0 (< i 5) (print i)) 7', '7')
 	check('dotimes', '(dotimes i 3 (print i)) 8', '8')
 	check('and-short', '(and 1 #f 3)', '#f')

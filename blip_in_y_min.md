@@ -152,10 +152,15 @@ million-deep countdown is a loop, not a crash:
       [(= x 2) 'two]
       [else 'other])
 
-(case x
-  [(1 2 3) 'low]
-  [(4 5 6) 'mid]
-  [else 'high])
+;; `case` is gone in v2: literal-`match` dispatches on values the same way.
+(match x
+  [1 'low]
+  [2 'low]
+  [3 'low]
+  [4 'mid]
+  [5 'mid]
+  [6 'mid]
+  [_ 'high])
 
 (and 1 2 3)        ;=> 3   (returns the deciding value, not a boolean)
 (or #f #f 7)       ;=> 7

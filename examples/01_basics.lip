@@ -121,11 +121,15 @@
       [(= 1 1) 'yes]
       [else 'unreachable])
 
-;; case dispatches on values, and uses = on integers
-(case 5
-  [(1 2 3) 'low]
-  [(4 5 6) 'mid']
-  [else 'high'])
+;; case is gone in v2: literal-match does the same job with destructuring.
+(match 5
+  [1 'low]
+  [2 'low]
+  [3 'low]
+  [4 'mid']
+  [5 'mid']
+  [6 'mid']
+  [_ 'high'])
 
 ;; --- and / or return the deciding value, not a boolean ---
 (and 1 2 3)       ;=> 3

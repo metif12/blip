@@ -101,10 +101,16 @@ Bindings destructure, in `let` and in parameter position:
       [(= 1 1) 'yes]
       [else 'unreachable])               ;=> yes
 
-(case 5
-  [(1 2 3) 'low]
-  [(4 5 6) 'mid']
-  [else 'high])                          ;=> mid
+;; `case` is gone in v2: literal-`match` dispatches on values the same way,
+;; with destructuring where `case` had only data.
+(match 5
+  [1 'low]
+  [2 'low]
+  [3 'low]
+  [4 'mid']
+  [5 'mid']
+  [6 'mid']
+  [_ 'high])                            ;=> mid
 
 (and 1 2 3)       ;=> 3
 (or #f #f 7)      ;=> 7

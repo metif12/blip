@@ -378,11 +378,15 @@ fn (mut e Emitter) special(name string, id reader.NodeId, kids []reader.NodeId) 
 	// is what the statement path did -- produced `cond([...], [else, null])`,
 	// which is not JavaScript and not an error either: the file failed to parse
 	// at `else`, far from the form that caused it.
-	for derived in ['cond', 'when', 'unless', 'and', 'or', 'case'] {
+	for derived in ['cond', 'when', 'unless', 'and', 'or'] {
 		if name == derived {
 			e.emit('${e.value(id)};')
 			return true
 		}
+	}
+	if name == 'case' {
+		e.refuse('`case` was removed in v2; use `match` with literal patterns')
+		return true
 	}
 	// `->` and `->>` in statement position are the same expression followed by
 	// a semicolon. Without this a top-level threading form fell to the ordinary
@@ -1186,8 +1190,9 @@ fn (mut e Emitter) expression_form(name string, kids []reader.NodeId) ?string {
 		}
 		return '(${cond} ? ${then} : ${other})'
 	}
-	if name == 'case' && kids.len >= 2 {
-		return e.case_expr(kids)
+	if name == 'case' {
+		e.refuse('`case` was removed in v2; use `match` with literal patterns')
+		return 'null'
 	}
 	if name == 'begin' {
 		if kids.len <= 1 {

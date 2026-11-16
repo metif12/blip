@@ -384,10 +384,6 @@ fn (mut s Suite) machine_nodes() {
 	n4 := m.transform_cond(m.arena.kids(cond.forms[0]))
 	s.record('transform_cond returns a node', n4 > 0, 'node ${n4}')
 
-	cs := m.arena.read_forms('(case 1 ((1) 10))')
-	n5 := m.transform_case(m.arena.kids(cs.forms[0]))
-	s.record('transform_case returns a node', n5 > 0, 'node ${n5}')
-
 	lp := m.arena.read_forms('(loop ([i 0]) [i 10] i)')
 	n6 := m.transform_loop(m.arena.kids(lp.forms[0]))
 	s.record('transform_loop returns a node', n6 > 0, 'node ${n6}')
