@@ -1,6 +1,7 @@
 module machine
 
 import blip
+import blip.manifest
 
 // CtxPrimFn is a machine-aware primitive: like blip.PrimFn it takes args, but
 // it also gets the machine, so it can reach the host, the current env, gensym,
@@ -69,4 +70,51 @@ pub fn (mut m Machine) restrict_to(keep []string) []string {
 	removed.sort()
 	m.cache_ok = false
 	return removed
+}
+
+// feature_prims maps a manifest capability to the prim names it gates.
+// v2 knows two: `fs` (file IO) and `env` (environment). Fibers land with
+// Track B4; naming one before then is an unknown-feature error, not a
+// silent no-op -- a manifest must be exact, and a typo must fail.
+fn feature_prims(name string) ?[]string {
+	match name {
+		'fs' {
+			return ['read-file', 'write-file', 'file-exists?']
+		}
+		'env' {
+			return ['env']
+		}
+		else {
+			return none
+		}
+	}
+}
+
+// apply_manifest enforces a blip.mod's `(features ...)` stanza (roadmap E2).
+// A feature switched OFF removes its prims, so a later use fails cleanly
+// as `unbound identifier` rather than running. A feature switched ON (or
+// absent, which defaults ON) keeps them. An unknown feature is a hard
+// error naming the blip.mod line, because the manifest must be exact and
+// the capability does not exist to switch off.
+//
+// Precedence is manifest < embedder code: an explicit `restrict_to` or
+// `register_prim` after this call wins, so the file declares intent and
+// code keeps control. The manifest is stored on the machine for E2b
+// `blip check`, which names the manifest line in its diagnostic.
+pub fn (mut m Machine) apply_manifest(mf manifest.Manifest) ! {
+	for name in mf.features.keys() {
+		prims := feature_prims(name) or {
+			line := mf.feature_line(name)
+			if line > 0 {
+				return error("blip.mod:${line}: unknown feature '${name}' (known: env, fs)")
+			}
+			return error("blip.mod: unknown feature '${name}' (known: env, fs)")
+		}
+		if !mf.features[name] {
+			for p in prims {
+				m.unregister_prim(p)
+			}
+		}
+	}
+	m.applied_manifest = mf
 }

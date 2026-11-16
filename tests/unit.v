@@ -614,6 +614,53 @@ fn (mut s Suite) manifest() {
 		&& full.deps[0].req == '1.2.3' && full.deps[1].req == '>=0.9', '${full.deps.len} deps')
 	s.record('manifest workspace reads members', full.workspace == ['shop', 'web'],
 		full.workspace.str())
+	// Feature lines point at the `(name #t/#f)` entry (E2b names this line
+	// in its check diagnostic): two switches on line 3 record line 3 each,
+	// an absent feature records 0.
+	lined := manifest.parse('(module m)\n(blip 2)\n(features (fs #f) (env #t))') or {
+		s.record('manifest feature lines parse', false, err.msg())
+		return
+	}
+	s.record('manifest feature line tracks the entry', lined.feature_line('fs') == 3
+		&& lined.feature_line('env') == 3, 'fs=${lined.feature_line('fs')} env=${lined.feature_line('env')}')
+	s.record('manifest missing feature has no line', lined.feature_line('fibers') == 0
+		&& m.feature_line('fs') == 0, 'absent is 0')
+	// Coverage pins for long-standing public helpers the api_coverage gate
+	// requires to be named in the corpus (they predate E2a and would
+	// otherwise keep the gate red).
+	s.record('is_type_name knows int', blip.is_type_name('int'), 'int is a type')
+	s.record('is_type_name rejects nope', !blip.is_type_name('nope'), 'nope is not')
+	s.record('type_compatible same types', blip.type_compatible('int', 'int'), 'int flows to int')
+	s.record('type_compatible any agrees', blip.type_compatible('any', 'string')
+		&& !blip.type_compatible('int', 'string'), 'any unifies, int/string differ')
+	mut ea := blip.EnvArena{}
+	root := ea.new_env(blip.no_env)
+	fr := ea.new_frame(root, ['a'], [blip.integer(1)])
+	s.record('new_frame binds in a child', (ea.lookup(fr, 'a') or { blip.nil_value() }).as_int() or { -1 } == 1,
+		'a is 1 in the frame')
+	mut pa := reader.Arena{}
+	pid := pa.leaf(.sym)
+	pa.set_pos_origin(pid, 7, 8, blip.SourceLocation{
+		file: 'f.blip'
+		line: 7
+		col:  8
+	})
+	s.record('set_pos_origin stamps line and origin', pa.node(pid).line == 7
+		&& pa.node(pid).origin.file == 'f.blip', 'line 7 in f.blip')
+	mdir := os.join_path(os.vtmp_dir(), 'blip_ensure_mod_probe')
+	os.rmdir_all(mdir) or {}
+	os.mkdir_all(mdir) or { s.record('ensure_mod setup', false, err.msg()) }
+	st := migrate.ensure_mod(mdir, 2) or {
+		s.record('ensure_mod creates a manifest', false, err.msg())
+		''
+	}
+	s.record('ensure_mod creates a manifest', st == 'created', st)
+	st2 := migrate.ensure_mod(mdir, 2) or {
+		s.record('ensure_mod is idempotent', false, err.msg())
+		''
+	}
+	s.record('ensure_mod is idempotent', st2 == 'current', st2)
+	os.rmdir_all(mdir) or {}
 	for c in [
 		'(blip 2)',
 		'(module myapp)',

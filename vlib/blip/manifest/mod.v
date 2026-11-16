@@ -31,12 +31,18 @@ pub:
 
 pub struct Manifest {
 pub mut:
-	name         string
-	blip_version int
-	features     map[string]bool
-	deps         []Dep
-	workspace    []string
+	name          string
+	blip_version  int
+	features      map[string]bool
+	feature_lines map[string]int
+	deps          []Dep
+	workspace     []string
 }
+
+// feature_line names the blip.mod source line where a feature switch
+// was written, or 0 when the manifest never mentions it. `blip check`
+// (E2b) reports the manifest line rather than the use site, so a
+// disabled capability points at the switch that disabled it.
 
 // feature answers whether a capability is on. Absent means on: the
 // manifest only ever switches things OFF, so an old manifest without a
@@ -46,6 +52,13 @@ pub fn (m Manifest) feature(name string) bool {
 		return m.features[name]
 	}
 	return true
+}
+
+pub fn (m Manifest) feature_line(name string) int {
+	if name in m.feature_lines {
+		return m.feature_lines[name]
+	}
+	return 0
 }
 
 // parse reads a blip.mod source string into a Manifest, or returns the
@@ -58,7 +71,8 @@ pub fn parse(src string) !Manifest {
 		return error('blip.mod:${d.line}:${d.col}: ${d.msg}')
 	}
 	mut m := Manifest{
-		features: map[string]bool{}
+		features:      map[string]bool{}
+		feature_lines: map[string]int{}
 	}
 	mut seen := map[string]bool{}
 	for id in res.forms {
@@ -87,7 +101,7 @@ pub fn parse(src string) !Manifest {
 				m.blip_version = parse_version(&res.arena, id, kids)!
 			}
 			'features' {
-				m.features = parse_features(&res.arena, id, kids)!
+				m.features, m.feature_lines = parse_features(&res.arena, id, kids)!
 			}
 			'deps' {
 				m.deps = parse_deps(&res.arena, id, kids)!
@@ -133,8 +147,9 @@ fn parse_version(a &reader.Arena, id reader.NodeId, kids []reader.NodeId) !int {
 	return n
 }
 
-fn parse_features(a &reader.Arena, id reader.NodeId, kids []reader.NodeId) !map[string]bool {
+fn parse_features(a &reader.Arena, id reader.NodeId, kids []reader.NodeId) !(map[string]bool, map[string]int) {
 	mut out := map[string]bool{}
+	mut lines := map[string]int{}
 	for k in kids[1..] {
 		entry := a.kids(k)
 		if a.node(k).tag != .list || entry.len != 2 || a.node(entry[0]).tag != .sym
@@ -146,8 +161,9 @@ fn parse_features(a &reader.Arena, id reader.NodeId, kids []reader.NodeId) !map[
 			return error("${at(a, k)}: duplicate feature '${name}'")
 		}
 		out[name] = a.node(entry[1]).i != 0
+		lines[name] = a.node(k).line
 	}
-	return out
+	return out, lines
 }
 
 fn parse_deps(a &reader.Arena, id reader.NodeId, kids []reader.NodeId) ![]Dep {

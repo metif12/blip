@@ -29,6 +29,7 @@ module main
 import blip
 import blip.host
 import blip.machine
+import blip.manifest
 import blip.printer
 
 struct Suite {
@@ -331,6 +332,93 @@ fn (mut s Suite) the_host_supplies_input() bool {
 	return s.record('the host supplies input', true, 'one line, then end of input', '')
 }
 
+// E2a: a manifest with `fs` off removes the file prims, so a later use
+// fails cleanly as `unbound identifier` instead of running. The manifest
+// stays stored on the machine for E2b `blip check`.
+fn (mut s Suite) manifest_fs_off_disables_file_prims() bool {
+	_, mut m, _, _ := pair()
+	mf := manifest.parse('(module m)\n(blip 2)\n(features (fs #f))') or {
+		s.fail('fs off disables file prims', err.msg())
+		return false
+	}
+	m.apply_manifest(mf) or {
+		s.fail('fs off disables file prims', err.msg())
+		return false
+	}
+	if m.applied_manifest.feature('fs') {
+		s.fail('fs off disables file prims', 'stored manifest still has fs on')
+		return false
+	}
+	m.run_str('(read-file "x")') or {
+		if err.msg().contains('unbound identifier: read-file') {
+			return s.record('fs off disables file prims', true, 'read-file unbound after apply', '')
+		}
+		s.fail('fs off disables file prims', 'wrong error: ${err.msg()}')
+		return false
+	}
+	s.fail('fs off disables file prims', 'read-file still ran')
+	return false
+}
+
+fn (mut s Suite) manifest_env_off_disables_env() bool {
+	_, mut m, _, _ := pair()
+	mf := manifest.parse('(module m)\n(blip 2)\n(features (env #f))') or {
+		s.fail('env off disables env', err.msg())
+		return false
+	}
+	m.apply_manifest(mf) or {
+		s.fail('env off disables env', err.msg())
+		return false
+	}
+	m.run_str('(env "HOME")') or {
+		if err.msg().contains('unbound identifier: env') {
+			return s.record('env off disables env', true, 'env unbound after apply', '')
+		}
+		s.fail('env off disables env', 'wrong error: ${err.msg()}')
+		return false
+	}
+	s.fail('env off disables env', 'env still ran')
+	return false
+}
+
+// E2a: an unknown capability is a hard error naming the blip.mod line,
+// not a silent no-op. `fibers` does not exist until Track B4 lands.
+fn (mut s Suite) manifest_unknown_feature_errors() bool {
+	_, mut m, _, _ := pair()
+	mf := manifest.parse('(module m)\n(blip 2)\n(features (fibers #f))') or {
+		s.fail('unknown feature errors', err.msg())
+		return false
+	}
+	m.apply_manifest(mf) or {
+		if err.msg().contains('blip.mod:3') && err.msg().contains("unknown feature 'fibers'") {
+			return s.record('unknown feature errors', true, 'fibers refused at blip.mod:3', '')
+		}
+		s.fail('unknown feature errors', 'wrong error: ${err.msg()}')
+		return false
+	}
+	s.fail('unknown feature errors', 'apply accepted fibers')
+	return false
+}
+
+// E2a: a manifest with `fs` on keeps the file prims. `file-exists?`
+// answers a bool with no host setup, so it proves the prim survived.
+fn (mut s Suite) manifest_fs_on_keeps_file_prims() bool {
+	_, mut m, _, _ := pair()
+	mf := manifest.parse('(module m)\n(blip 2)\n(features (fs #t))') or {
+		s.fail('fs on keeps file prims', err.msg())
+		return false
+	}
+	m.apply_manifest(mf) or {
+		s.fail('fs on keeps file prims', err.msg())
+		return false
+	}
+	got := m.run_str('(file-exists? "no-such-blip-file")') or {
+		s.fail('fs on keeps file prims', err.msg())
+		return false
+	}
+	return s.record('fs on keeps file prims', text(got) == '#f', 'file-exists? answered #f', 'got ${text(got)}')
+}
+
 fn main() {
 	mut s := Suite{}
 	s.two_machines_are_independent()
@@ -346,6 +434,10 @@ fn main() {
 	s.a_step_limit_is_per_machine()
 	s.a_machine_survives_a_bad_program()
 	s.the_host_supplies_input()
+	s.manifest_fs_off_disables_file_prims()
+	s.manifest_env_off_disables_env()
+	s.manifest_unknown_feature_errors()
+	s.manifest_fs_on_keeps_file_prims()
 
 	if s.fails > 0 {
 		println('${s.fails} FAILURE(S)')

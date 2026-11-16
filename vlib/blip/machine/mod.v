@@ -31,6 +31,7 @@ $if !wasm32 {
 import strconv
 import blip
 import blip.host
+import blip.manifest
 import blip.prims
 import blip.printer
 import blip.reader
@@ -84,6 +85,10 @@ pub mut:
 	src_text string
 	// loaded is the set of module paths this machine has already evaluated.
 	loaded []string
+	// applied_manifest is the blip.mod last handed to apply_manifest, kept
+	// so E2b `blip check` can name the manifest line that disabled a
+	// capability. Empty until the embedder or CLI applies one.
+	applied_manifest manifest.Manifest
 	// macros names the procedures defmacro created, so macex can tell a macro from
 	// a function without guessing from its shape.
 	macros []string
