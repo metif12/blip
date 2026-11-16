@@ -1,7 +1,9 @@
 module machine
 
 import blip
+import blip.host
 import blip.manifest
+import blip.prims
 
 // CtxPrimFn is a machine-aware primitive: like blip.PrimFn it takes args, but
 // it also gets the machine, so it can reach the host, the current env, gensym,
@@ -72,17 +74,24 @@ pub fn (mut m Machine) restrict_to(keep []string) []string {
 	return removed
 }
 
-// feature_prims maps a manifest capability to the prim names it gates.
+// capabilities lists every manifest capability this machine knows
+// (roadmap E2/E3). Sorted, so `blip env` and error messages print them
+// in a stable order.
+pub fn capabilities() []string {
+	return ['env', 'fs']
+}
+
+// capability_prims maps a manifest capability to the prim names it gates.
 // v2 knows two: `fs` (file IO) and `env` (environment). Fibers land with
 // Track B4; naming one before then is an unknown-feature error, not a
 // silent no-op -- a manifest must be exact, and a typo must fail.
-fn feature_prims(name string) ?[]string {
+pub fn capability_prims(name string) ?[]string {
 	match name {
 		'fs' {
-			return ['read-file', 'write-file', 'file-exists?']
+			return prims.fs_prim_names()
 		}
 		'env' {
-			return ['env']
+			return prims.env_prim_names()
 		}
 		else {
 			return none
@@ -103,7 +112,7 @@ fn feature_prims(name string) ?[]string {
 // `blip check`, which names the manifest line in its diagnostic.
 pub fn (mut m Machine) apply_manifest(mf manifest.Manifest) ! {
 	for name in mf.features.keys() {
-		prims := feature_prims(name) or {
+		gated := capability_prims(name) or {
 			line := mf.feature_line(name)
 			if line > 0 {
 				return error("blip.mod:${line}: unknown feature '${name}' (known: env, fs)")
@@ -111,10 +120,53 @@ pub fn (mut m Machine) apply_manifest(mf manifest.Manifest) ! {
 			return error("blip.mod: unknown feature '${name}' (known: env, fs)")
 		}
 		if !mf.features[name] {
-			for p in prims {
+			for p in gated {
 				m.unregister_prim(p)
 			}
 		}
 	}
 	m.applied_manifest = mf
+}
+
+// new_standalone_core builds a machine with the minimal core only
+// (roadmap E3): arithmetic, collections, strings, and machine builtins
+// work, while `fs`/`env` prims are absent from the start rather than
+// removed afterwards. An embedder that never wants IO starts here;
+// one that wants it conditionally starts from new_standalone and calls
+// apply_manifest, or re-adds a capability with enable_fs/enable_env.
+pub fn new_standalone_core(h host.Host) &Machine {
+	mut m := new_standalone(h)
+	for n in prims.fs_prim_names() {
+		m.prims.delete(n)
+	}
+	for n in prims.env_prim_names() {
+		m.prims.delete(n)
+	}
+	m.cache_ok = false
+	return m
+}
+
+// enable_fs re-adds the `fs` capability after apply_manifest or a
+// core-only construction removed it. Precedence stays manifest < code:
+// calling this after apply_manifest wins over the file.
+pub fn (mut m Machine) enable_fs() {
+	fresh := prims.table()
+	for n in prims.fs_prim_names() {
+		if f := fresh[n] {
+			m.prims[n] = f
+		}
+	}
+	m.cache_ok = false
+}
+
+// enable_env re-adds the `env` capability after apply_manifest or a
+// core-only construction removed it.
+pub fn (mut m Machine) enable_env() {
+	fresh := prims.table()
+	for n in prims.env_prim_names() {
+		if f := fresh[n] {
+			m.prims[n] = f
+		}
+	}
+	m.cache_ok = false
 }

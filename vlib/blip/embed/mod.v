@@ -16,6 +16,7 @@ module embed
 import blip
 import blip.host
 import blip.machine
+import blip.manifest
 import blip.printer
 
 // Embedded prelude: the same lib/std.blip `blip run` loads, compiled into the
@@ -35,6 +36,11 @@ pub:
 	max_kont     int
 	prelude      PreludeMode = .embedded
 	prelude_path string      = 'lib/std.blip'
+	// fs/env gate the IO capabilities (roadmap E2/E3). True by default,
+	// so existing embedders keep full prims; false starts from the
+	// minimal core instead of building then stripping.
+	fs  bool = true
+	env bool = true
 }
 
 @[heap]
@@ -57,10 +63,20 @@ pub fn new(h host.Host) &Interp {
 // new_with_config builds an interpreter honoring cfg. max_steps/max_kont of 0
 // keep the machine defaults; prelude .file loads prelude_path through the
 // host (an error surfaces), .none skips the prelude, .embedded uses the
-// compiled-in copy.
+// compiled-in copy. fs/env false start from the minimal core (E3).
 pub fn new_with_config(h host.Host, cfg Config) !&Interp {
 	mut e := &Interp{
 		m: machine.new_standalone(h)
+	}
+	if !cfg.fs {
+		for n in machine.capability_prims('fs') or { []string{} } {
+			e.m.unregister_prim(n)
+		}
+	}
+	if !cfg.env {
+		for n in machine.capability_prims('env') or { []string{} } {
+			e.m.unregister_prim(n)
+		}
 	}
 	if cfg.max_steps > 0 {
 		e.m.max_steps = cfg.max_steps
@@ -174,6 +190,18 @@ pub fn (mut e Interp) prim_names() []string {
 // and missing is gone. Returns the removed names.
 pub fn (mut e Interp) restrict_to(keep []string) []string {
 	return e.m.restrict_to(keep)
+}
+
+// apply_manifest enforces a blip.mod's `(features ...)` stanza (roadmap
+// E2): `fs`/`env` off remove their prims, unknown names error naming the
+// manifest line. Stored on the machine for `blip check` (E2b).
+pub fn (mut e Interp) apply_manifest(mf manifest.Manifest) ! {
+	e.m.apply_manifest(mf)!
+}
+
+// capabilities lists every manifest capability the machine knows.
+pub fn capabilities() []string {
+	return machine.capabilities()
 }
 
 // ---- value helpers ---------------------------------------------------------

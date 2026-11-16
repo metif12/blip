@@ -255,7 +255,18 @@ manifest with a capability off, asserting the clean error on use and a
 Concrete definition or it is un-gateable: prim groups registered per
 module behind the existing `Host`-style seams, so a minimal core (no
 IO/FFI) builds and passes a subset gate. No new plugin ABI in v2; the
-gate is the subset run, not a diagram.
+gate is the subset run, not a diagram. — **done**: `prims.core_table`
+plus `register_fs`/`register_env` (with `fs_prim_names`/`env_prim_names`)
+is the single source of group membership; `table()` is core plus both.
+`machine.capabilities`/`capability_prims` is the registry `apply_manifest`
+and embedders share; `new_standalone_core` starts without IO,
+`enable_fs`/`enable_env` re-add a capability (manifest < code preserved).
+`embed.Config` carries `fs`/`env` (default on) and `apply_manifest` is
+reachable through the facade. The hot path (`call_primitive` fast path)
+does one fewer hash probe per prim call (ctx-miss + prims-hit, instead
+of `!in` + `in` + index). Gate: `unit.modular_core` (core lacks fs/env,
+table has them, core runs arithmetic and refuses IO, enable restores) +
+`embed_api` no-io config and facade `apply_manifest`.
 
 ## Track F — release packaging (agreed, incremental)
 

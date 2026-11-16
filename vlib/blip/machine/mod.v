@@ -1594,13 +1594,18 @@ fn format_args(args []blip.Value) string {
 }
 
 fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
-	// Fast path for plain-table prims (+, -, car, ...): two map probes
+	// Fast path for plain-table prims (+, -, car, ...): one map probe
 	// instead of the ~30-arm builtin match below. The name sets are disjoint
 	// (verified: no prims-table key is a machine builtin), so a table hit
 	// takes exactly the path the tail lookup would take; ctx entries keep
 	// override priority by falling through to the logic below.
-	if name !in m.ctx_prims && name in m.prims {
-		f := m.prims[name]
+	//
+	// Two probes total on a hit (ctx miss + prims hit), one probe on a
+	// ctx-shadowed name, instead of three (`!in` + `in` + index). The
+	// slow path re-probes for the miss/error cases, which are cold.
+	if name in m.ctx_prims {
+		// Shadowed: fall through so the ctx entry wins below.
+	} else if f := m.prims[name] {
 		res := f(args) or { return error('${name}: ${err.msg()}') }
 		m.val = res
 		m.ret()

@@ -747,6 +747,53 @@ fn (mut s Suite) install_pins() {
 	}
 }
 
+fn (mut s Suite) modular_core() {
+	// E3: the prim table splits into core + gated IO. core_table lacks
+	// fs/env; table adds them back; names and register fns agree.
+	core := prims.core_table()
+	s.record('core lacks read-file', 'read-file' !in core, 'minimal core')
+	s.record('core lacks env', 'env' !in core, 'minimal core')
+	s.record('core keeps arithmetic', 'car' in core && '+' in core, '+ and car present')
+	s.record('core keeps html-escape', 'html-escape' in core, 'pure string helper stays')
+	full := prims.table()
+	s.record('table has fs and env', 'read-file' in full && 'env' in full, 'full table')
+	s.record('fs names list file prims', prims.fs_prim_names() == ['read-file', 'write-file',
+		'file-exists?'], prims.fs_prim_names().str())
+	s.record('env names list env', prims.env_prim_names() == ['env'], 'env')
+	mut p := prims.core_table()
+	prims.register_fs(mut p)
+	s.record('register_fs adds file prims', 'read-file' in p && 'file-exists?' in p, 'fs installed')
+	prims.register_env(mut p)
+	s.record('register_env adds env', 'env' in p, 'env installed')
+	// E3: machine capabilities mirror the prim groups.
+	s.record('capabilities list env and fs', machine.capabilities() == ['env', 'fs'],
+		machine.capabilities().str())
+	fsp := machine.capability_prims('fs') or { []string{} }
+	s.record('capability_prims fs matches', fsp == prims.fs_prim_names(), fsp.str())
+	if _ := machine.capability_prims('fibers') {
+		s.record('capability_prims rejects fibers', false, 'fibers resolved')
+	} else {
+		s.record('capability_prims rejects fibers', true, 'fibers unknown until B4')
+	}
+	// E3: a core-only machine runs pure code and refuses IO cleanly.
+	h := host.new_capture()
+	mut m := machine.new_standalone_core(h)
+	v := m.run_str('(+ 1 2)') or { blip.nil_value() }
+	s.record('core machine runs arithmetic', printer.write(v) == '3', printer.write(v))
+	m.run_str('(read-file "x")') or {
+		s.record('core machine refuses read-file', err.msg().contains('unbound identifier'),
+			err.msg())
+	}
+	m.run_str('(env "HOME")') or {
+		s.record('core machine refuses env', err.msg().contains('unbound identifier'), err.msg())
+	}
+	m.enable_fs()
+	v2 := m.run_str('(file-exists? "no-such-blip-file")') or { blip.nil_value() }
+	s.record('enable_fs restores file prims', printer.write(v2) == '#f', printer.write(v2))
+	m.enable_env()
+	s.record('enable_env restores env', m.has_prim('env'), 'env present')
+}
+
 fn main() {
 	mut s := Suite{}
 	s.install_pins()
@@ -768,6 +815,7 @@ fn main() {
 	s.error_format()
 	s.lsp_api()
 	s.manifest()
+	s.modular_core()
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')

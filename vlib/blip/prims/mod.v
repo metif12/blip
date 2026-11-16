@@ -20,8 +20,36 @@ import blip.printer
 // be rejected rather than silently yielding 12.
 const strict_float = strconv.AtoF64Param{}
 
-// table returns every primitive, keyed by name.
-pub fn table() map[string]blip.PrimFn {
+// fs_prim_names lists the file-system prims gated by the `fs`
+// capability (roadmap E2/E3). Pure string helpers like `html-escape`
+// stay in core: they touch no filesystem.
+pub fn fs_prim_names() []string {
+	return ['read-file', 'write-file', 'file-exists?']
+}
+
+// env_prim_names lists the environment prims gated by the `env`
+// capability (roadmap E2/E3).
+pub fn env_prim_names() []string {
+	return ['env']
+}
+
+// register_fs installs the `fs` capability into a prim table.
+pub fn register_fs(mut p map[string]blip.PrimFn) {
+	p['read-file'] = prim_read_file
+	p['write-file'] = prim_write_file
+	p['file-exists?'] = prim_file_exists
+}
+
+// register_env installs the `env` capability into a prim table.
+pub fn register_env(mut p map[string]blip.PrimFn) {
+	p['env'] = prim_env
+}
+
+// core_table returns every primitive except the gated IO capabilities.
+// A minimal core (no filesystem, no environment) builds from this and
+// passes the subset gate: arithmetic, collections, and strings work,
+// while `read-file`/`env` cleanly resolve as unbound.
+pub fn core_table() map[string]blip.PrimFn {
 	mut p := map[string]blip.PrimFn{}
 	p['source-location'] = prim_source_location
 	p['+'] = prim_add
@@ -118,11 +146,11 @@ pub fn table() map[string]blip.PrimFn {
 	// generated, because they need the OS, not V's standard library.
 	// They answer Result values so a config file can say `(use (read-file
 	// "x") body)` and skip on failure, instead of aborting.
-	p['read-file'] = prim_read_file
-	p['write-file'] = prim_write_file
+	//
+	// `read-file`/`write-file`/`file-exists?`/`env` live behind
+	// register_fs/register_env (capabilities `fs`/`env`): core_table
+	// omits them, table adds them back.
 	p['html-escape'] = prim_html_escape
-	p['file-exists?'] = prim_file_exists
-	p['env'] = prim_env
 	p['dissoc!'] = prim_dissoc_bang
 	p['string-index-of'] = prim_string_index_of
 	p['string-not-blank?'] = prim_string_not_blank
@@ -160,6 +188,16 @@ pub fn table() map[string]blip.PrimFn {
 	// Generated bindings live in gen_<module>.v, written by
 	// tools/genprims.vsh; each module costs exactly this one line.
 	register_gen_math(mut p)
+	return p
+}
+
+// table returns every primitive, keyed by name: the core plus the
+// gated IO capabilities. Embedders that want the minimal core use
+// core_table directly (or new_standalone_core on the machine side).
+pub fn table() map[string]blip.PrimFn {
+	mut p := core_table()
+	register_fs(mut p)
+	register_env(mut p)
 	return p
 }
 

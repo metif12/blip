@@ -8,6 +8,7 @@ import blip
 import blip.embed
 import blip.host
 import blip.machine
+import blip.manifest
 import blip.printer
 
 struct Suite {
@@ -342,6 +343,57 @@ fn main() {
 		}
 		box.eval('(read-file "x")') or {
 			s.ok('embed sandbox eval', 'blocked: ${err.msg()}')
+		}
+	}
+
+	// E3 modular core: Config fs/env false start without IO; the
+	// capabilities list names exactly what the machine gates.
+	if embed.capabilities() != ['env', 'fs'] {
+		s.fail('embed capabilities', embed.capabilities().str())
+	} else {
+		s.ok('embed capabilities', 'env, fs')
+	}
+	{
+		h6 := host.new_capture()
+		mut bare := embed.new_with_config(h6, embed.Config{
+			prelude: .none
+			fs:      false
+			env:     false
+		}) or {
+			s.fail('embed config no-io', err.msg())
+			return
+		}
+		bv := bare.eval('(+ 1 2)') or {
+			s.fail('embed config no-io eval', err.msg())
+			return
+		}
+		if embed.show(bv) != '3' {
+			s.fail('embed config no-io eval', 'expected 3')
+		} else {
+			s.ok('embed config no-io eval', 'core runs')
+		}
+		if bare.has_prim('read-file') || bare.has_prim('env') {
+			s.fail('embed config no-io', 'IO still resolves')
+		} else {
+			s.ok('embed config no-io', 'fs+env absent')
+		}
+	}
+	// E2 via the facade: apply_manifest with fs off blocks IO cleanly.
+	{
+		h7 := host.new_capture()
+		mut me := embed.new(h7)
+		mf := manifest.parse('(module m)\n(blip 2)\n(features (fs #f))') or {
+			s.fail('embed apply_manifest parse', err.msg())
+			return
+		}
+		me.apply_manifest(mf) or {
+			s.fail('embed apply_manifest', err.msg())
+			return
+		}
+		if me.has_prim('read-file') {
+			s.fail('embed apply_manifest', 'read-file still resolves')
+		} else {
+			s.ok('embed apply_manifest', 'fs off via facade')
 		}
 	}
 
