@@ -62,7 +62,6 @@ fn mangle(name string) string {
 		'|>' { return 'pipe' }
 		'map' { return 'map' }
 		'filter' { return 'filter' }
-		'keep' { return 'filter' }
 		'fold' { return 'fold' }
 		'for-each' { return 'for_each' }
 		'vector-map' { return 'vector_map' }
@@ -147,8 +146,6 @@ fn mangle(name string) string {
 		// The prims the examples and the standard library actually reach for.
 		// There are 126 prims in vlib/blip/prims and 17 of these were unrouted,
 		// which is how a program emitted cleanly and then died on `sqrt`.
-		'first' { return 'first' }
-		'rest' { return 'rest' }
 		'last' { return 'last' }
 		'count' { return 'count' }
 		'list-ref' { return 'list_ref' }
@@ -206,7 +203,6 @@ const prim_names = {
 	'|>':                true
 	'map':               true
 	'filter':            true
-	'keep':              true
 	'fold':              true
 	'for-each':          true
 	'vector-map':        true
@@ -269,8 +265,6 @@ const prim_names = {
 	'assert':            true
 	'any?':              true
 	'every?':            true
-	'first':             true
-	'rest':              true
 	'last':              true
 	'count':             true
 	'list-ref':          true
