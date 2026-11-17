@@ -10,6 +10,7 @@ import math
 
 $if !wasm32 {
 	import os
+	import time
 }
 import strconv
 import blip
@@ -186,6 +187,10 @@ pub fn core_table() map[string]blip.PrimFn {
 	p['string->rune'] = prim_string_to_rune
 	p['code->string'] = prim_code_to_string
 	p['__make-struct'] = prim_make_struct
+	// `now` is core, not a capability: reading the clock reveals nothing
+	// about the host the way the filesystem or the environment does, so
+	// the minimal core keeps it.
+	p['now'] = prim_now
 	// Generated bindings live in gen_<module>.v, written by
 	// tools/genprims.vsh; each module costs exactly this one line.
 	register_gen_math(mut p)
@@ -2142,6 +2147,22 @@ $if wasm32 {
 			return blip.nil_value()
 		}
 		return blip.string(v)
+	}
+}
+
+// now answers unix seconds as an integer. It takes no arguments; extra ones
+// are an error rather than silently ignored, because a silent call would
+// hide a typo in the one place time enters a program.
+$if wasm32 {
+	fn prim_now(args []blip.Value) !blip.Value {
+		return blip.integer(0)
+	}
+} $else {
+	fn prim_now(args []blip.Value) !blip.Value {
+		if args.len != 0 {
+			return error('now expects no arguments, got ${args.len}')
+		}
+		return blip.integer(time.now().unix())
 	}
 }
 

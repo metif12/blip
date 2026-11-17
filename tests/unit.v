@@ -889,6 +889,21 @@ fn (mut s Suite) result_combinators_are_ordinary() {
 	}
 	s.record('emitter routes drop to the runtime', dropped.js.contains('blip.drop('),
 		'runtime helper')
+	// D5's `row->table` needs a mangled arrow: `->` becomes `_to_`, because
+	// a general dash replacement would leave a bare `>`, which is not a
+	// JavaScript identifier character.
+	arrowed := emit.compile_program('(def (row->table r) r) (row->table (quote ()))') or {
+		s.record('emitter mangles arrows', false, err.msg())
+		emit.Result{}
+	}
+	s.record('emitter mangles arrows', arrowed.js.contains('row_to_table'), 'row_to_table')
+	// A mangling collision refuses instead of silently merging two names.
+	clash := emit.compile_program('(def (a-b) 1) (def (a_b) 2) (a-b)') or {
+		s.record('emitter refuses collisions', false, err.msg())
+		emit.Result{}
+	}
+	s.record('emitter refuses collisions', clash.blocked.join(',').contains('collision'),
+		clash.blocked.str())
 	bad := emit.compile_program('(def (f a . r b) r) (f 1 2 3)') or {
 		s.record('emitter refuses a misplaced dot', false, err.msg())
 		return
@@ -934,6 +949,38 @@ fn (mut s Suite) std_seq_are_ordinary() {
 		return
 	}
 	s.record('keep stays removed', false, 'keep evaluated instead of refusing')
+}
+
+// The D5 set lives in std too, except the clock: csv/json/config helpers
+// resolve to lib/std.blip, while `now` is a prim (nothing ordinary can
+// read a clock) wired through the emitter like the other tabled prims.
+fn (mut s Suite) std_fs_json_time_cover() {
+	h := host.new_capture()
+	mut m := machine.new_standalone(h)
+	m.source = 'lib/std.blip'
+	std_src := os.read_file('lib/std.blip') or { '' }
+	m.run_str(std_src) or {
+		s.record('std loads for D5 pins', false, err.msg())
+		return
+	}
+	for name in ['csv->table', 'parse-line', 'read-config', 'tmp-dir', 'json-parse',
+		'json-emit', 'elapsed'] {
+		loc := m.run_str('(source-location ${name})') or { blip.nil_value() }
+		mut file := ''
+		if loc.tag == .table {
+			if t := loc.as_table() {
+				file = t.get('file').as_string() or { '' }
+			}
+		}
+		s.record('${name} resolves to the std', file == 'lib/std.blip', file)
+	}
+	got := m.run_str('(integer? (now))') or { blip.nil_value() }
+	s.record('now answers an integer', printer.write(got) == '#t', printer.write(got))
+	js := emit.compile_program('(now)') or {
+		s.record('emitter routes now', false, err.msg())
+		return
+	}
+	s.record('emitter routes now', js.js.contains('blip.now('), 'blip.now')
 }
 
 // The string set is split by nature: join/trim/split/repeat and the affix
@@ -1135,6 +1182,7 @@ fn main() {
 	s.result_combinators_are_ordinary()
 	s.std_seq_are_ordinary()
 	s.std_string_covers()
+	s.std_fs_json_time_cover()
 	s.std_table_covers()
 
 	if s.fails > 0 {

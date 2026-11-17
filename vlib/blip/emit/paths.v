@@ -130,6 +130,13 @@ fn compile_with_base(src string, base string) !Result {
 	}
 	// The runtime comes first in the TEXT even though it is emitted last, so the
 	// generated module is self-contained: one file, runnable by node as it is.
+	//
+	// A mangling collision is a refusal, not a silent merge: two blip names
+	// reaching one JavaScript identifier would run one of them as the other.
+	// mangle_name records every claimed identifier for exactly this check.
+	for name in e.collided.keys() {
+		e.refuse("name collision: '${name}' collides after mangling")
+	}
 	mut body := e.out.clone()
 	e.out = []
 	e.emit(prelude)

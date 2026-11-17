@@ -113,6 +113,10 @@ fn mangle(name string) string {
 		// (prim_drop) but the backend did not, so a program using it emitted a
 		// call to a name nothing defined.
 		'drop' { return 'drop' }
+		// `now` is unix seconds as an integer. The machine reads the clock;
+		// the backend reads the date, floored -- the same number except
+		// across the single second the two calls happen to straddle.
+		'now' { return 'now' }
 		// The type predicates. Each maps to the tag check its prim does
 		// (tag_is in prims/mod.v), except where JavaScript cannot tell two
 		// blip types apart -- see the runtime note on int vs float.
@@ -253,6 +257,7 @@ const prim_names = {
 	'put!':              true
 	'take':              true
 	'drop':              true
+	'now':               true
 	'array?':            true
 	'table?':            true
 	'float?':            true
@@ -314,17 +319,27 @@ fn (mut e Emitter) mangle_name(s string) string {
 	if !needs_mangle(s) {
 		return s
 	}
-	mut out := s.replace('-', '_').replace('?', '_q').replace('!', '_b')
+	// `->` first: it contains `-`, and a general dash replacement would
+	// leave a bare `>` -- which is not a JavaScript identifier character.
+	// `row->table` is the threaded naming blip reads naturally.
+	mut out := s.replace('->', '_to_').replace('-', '_').replace('?', '_q').replace('!', '_b')
 	out = out.replace('*', '_star_').replace('#', '_hash_')
-	// A first mapping wins. If this identifier was already claimed by a
-	// DIFFERENT blip name, the program has a genuine collision, and it is
-	// recorded rather than silently compiled to whichever came first.
-	prev := e.mangled[out]
-	if prev != '' && prev != s {
-		e.collided[s] = out
-	}
-	e.mangled[out] = s
 	return out
+}
+
+// claim_name records a top-level definition's JavaScript identifier. Two
+// DIFFERENT blip names reaching one identifier is a genuine collision --
+// the module would run one definition as the other -- so the second claim
+// is recorded for the end-of-compile check, which turns it into a refusal.
+// Only definitions claim: parameters and locals live in their own scopes,
+// so a local that shadows a mangled top-level name is shadowing, not
+// colliding, and registering uses would cry wolf on every reference.
+fn (mut e Emitter) claim_name(blip_name string, js string) {
+	prev := e.mangled[js] or { '' }
+	if prev != '' && prev != blip_name {
+		e.collided[blip_name] = js
+	}
+	e.mangled[js] = blip_name
 }
 
 fn needs_mangle(s string) bool {

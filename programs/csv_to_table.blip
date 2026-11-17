@@ -3,36 +3,10 @@
 ;; The first program that forces file I/O into existence. A CSV file becomes
 ;; a vector of tables, one per row, with the header row as keys. Nothing
 ;; aborts: a short row, a blank line or a missing file is a value.
-
-(def (split-line line)
-  (string-split line ","))
-
-(def (trim-cell s) (string-trim s))
-
-(def (csv-rows text)
-  (filter (fn [l] (not (string-blank? l)))
-          (string-split text "\n")))
-
-(def (header-row lines)
-  (map trim-cell (split-line (list-ref lines 0))))
-
-(def (row->table header cells)
-  (fold (fn [acc i]
-          (put acc (list-ref header i)
-               (if (< i (length cells))
-                 (trim-cell (list-ref cells i))
-                 nil)))
-        {}
-        (range 0 (- (length header) 1))))
-
-(def (csv->table text)
-  (let lines (csv-rows text)
-    (if (= (length lines) 0)
-      (vector)
-      (let header (header-row lines)
-        (map (fn [line]
-               (row->table header (split-line line)))
-             (cdr lines))))))
+;;
+;; The parsing itself lives in lib/std.blip (split-line, trim-cell,
+;; csv-rows, header-row, row->table, csv->table); what stays here is the
+;; demo that proves it, plus the short-row assert.
 
 ;; ---------------------------------------------------------------- demo
 (let sample "name,age,city\nalice,30,paris\nbob,25,\n"

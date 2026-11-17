@@ -578,7 +578,9 @@ fn (mut e Emitter) emit_define(kids []reader.NodeId) {
 		// ordinary blip, and JavaScript throws on an assignment to a `const`.
 		// The mangling matches every other use of the name, so a definition and a
 		// `set!` cannot disagree.
-		e.emit('var ${e.mangle_name(sig.value)} = ${e.value(kids[2])};')
+		js := e.mangle_name(sig.value)
+		e.claim_name(sig.value, js)
+		e.emit('var ${js} = ${e.value(kids[2])};')
 		return
 	}
 	e.refuse('def')
@@ -708,6 +710,7 @@ fn (mut e Emitter) named_function(name string, params []reader.NodeId, body []re
 	// was mangled -- a ReferenceError, and a worse one than a visible difference
 	// because the emitted file looks plausible.
 	js_name := e.mangle_name(name)
+	e.claim_name(name, js_name)
 	head := if js_name == '' { '' } else { ' ' + js_name }
 	e.emit('function${head}(${ps.join(', ')}) {')
 	e.depth++

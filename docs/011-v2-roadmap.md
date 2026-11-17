@@ -196,6 +196,30 @@ Order (one PR each, each with an example + asserts, never `;=>`-only):
    `02_data` asserts on both engines, `unit` pins the std source
    locations plus `get-in`/`merge`/`select-keys` behavior.
 5. `fs`/`time`/`json`/`csv`: promote logic already inside `programs/`.
+   — **done**: `csv->table` and friends, `parse-line`/`read-config`/
+   `tmp-dir`, and the whole JSON parser/emitter moved into std;
+   `programs/csv_to_table.blip`, `config.blip`, and `json.blip` keep
+   only their demos and self-tests, which run unchanged against the
+   moved code (the fail-without proof: deleting a std def breaks its
+   program). `now` (unix seconds, core like the other small builtins)
+   covers `time`. Along the way: `drop`, `string-join`,
+   `string-repeat`, `string-start/end-with?`, and `now` are wired
+   through the emitter (they were machine-only prims emitting calls
+   to undefined names); `row->table` forced `->` mangling plus
+   collision refusals instead of silent merges. Gate: programs green
+   on std, `unit` pins the std source locations, `emit_js`
+   node-parity, and the new emitter routing.
+   — **done**: csv (`split-line`, `trim-cell`, `csv-rows`, `header-row`,
+   `row->table`, `csv->table`), fs/config (`parse-line`, `read-config`,
+   `tmp-dir`), the whole json parser+emitter (`json-parse`, `json-emit`
+   and friends), and `elapsed` over the new `now` prim (unix seconds,
+   core like the other small builtins) now live in `lib/std.blip`;
+   `programs/csv_to_table.blip`, `config.blip`, and `json.blip` keep
+   only their demos and self-tests, which run unchanged against the
+   moved code. Gate: programs run green on the std definitions (the
+   fail-without proof: deleting a std def breaks its program), `unit`
+   pins the std source locations, `now` answers an integer, and the
+   emitter routes it.
 6. `test`: `deftest`/`is` in the Racket shape, over the existing `assert`.
 
 Rules:

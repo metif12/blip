@@ -126,6 +126,10 @@ const blip = {
     if (!Array.isArray(items)) return coll;
     return rewrap(coll, items.slice(Math.max(0, n)));
   },
+  // `now` is unix seconds as an integer. `Date.now` answers milliseconds;
+  // flooring is what makes it the machine's number outside the single
+  // second the two calls happen to straddle.
+  now: () => Math.floor(Date.now() / 1000),
   // A list is a bare array: the printer writes `(1 2 3)`, which is the list
   // spelling, and vectors carry the tag that separates them.
   list: (...items) => items,

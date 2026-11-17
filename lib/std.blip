@@ -161,6 +161,398 @@
 (def (vals t)
   (map (fn [k] (get t k)) (table-keys t)))
 
+;; ---------------------------------------------------------------- csv
+;; Promoted from programs/csv_to_table.blip, which keeps its demo and its
+;; asserts: the file that proved the code is the file that still runs it.
+;; A CSV file becomes a vector of tables, one per row, with the header row
+;; as keys. Nothing aborts: a short row, a blank line or a missing file is
+;; a value.
+
+;; split-line splits one comma-separated line.
+(def (split-line line)
+  (string-split line ","))
+
+;; trim-cell trims one cell.
+(def (trim-cell s) (string-trim s))
+
+;; csv-rows splits text into non-blank lines.
+(def (csv-rows text)
+  (filter (fn [l] (not (string-blank? l)))
+          (string-split text "\n")))
+
+;; header-row reads the header names off the first line.
+(def (header-row lines)
+  (map trim-cell (split-line (list-ref lines 0))))
+
+;; row->table folds one row into a table: missing cells are nil, so a
+;; short row is a sparse row, not an error.
+(def (row->table header cells)
+  (fold (fn [acc i]
+          (put acc (list-ref header i)
+               (if (< i (length cells))
+                   (trim-cell (list-ref cells i))
+                   nil)))
+        {}
+        (range 0 (- (length header) 1))))
+
+;; csv->table reads the whole text: header plus one table per data row.
+(def (csv->table text)
+  (let lines (csv-rows text)
+    (if (= (length lines) 0)
+        (vector)
+        (let header (header-row lines)
+          (map (fn [line]
+                 (row->table header (split-line line)))
+               (cdr lines))))))
+
+;; ---------------------------------------------------------------- fs
+;; Promoted from programs/config.blip, which keeps its demo: key: value
+;; config files and the temp dir they stage in. `read-file`/`write-file`
+;; stay prims (only the machine touches the OS); what is ordinary blip
+;; about files -- splitting, folding, skipping blanks -- lives here.
+
+;; parse-line reads one "key: value" line: (ok key value), or (ok nil nil)
+;; for a blank line, which is nothing rather than an error.
+(def (parse-line line)
+  (if (string-blank? line)
+      (ok nil nil)
+      (use (parse-in line)
+        (ok r1 r2))))
+
+;; read-config folds a key: value file into a table. A read failure stops
+;; the whole thing -- there is no config to fold -- and a malformed line
+;; is an error naming it.
+(def (read-config path)
+  (let res (read-file path)
+    (if (err? res)
+        res
+        (let lines (string-split (ok-value res) "\n")
+          (fold (fn [acc line]
+                  (use (parse-line line)
+                    (if (nil? r1)
+                        acc
+                        (put acc r1 r2))))
+                {}
+                lines)))))
+
+;; tmp-dir answers a scratch directory: TEMP, then TMP (Windows
+;; conventions), else /tmp. An unset variable is nil, which is truthy
+;; here, so unset-ness is tested with `nil?`, never `or`.
+(def (tmp-dir)
+  (if (nil? (env "TEMP"))
+      (if (nil? (env "TMP")) "/tmp" (env "TMP"))
+      (env "TEMP")))
+
+;; ---------------------------------------------------------------- time
+;; `now` is unix seconds as an integer. The clock is not ordinary blip --
+;; nothing in this file could read it -- so it is a prim, wired through
+;; the emitter like every other one. `elapsed` answers whole seconds
+;; since a `now` value.
+
+;; elapsed answers whole seconds since start.
+(def (elapsed start)
+  (- (now) start))
+
+;; ---------------------------------------------------------------- json
+;; Promoted from programs/json.blip, which keeps its driver and its
+;; asserts: the file that proved the code is the file that still runs it.
+;; Values: objects become tables with string keys, arrays become vectors,
+;; strings/numbers/booleans map to themselves, null is nil. Positions are
+;; integer indexes; every parse function returns `(ok value pos)` or
+;; `(err reason pos)`. Nothing on the parse path raises.
+
+;; json-code is the byte at `pos`, or -1 past the end. One place, so the
+;; past-the-end rule cannot drift between callers.
+(def (json-code text pos)
+  (if (>= pos (length text))
+      -1
+      (rune->integer (string->rune (string-slice text pos (+ pos 1))))))
+
+(def (json-space? code)
+  (or (= code 32) (= code 9) (= code 10) (= code 13)))
+
+(def (json-skip-ws text pos)
+  (if (json-space? (json-code text pos))
+      (json-skip-ws text (+ pos 1))
+      pos))
+
+(def (json-digit? code)
+  (and (>= code 48) (<= code 57)))
+
+;; --- strings ---
+
+(def (json-hex code)
+  (cond [(and (>= code 48) (<= code 57)) (- code 48)]
+        [(and (>= code 97) (<= code 102)) (+ (- code 97) 10)]
+        [(and (>= code 65) (<= code 70)) (+ (- code 65) 10)]
+        [else -1]))
+
+;; json-unicode reads four hex digits at `pos`: (ok code pos-after).
+(def (json-unicode text pos)
+  (let d1 (json-hex (json-code text pos))
+    (let d2 (json-hex (json-code text (+ pos 1)))
+      (let d3 (json-hex (json-code text (+ pos 2)))
+        (let d4 (json-hex (json-code text (+ pos 3)))
+          (if (or (< d1 0) (< d2 0) (< d3 0) (< d4 0))
+              (err 'bad-unicode pos)
+              (ok (+ (* d1 4096) (* d2 256) (* d3 16) d4) (+ pos 4))))))))
+
+;; json-escape resolves the escape at `pos` (just past the backslash),
+;; pushing the decoded character and continuing the string.
+(def (json-escape text pos acc)
+  (let code (json-code text pos)
+    (cond [(= code 34) (json-string-tail text (+ pos 1) (array-push! acc "\""))]
+          [(= code 92) (json-string-tail text (+ pos 1) (array-push! acc "\\"))]
+          [(= code 47) (json-string-tail text (+ pos 1) (array-push! acc "/"))]
+          [(= code 98) (json-string-tail text (+ pos 1) (array-push! acc (code->string 8)))]
+          [(= code 102) (json-string-tail text (+ pos 1) (array-push! acc (code->string 12)))]
+          [(= code 110) (json-string-tail text (+ pos 1) (array-push! acc "\n"))]
+          [(= code 114) (json-string-tail text (+ pos 1) (array-push! acc "\r"))]
+          [(= code 116) (json-string-tail text (+ pos 1) (array-push! acc "\t"))]
+          [(= code 117) (use (json-unicode text (+ pos 1))
+                          (json-string-tail text r2 (array-push! acc (code->string r1))))]
+          [else (err 'bad-escape pos)])))
+
+;; json-string-tail walks from `pos` (just past the opening quote),
+;; collecting one-character strings into `acc`, until the closing quote.
+;; The accumulator plus one join keeps this linear rather than quadratic.
+(def (json-string-tail text pos acc)
+  (let code (json-code text pos)
+    (cond [(= code -1) (err 'unterminated-string pos)]
+          [(= code 34) (ok (string-join acc "") (+ pos 1))]
+          [(= code 92) (json-escape text (+ pos 1) acc)]
+          [(< code 32) (err 'control-char pos)]
+          [else (json-string-tail text (+ pos 1)
+                  (array-push! acc (string-slice text pos (+ pos 1))))])))
+
+(def (json-parse-string text pos)
+  (json-string-tail text (+ pos 1) (vector)))
+
+;; --- numbers ---
+;;
+;; Grammar: -?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)? -- checked by hand
+;; because `string->number` answers nil for garbage instead of saying where,
+;; and "where" is what an (err reason pos) owes its caller.
+
+(def (json-numchar? code)
+  (or (= code 45) (= code 43) (= code 46)
+      (= code 101) (= code 69)
+      (json-digit? code)))
+
+(def (json-scan-number text pos)
+  (if (json-numchar? (json-code text pos))
+      (json-scan-number text (+ pos 1))
+      pos))
+
+;; json-digits1 skips one or more digits, or -1 when there are none.
+(def (json-digits1 token pos end)
+  (if (or (>= pos end) (not (json-digit? (json-code token pos))))
+      -1
+      (json-digits token (+ pos 1) end)))
+
+(def (json-digits token pos end)
+  (if (or (>= pos end) (not (json-digit? (json-code token pos))))
+      pos
+      (json-digits token (+ pos 1) end)))
+
+(def (json-int-start token end)
+  (let p (if (= (json-code token 0) 45) 1 0)
+    (if (>= p end)
+        -1
+        (if (= (json-code token p) 48)
+            (+ p 1)
+            (json-digits1 token p end)))))
+
+(def (json-frac-part token pos end)
+  (if (or (>= pos end) (not= (json-code token pos) 46))
+      pos
+      (json-digits1 token (+ pos 1) end)))
+
+(def (json-e? code)
+  (or (= code 101) (= code 69)))
+
+(def (json-exp-part token pos end)
+  (if (or (>= pos end) (not (json-e? (json-code token pos))))
+      pos
+      (let q (+ pos 1)
+        (let r (if (or (= (json-code token q) 43) (= (json-code token q) 45))
+                   (+ q 1)
+                   q)
+          (json-digits1 token r end)))))
+
+(def (json-valid-number? token)
+  (let end (string-length token)
+    (let p1 (json-int-start token end)
+      (if (< p1 0)
+          #f
+          (let p2 (json-frac-part token p1 end)
+            (if (< p2 0)
+                #f
+                (= (json-exp-part token p2 end) end)))))))
+
+(def (json-parse-number text pos)
+  (let end (json-scan-number text pos)
+    (let token (string-slice text pos end)
+      (if (json-valid-number? token)
+          (let n (string->number token)
+            (if (nil? n)
+                (err 'bad-number pos)
+                (ok n end)))
+          (err 'bad-number pos)))))
+
+;; --- literals ---
+
+(def (json-word? text pos word)
+  (let end (+ pos (string-length word))
+    (if (> end (string-length text))
+        #f
+        (= (string-slice text pos end) word))))
+
+(def (json-parse-literal text pos)
+  (cond [(json-word? text pos "true") (ok #t (+ pos 4))]
+        [(json-word? text pos "false") (ok #f (+ pos 5))]
+        [(json-word? text pos "null") (ok nil (+ pos 4))]
+        [else (err 'unexpected-char pos)]))
+
+;; --- arrays ---
+
+(def (json-parse-array text pos)
+  (json-array-items text (+ pos 1) (vector) #t))
+
+;; `first?` is whether `]` may close the array here: it may for `[] but not
+;; after a comma, where `[1,]` must fail rather than parse as `[1]`.
+(def (json-array-items text pos acc first?)
+  (let p (json-skip-ws text pos)
+    (if (and first? (= (json-code text p) 93))
+        (ok acc (+ p 1))
+        (use (json-parse-value text p)
+          (let q (json-skip-ws text r2)
+            (cond [(= (json-code text q) 44)
+                   (json-array-items text (+ q 1) (array-push! acc r1) #f)]
+                  [(= (json-code text q) 93)
+                   (ok (array-push! acc r1) (+ q 1))]
+                  [else (err 'expected-comma-or-bracket q)]))))))
+
+;; --- objects ---
+;;
+;; The nested `use` rebinds r1/r2, so the key is stashed in a `let` first:
+;; lexical bindings survive what `use` rebinds.
+
+(def (json-parse-object text pos)
+  (json-object-items text (+ pos 1) {} #t))
+
+;; `first?` is whether `}` may close the object here: it may for `{}` but not
+;; after a comma, where `{"a":1,}` must fail rather than parse as `{"a":1}`.
+(def (json-object-items text pos acc first?)
+  (let p (json-skip-ws text pos)
+    (if (and first? (= (json-code text p) 125))
+        (ok acc (+ p 1))
+        (if (not= (json-code text p) 34)
+            (err 'expected-string-key p)
+            (use (json-parse-string text p)
+              (let key r1
+                (let q (json-skip-ws text r2)
+                  (if (not= (json-code text q) 58)
+                      (err 'expected-colon q)
+                      (use (json-parse-value text (json-skip-ws text (+ q 1)))
+                        (let v r1
+                          (let r (json-skip-ws text r2)
+                            (cond [(= (json-code text r) 44)
+                                   (json-object-items text (+ r 1) (put acc key v) #f)]
+                                  [(= (json-code text r) 125)
+                                   (ok (put acc key v) (+ r 1))]
+                                  [else (err 'expected-comma-or-brace r)]))))))))))))
+
+;; --- values + entry ---
+
+(def (json-parse-value text pos)
+  (let p (json-skip-ws text pos)
+    (let code (json-code text p)
+      (cond [(= code 123) (json-parse-object text p)]
+            [(= code 91) (json-parse-array text p)]
+            [(= code 34) (json-parse-string text p)]
+            [(= code 116) (json-parse-literal text p)]
+            [(= code 102) (json-parse-literal text p)]
+            [(= code 110) (json-parse-literal text p)]
+            [(= code 45) (json-parse-number text p)]
+            [(json-digit? code) (json-parse-number text p)]
+            [(= code -1) (err 'unexpected-end p)]
+            [else (err 'unexpected-char p)]))))
+
+(def (json-parse text)
+  (use (json-parse-value text 0)
+    (let end (json-skip-ws text r2)
+      (if (= end (string-length text))
+          (ok r1)
+          (err 'trailing-garbage end)))))
+
+;; --- emit ---
+
+(def json-hex-digits "0123456789abcdef")
+
+(def (json-hex2 code)
+  (string-append (string-slice json-hex-digits (/ code 16) (+ (/ code 16) 1))
+                 (string-slice json-hex-digits (modulo code 16) (+ (modulo code 16) 1))))
+
+(def (json-piece ch code)
+  (cond [(= code 34) "\\\""]
+        [(= code 92) "\\\\"]
+        [(= code 10) "\\n"]
+        [(= code 9) "\\t"]
+        [(= code 13) "\\r"]
+        [(= code 8) "\\b"]
+        [(= code 12) "\\f"]
+        [(< code 32) (string-append "\\u00" (json-hex2 code))]
+        [else ch]))
+
+(def (json-string-pieces s i acc)
+  (if (>= i (string-length s))
+      (array-push! acc "\"")
+      (let ch (string-slice s i (+ i 1))
+        (let code (rune->integer (string->rune ch))
+          (json-string-pieces s (+ i 1) (array-push! acc (json-piece ch code)))))))
+
+(def (json-emit-string s)
+  (string-join (json-string-pieces s 0 (array-push! (vector) "\"")) ""))
+
+(def (json-emit-items v i acc)
+  (if (>= i (length v))
+      acc
+      (json-emit-items v (+ i 1) (array-push! acc (json-emit (vector-ref v i))))))
+
+(def (json-emit-array v)
+  (string-append "[" (string-append (string-join (json-emit-items v 0 (vector)) ",") "]")))
+
+;; table-keys answers keywords; `str` renders one with its colon, which is
+;; sliced off. One conversion, in one place.
+(def (json-key-string k)
+  (let s (str k)
+    (string-slice s 1 (string-length s))))
+
+(def (json-emit-pairs v keys i acc)
+  (if (>= i (length keys))
+      acc
+      (let k (json-key-string (get keys i))
+        (json-emit-pairs v keys (+ i 1)
+          (array-push! acc (string-append (json-emit-string k)
+                             (string-append ":" (json-emit (get v k)))))))))
+
+(def (json-emit-object v)
+  (string-append "{" (string-append (string-join (json-emit-pairs v (table-keys v) 0 (vector)) ",") "}")))
+
+;; Emitting a non-JSON value is a caller bug, not a parse failure, so it
+;; raises: `err` is for inputs the world handed us, `raise` is for contracts
+;; we broke ourselves.
+(def (json-emit v)
+  (cond [(string? v) (json-emit-string v)]
+        [(integer? v) (number->string v)]
+        [(float? v) (number->string v)]
+        [(boolean? v) (if v "true" "false")]
+        [(nil? v) "null"]
+        [(vector? v) (json-emit-array v)]
+        [(table? v) (json-emit-object v)]
+        [else (raise (error "json-emit: cannot encode ~a" v))]))
+
 ;; ---------------------------------------------------------------- seq
 ;; Zipping, indexing, and chunking. These take lists and answer lists;
 ;; the polymorphic builtins (`map`, `filter`) already serve every
