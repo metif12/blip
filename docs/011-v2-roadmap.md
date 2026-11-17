@@ -179,6 +179,14 @@ Order (one PR each, each with an example + asserts, never `;=>`-only):
    engines, `unit` pins the std source locations, the `drop` routing,
    and `keep` staying unbound.
 3. `string`: `split`/`trim`/`join`/`starts-with?`/`ends-with?`/`pad`.
+   — **done**: `string-split`/`trim` were already wired; `join`,
+   `string-repeat`, `string-start-with?` and the new
+   `string-ends-with?` prim are wired through the emitter now (they
+   emitted calls to undefined names before, the same gap `drop` had);
+   `pad`/`pad-left` are ordinary std over them. Gate: `02_data`
+   asserts (single-line `;=>` plus `assert` where whitespace defeats
+   `;=>` chunking) on both engines, `unit` pins the std source
+   locations, the emitter routing, and the answers.
 4. `table`: `get-in`/`merge`/`select-keys`/`keys`/`vals`.
 5. `fs`/`time`/`json`/`csv`: promote logic already inside `programs/`.
 6. `test`: `deftest`/`is` in the Racket shape, over the existing `assert`.

@@ -156,6 +156,7 @@ pub fn core_table() map[string]blip.PrimFn {
 	p['string-not-blank?'] = prim_string_not_blank
 	p['string-contains?'] = prim_string_containsp
 	p['string-start-with?'] = prim_string_start_withp
+	p['string-ends-with?'] = prim_string_end_withp
 	p['string-join'] = prim_string_join
 	p['string-repeat'] = prim_string_repeat
 	p['string-slice'] = prim_string_slice
@@ -1812,6 +1813,16 @@ fn prim_string_start_withp(args []blip.Value) !blip.Value {
 	}
 	return blip.boolean(need_str('string-start-with?', args[0])!
 		.starts_with(need_str('string-start-with?', args[1])!))
+}
+
+// string-ends-with? mirrors string-start-with? at the other end: same
+// shape, same errors, the pair the D3 std set assumes.
+fn prim_string_end_withp(args []blip.Value) !blip.Value {
+	if args.len < 2 {
+		return error('string-ends-with? expects at least 2 arguments, got ${args.len}')
+	}
+	return blip.boolean(need_str('string-ends-with?', args[0])!
+		.ends_with(need_str('string-ends-with?', args[1])!))
 }
 
 fn prim_string_join(args []blip.Value) !blip.Value {

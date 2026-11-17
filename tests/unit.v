@@ -936,6 +936,45 @@ fn (mut s Suite) std_seq_are_ordinary() {
 	s.record('keep stays removed', false, 'keep evaluated instead of refusing')
 }
 
+// The string set is split by nature: join/trim/split/repeat and the affix
+// tests are prims (wired through the emitter like `drop` was), while pad
+// and pad-left are ordinary std over them. The pins cover both halves:
+// the std defs resolve to lib/std.blip, and the newly wired prims route
+// to the runtime instead of a bare undefined name.
+fn (mut s Suite) std_string_covers() {
+	h := host.new_capture()
+	mut m := machine.new_standalone(h)
+	m.source = 'lib/std.blip'
+	std_src := os.read_file('lib/std.blip') or { '' }
+	m.run_str(std_src) or {
+		s.record('std loads for string pins', false, err.msg())
+		return
+	}
+	for name in ['pad', 'pad-left'] {
+		loc := m.run_str('(source-location ${name})') or { blip.nil_value() }
+		mut file := ''
+		if loc.tag == .table {
+			if t := loc.as_table() {
+				file = t.get('file').as_string() or { '' }
+			}
+		}
+		s.record('${name} resolves to the std', file == 'lib/std.blip', file)
+	}
+	got := m.run_str('(string-ends-with? "hello" "lo")') or { blip.nil_value() }
+	s.record('string-ends-with? answers', printer.write(got) == '#t', printer.write(got))
+	for pair in [['string-join', 'blip.string_join'], ['string-repeat',
+		'blip.string_repeat'], ['string-start-with?', 'blip.string_start_with_q'], [
+		'string-ends-with?', 'blip.string_ends_with_q']] {
+		name := pair[0]
+		want := pair[1]
+		js := emit.compile_program('(${name} "a" "b")') or {
+			s.record('emitter routes ${name}', false, err.msg())
+			continue
+		}
+		s.record('emitter routes ${name}', js.js.contains(want + '('), want)
+	}
+}
+
 fn (mut s Suite) toolchain_pins() {
 	old_home := os.getenv('BLIP_HOME')
 	th := os.join_path(os.vtmp_dir(), 'blip_tc_pins')
@@ -1063,6 +1102,7 @@ fn main() {
 	s.toolchain_pins()
 	s.result_combinators_are_ordinary()
 	s.std_seq_are_ordinary()
+	s.std_string_covers()
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')

@@ -83,6 +83,23 @@
 (def (lazy-map-result r f)
   (map-result r f))
 
+;; ---------------------------------------------------------------- strings
+;; Padding is spaces, to a width, never truncating: a value longer than the
+;; width is already aligned. `pad` pads on the right (columns read left to
+;; right); `pad-left` pads on the left (numbers line up).
+
+;; pad pads on the right with spaces.
+(def (pad s width)
+  (if (<= (string-length s) width)
+      (string-append s (string-repeat " " (- width (string-length s))))
+      s))
+
+;; pad-left pads on the left with spaces.
+(def (pad-left s width)
+  (if (<= (string-length s) width)
+      (string-append (string-repeat " " (- width (string-length s))) s)
+      s))
+
 ;; ---------------------------------------------------------------- seq
 ;; Zipping, indexing, and chunking. These take lists and answer lists;
 ;; the polymorphic builtins (`map`, `filter`) already serve every

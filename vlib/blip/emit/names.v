@@ -96,6 +96,13 @@ fn mangle(name string) string {
 		'remove' { return 'remove' }
 		'string-split' { return 'string_split' }
 		'string-trim' { return 'string_trim' }
+		// `string-join`, `string-repeat` and the with-affixes were machine-only
+		// prims the backend did not route, so programs using them emitted calls
+		// to names nothing defined -- the same gap `drop` closed in D2.
+		'string-join' { return 'string_join' }
+		'string-repeat' { return 'string_repeat' }
+		'string-start-with?' { return 'string_start_with_q' }
+		'string-ends-with?' { return 'string_ends_with_q' }
 		'string-index-of' { return 'string_index_of' }
 		'vector-append' { return 'vector_append' }
 		'array-push!' { return 'array_push_b' }
@@ -235,6 +242,10 @@ const prim_names = {
 	'remove':            true
 	'string-split':      true
 	'string-trim':       true
+	'string-join':       true
+	'string-repeat':     true
+	'string-start-with?': true
+	'string-ends-with?': true
 	'string-index-of':   true
 	'vector-append':     true
 	'array-push!':       true

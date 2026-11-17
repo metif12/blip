@@ -77,6 +77,25 @@
 (string->number "42")           ;=> 42
 (number->string 42)             ;=> "42"
 (format "~a and ~a" 1 "two")    ;=> "1 and two"
+(string-join '("a" "b" "c") ", ")  ;=> "a, b, c"
+(string-join '("a" "b" "c"))       ;=> "abc"
+(string-start-with? "hello" "he")  ;=> #t
+(string-start-with? "hello" "lo")  ;=> #f
+(string-ends-with? "hello" "lo")   ;=> #t
+(string-ends-with? "hello" "he")   ;=> #f
+;; Padding is whitespace, which `;=>` cannot spell (it splits an expectation
+;; on runs of whitespace), so these assert instead of annotating:
+(assert (equal? (pad "x" 3) "x  ") "pad pads on the right")
+(assert (equal? (pad "toolong" 3) "toolong") "pad never truncates")
+(assert (equal? (pad-left "x" 3) "  x") "pad-left pads on the left")
+(assert (equal? (pad-left "42" 4) "  42") "width counts the value")
+
+;; aligned columns read because every cell is the same width:
+(def (show-table rows)
+  (map (fn [r] (string-append (pad (car r) 7) (car (cdr r)))) rows))
+
+(show-table '(("ada" "1815") ("grace" "1843")))
+;=> ("ada    1815" "grace  1843")
 
 ;; --- predicates ---
 (integer? 1)   (float? 1.0)   (number? 1)

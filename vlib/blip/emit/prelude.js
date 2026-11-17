@@ -443,6 +443,22 @@ const blip = {
   vector: (...items) => blip.vec(...items),
   string_not_blank_q: (s) => String(s).trim() !== "",
   string_blank_q: (s) => String(s).trim() === "",
+  // `string-join` concatenates a sequence with a separator, defaulting to no
+  // separator -- the machine's `sep` starts empty and stays empty for one
+  // argument. Non-string items are the caller's bug in blip (need_str
+  // refuses); here they stringify, the same looseness `string` already has.
+  string_join: (coll, sep) => {
+    const items = unvec(coll);
+    if (!Array.isArray(items)) return coll;
+    return items.join(sep === undefined ? "" : sep);
+  },
+  // `string-repeat` repeats verbatim. A negative count is the caller's bug
+  // on both engines; the guard here keeps it from throwing inside node.
+  string_repeat: (s, n) => (n <= 0 ? "" : String(s).repeat(n)),
+  // Affix tests are plain `startsWith`/`endsWith`. The machine errors on
+  // non-strings (need_str); here they coerce, the runtime's usual looseness.
+  string_start_with_q: (s, prefix) => String(s).startsWith(String(prefix)),
+  string_ends_with_q: (s, suffix) => String(s).endsWith(String(suffix)),
   // frequencies answers a LIST of `(value count)` pairs in FIRST-SEEN order, not
   // sorted, and each pair carries the ORIGINAL value -- not one rebuilt from its
   // printed form, which is how the quote characters got INTO the data.
