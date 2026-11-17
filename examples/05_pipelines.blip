@@ -202,3 +202,31 @@
   "a match* miss falls through to the next clause")
 
 (print "results ok")
+
+;; =====================================================================
+;; seq: zipping, indexing, chunking (ordinary std, lists in and out)
+;; =====================================================================
+
+(zip '(1 2 3) '(a b c))          ;=> ((1 a) (2 b) (3 c))
+(zip '(1 2) '(a b c))            ;=> ((1 a) (2 b))
+(zip '() '(a b))                 ;=> ()
+(enumerate '(a b c))             ;=> ((0 a) (1 b) (2 c))
+(enumerate '())                  ;=> ()
+(partition 2 '(1 2 3 4))         ;=> ((1 2) (3 4))
+(partition 2 '(1 2 3))           ;=> ((1 2) (3))
+(partition 3 '(1 2 3))           ;=> ((1 2 3))
+(partition 2 '())                ;=> ()
+
+;; Numbered report lines: enumerate, then render each pair.
+(def (numbered lines)
+  (map (fn [p] (string-append (number->string (car p)) ". " (car (cdr p))))
+       (enumerate lines)))
+
+(numbered '("parse" "check" "emit"))  ;=> ("0. parse" "1. check" "2. emit")
+
+;; Paired columns: zip, then render each pair.
+(def (pair-up names scores)
+  (map (fn [p] (string-append (car p) ": " (number->string (car (cdr p)))))
+       (zip names scores)))
+
+(pair-up '("ada" "bob") '(10 20))     ;=> ("ada: 10" "bob: 20")

@@ -167,6 +167,17 @@ Order (one PR each, each with an example + asserts, never `;=>`-only):
    on both engines, `unit` pins the std source-location, the emitter
    routing, and the rest rules.
 2. `seq`: `map`/`filter`/`fold`/`keep`/`zip`/`enumerate`/`partition`.
+   — **done** (subset): `zip`, `enumerate` (plus `enumerate-from`),
+   and `partition` are ordinary `lib/std.blip` definitions over lists;
+   `map`/`filter`/`fold` stay machine builtins (they already serve every
+   container polymorphically). `keep` stays OUT: v2 removed it as a
+   duplicate of `filter`, and `(def keep filter)` in your own file is the
+   alias recipe -- the std will not carry both spellings. Wiring found
+   along the way: `drop` was a machine-only prim (the emitter had no
+   runtime for it), so it is routed to a `blip.drop` helper like `take`.
+   Gate: `05_pipelines` seq section with asserts on every branch on both
+   engines, `unit` pins the std source locations, the `drop` routing,
+   and `keep` staying unbound.
 3. `string`: `split`/`trim`/`join`/`starts-with?`/`ends-with?`/`pad`.
 4. `table`: `get-in`/`merge`/`select-keys`/`keys`/`vals`.
 5. `fs`/`time`/`json`/`csv`: promote logic already inside `programs/`.

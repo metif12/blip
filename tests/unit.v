@@ -881,12 +881,59 @@ fn (mut s Suite) result_combinators_are_ordinary() {
 		return
 	}
 	s.record('emitter spreads rest params', rest.js.contains('...r'), '...r emitted')
+	// `drop` was a machine-only prim: the emitter had no runtime for it,
+	// so std's `partition` (which drops) miscompiled to a bare `drop`.
+	dropped := emit.compile_program('(drop xs 1)') or {
+		s.record('emitter routes drop to the runtime', false, err.msg())
+		emit.Result{}
+	}
+	s.record('emitter routes drop to the runtime', dropped.js.contains('blip.drop('),
+		'runtime helper')
 	bad := emit.compile_program('(def (f a . r b) r) (f 1 2 3)') or {
 		s.record('emitter refuses a misplaced dot', false, err.msg())
 		return
 	}
 	s.record('emitter refuses a misplaced dot', bad.blocked.join(',').contains('rest'),
 		bad.blocked.str())
+}
+
+// The seq trio are ordinary std too (roadmap D2): zip/enumerate/partition
+// resolve to lib/std.blip definitions, while `keep` stays what v2 made
+// it -- a builtin that refuses with the migration, not a second spelling
+// carried by the std.
+fn (mut s Suite) std_seq_are_ordinary() {
+	h := host.new_capture()
+	mut m := machine.new_standalone(h)
+	m.source = 'lib/std.blip'
+	std_src := os.read_file('lib/std.blip') or { '' }
+	m.run_str(std_src) or {
+		s.record('std loads for seq pins', false, err.msg())
+		return
+	}
+	for name in ['zip', 'enumerate', 'partition'] {
+		loc := m.run_str('(source-location ${name})') or { blip.nil_value() }
+		mut file := ''
+		if loc.tag == .table {
+			if t := loc.as_table() {
+				file = t.get('file').as_string() or { '' }
+			}
+		}
+		s.record('${name} resolves to the std', file == 'lib/std.blip', file)
+	}
+	mut defines_keep := false
+	kept_src := os.read_file('lib/std.blip') or { '' }
+	for line in kept_src.split_into_lines() {
+		t := line.trim_space()
+		if t.starts_with('(def keep') || t.starts_with('(def (keep') {
+			defines_keep = true
+		}
+	}
+	s.record('std does not define keep', !defines_keep, 'no keep def')
+	m.run_str('(keep (quote (1)) odd?)') or {
+		s.record('keep stays removed', err.msg().contains('removed in v2'), err.msg())
+		return
+	}
+	s.record('keep stays removed', false, 'keep evaluated instead of refusing')
 }
 
 fn (mut s Suite) toolchain_pins() {
@@ -1015,6 +1062,7 @@ fn main() {
 	s.pkg_logic()
 	s.toolchain_pins()
 	s.result_combinators_are_ordinary()
+	s.std_seq_are_ordinary()
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')

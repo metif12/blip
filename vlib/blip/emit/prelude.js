@@ -118,6 +118,14 @@ const blip = {
     if (!Array.isArray(items)) return coll;
     return rewrap(coll, items.slice(0, Math.max(0, n)));
   },
+  // `drop` answers everything after the first n items, preserving the
+  // container. The machine has always had it (prim_drop); the backend did
+  // not, so a program using it emitted a call nothing defined.
+  drop: (coll, n) => {
+    const items = unvec(coll);
+    if (!Array.isArray(items)) return coll;
+    return rewrap(coll, items.slice(Math.max(0, n)));
+  },
   // A list is a bare array: the printer writes `(1 2 3)`, which is the list
   // spelling, and vectors carry the tag that separates them.
   list: (...items) => items,

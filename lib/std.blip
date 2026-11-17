@@ -83,6 +83,44 @@
 (def (lazy-map-result r f)
   (map-result r f))
 
+;; ---------------------------------------------------------------- seq
+;; Zipping, indexing, and chunking. These take lists and answer lists;
+;; the polymorphic builtins (`map`, `filter`) already serve every
+;; container, and these fill the missing shapes, not a second copy of
+;; them. A `keep` is deliberately absent: v2 removed it as a duplicate
+;; of `filter`, and `(def keep filter)` in your own file is the alias
+;; recipe -- the core and the std carry one spelling each.
+
+;; zip stops at the shorter input: no padding, no silent miss.
+(def (zip a b)
+  (if (null? a)
+      (list)
+      (if (null? b)
+          (list)
+          (cons (list (car a) (car b)) (zip (cdr a) (cdr b))))))
+
+;; enumerate pairs each element with its index from 0, so the result
+;; reads with `car`/`cadr` exactly like `frequencies` pairs do.
+(def (enumerate xs)
+  (enumerate-from xs 0))
+
+;; enumerate-from is the index-carrying half of enumerate, kept under its
+;; own name so the name a program writes stays the name that reads well.
+(def (enumerate-from xs n)
+  (if (null? xs)
+      (list)
+      (cons (list n (car xs)) (enumerate-from (cdr xs) (+ n 1)))))
+
+;; partition chunks a list into n-sized pieces, keeping a short tail:
+;; dropping it would lose data silently. A non-positive size is a bug,
+;; not a result, so it raises.
+(def (partition n xs)
+  (if (<= n 0)
+      (raise (error "partition needs a positive size"))
+      (if (null? xs)
+          (list)
+          (cons (take xs n) (partition n (drop xs n))))))
+
 ;; ---------------------------------------------------------------- parsing
 
 ;; parse-in reads "key: value" and returns (ok key value). It is the smallest

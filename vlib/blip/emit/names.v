@@ -102,6 +102,10 @@ fn mangle(name string) string {
 		'array-set!' { return 'array_set_b' }
 		'put!' { return 'put_b' }
 		'take' { return 'take' }
+		// `drop` is the dual of `take`: the machine has always had it
+		// (prim_drop) but the backend did not, so a program using it emitted a
+		// call to a name nothing defined.
+		'drop' { return 'drop' }
 		// The type predicates. Each maps to the tag check its prim does
 		// (tag_is in prims/mod.v), except where JavaScript cannot tell two
 		// blip types apart -- see the runtime note on int vs float.
@@ -237,6 +241,7 @@ const prim_names = {
 	'array-set!':        true
 	'put!':              true
 	'take':              true
+	'drop':              true
 	'array?':            true
 	'table?':            true
 	'float?':            true
