@@ -65,6 +65,24 @@
 (:a {:a 1})             ; same thing, shorter
 (:missing {:a 1})       ;=> nil
 
+;; --- tables: paths, merges, and subsets ---
+(get-in {:a {:b 42}} [:a :b])     ;=> 42
+(get-in {:a {:b 42}} '(:a :b))    ;=> 42
+(get-in {:a 1} [:missing])        ;=> nil
+(get-in {:a 1} [:a :b])           ;=> nil
+(merge {:a 1} {:b 2})             ;=> {:a 1 :b 2}
+(merge {:a 1} {:a 2 :b 3})        ;=> {:a 2 :b 3}
+(merge {:a 1} {:b 2} {:c 3})      ;=> {:a 1 :b 2 :c 3}
+(merge)                           ;=> {}
+(select-keys {:a 1 :b 2 :c 3} [:a :c])  ;=> {:a 1 :c 3}
+(select-keys {:a 1} [:missing])         ;=> {}
+(vals {:b 2 :a 1})                ;=> (1 2)
+
+;; defaults over merged configuration: later layers win.
+(def defaults {:host "localhost" :port 8080})
+(def overrides {:port 9000})
+(get-in (merge defaults overrides) [:port])  ;=> 9000
+
 ;; --- strings ---
 (string-append "foo" "bar")     ;=> "foobar"
 (string-length "hello")         ;=> 5

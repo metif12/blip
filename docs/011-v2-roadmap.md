@@ -188,6 +188,13 @@ Order (one PR each, each with an example + asserts, never `;=>`-only):
    `;=>` chunking) on both engines, `unit` pins the std source
    locations, the emitter routing, and the answers.
 4. `table`: `get-in`/`merge`/`select-keys`/`keys`/`vals`.
+   — **done**: `get-in` (nil on a miss or a wrong turn), variadic
+   `merge` over a binary worker (later keys win), `select-keys` (absent
+   keys skipped), and `vals` (key order, like the printer) are ordinary
+   std; `keys` stays the `table-keys` prim it always was. Vector paths
+   and key sets work through one `as-list` normalization. Gate: new
+   `02_data` asserts on both engines, `unit` pins the std source
+   locations plus `get-in`/`merge`/`select-keys` behavior.
 5. `fs`/`time`/`json`/`csv`: promote logic already inside `programs/`.
 6. `test`: `deftest`/`is` in the Racket shape, over the existing `assert`.
 

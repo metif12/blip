@@ -100,6 +100,67 @@
       (string-append (string-repeat " " (- width (string-length s))) s)
       s))
 
+;; ---------------------------------------------------------------- tables
+;; Paths, merges, and subsets. `get` is total (nil on a miss) and
+;; `table-keys` lists every key, so the rest is ordinary blip: `get-in`
+;; walks a path of keys, `merge` overlays left to right with later keys
+;; winning, `select-keys` keeps a subset, and `vals` reads every value in
+;; key order. Paths and key sets read naturally as vectors, so a small
+;; `as-list` normalizes them once instead of every caller checking twice.
+
+;; as-list turns a vector into a list of its elements; lists pass through.
+(def (as-list xs)
+  (if (vector? xs)
+      (as-list-from xs 0 (vector-length xs))
+      xs))
+
+;; as-list-from is the index-carrying half of as-list.
+(def (as-list-from xs i n)
+  (if (= i n)
+      nil
+      (cons (vector-ref xs i) (as-list-from xs (+ i 1) n))))
+
+;; get-in follows a path of keys, answering nil the moment a step misses
+;; or leaves the tables: a missing key and a wrong turn are both absence.
+(def (get-in tbl path)
+  (get-in-at tbl (as-list path)))
+
+;; get-in-at is the walking half of get-in.
+(def (get-in-at t ks)
+  (if (null? ks)
+      t
+      (if (table? t)
+          (let ([v (get t (car ks))])
+            (if (nil? v) nil (get-in-at v (cdr ks))))
+          nil)))
+
+;; merge overlays tables left to right; later keys win. No tables is {},
+;; one table is itself.
+(def (merge-two a b)
+  (fold (fn [acc k] (put acc k (get b k))) a (table-keys b)))
+
+(def (merge . ts)
+  (fold merge-two {} ts))
+
+;; select-keys keeps the named keys that exist; absent ones are skipped,
+;; not errors, because a subset that fails on a missing key is a lookup,
+;; not a subset.
+(def (select-keys t ks)
+  (select-keys-from t (as-list ks) {}))
+
+;; select-keys-from is the carrying half of select-keys.
+(def (select-keys-from t ks acc)
+  (if (null? ks)
+      acc
+      (if (has-key? t (car ks))
+          (select-keys-from t (cdr ks) (put acc (car ks) (get t (car ks))))
+          (select-keys-from t (cdr ks) acc))))
+
+;; vals reads every value in key order (table-keys sorts), so the answer
+;; is deterministic whatever order the table was built in.
+(def (vals t)
+  (map (fn [k] (get t k)) (table-keys t)))
+
 ;; ---------------------------------------------------------------- seq
 ;; Zipping, indexing, and chunking. These take lists and answer lists;
 ;; the polymorphic builtins (`map`, `filter`) already serve every

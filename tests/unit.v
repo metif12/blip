@@ -975,6 +975,38 @@ fn (mut s Suite) std_string_covers() {
 	}
 }
 
+// The table set is ordinary std: get-in/merge/select-keys/vals resolve to
+// lib/std.blip (merge-two is the binary worker `merge` folds with), while
+// `keys` stays the table-keys prim it always was -- no second spelling.
+fn (mut s Suite) std_table_covers() {
+	h := host.new_capture()
+	mut m := machine.new_standalone(h)
+	m.source = 'lib/std.blip'
+	std_src := os.read_file('lib/std.blip') or { '' }
+	m.run_str(std_src) or {
+		s.record('std loads for table pins', false, err.msg())
+		return
+	}
+	for name in ['get-in', 'merge', 'select-keys', 'vals'] {
+		loc := m.run_str('(source-location ${name})') or { blip.nil_value() }
+		mut file := ''
+		if loc.tag == .table {
+			if t := loc.as_table() {
+				file = t.get('file').as_string() or { '' }
+			}
+		}
+		s.record('${name} resolves to the std', file == 'lib/std.blip', file)
+	}
+	nested := m.run_str('(get-in {:a {:b 42}} [:a :b])') or { blip.nil_value() }
+	s.record('get-in descends', printer.write(nested) == '42', printer.write(nested))
+	missing := m.run_str('(get-in {:a 1} [:a :b])') or { blip.nil_value() }
+	s.record('get-in misses to nil', missing.is_nil(), printer.write(missing))
+	merged := m.run_str('(merge {:a 1} {:b 2})') or { blip.nil_value() }
+	s.record('merge overlays', printer.write(merged) == '{:a 1 :b 2}', printer.write(merged))
+	kept := m.run_str('(select-keys {:a 1 :b 2} [:a])') or { blip.nil_value() }
+	s.record('select-keys subsets', printer.write(kept) == '{:a 1}', printer.write(kept))
+}
+
 fn (mut s Suite) toolchain_pins() {
 	old_home := os.getenv('BLIP_HOME')
 	th := os.join_path(os.vtmp_dir(), 'blip_tc_pins')
@@ -1103,6 +1135,7 @@ fn main() {
 	s.result_combinators_are_ordinary()
 	s.std_seq_are_ordinary()
 	s.std_string_covers()
+	s.std_table_covers()
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')
