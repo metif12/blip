@@ -34,6 +34,8 @@ Numbers are exact where it matters: integers, floats, and rationals like `1/3`. 
 
 Only `#f` is false. Everything else — `0`, `""`, the empty list — counts as true.
 
+The tower is minimal and explicit: `+`/`-`/`*` over integers and rationals stay exact (`(+ 1/3 1/6)` is `1/2`), a float anywhere contaminates to float, and `(/ 3 2)` is `1.5` while `(/ 4 2)` is `2` — integer division with an exact answer stays whole. Equality is representation-strict: `2` is not `2/1` and `1/2` is not `0.5`.
+
 ## Definitions and functions
 
 `def` is the whole ceremony. There is no `defn`, no `function` keyword.

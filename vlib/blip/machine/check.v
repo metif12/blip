@@ -248,6 +248,7 @@ fn (mut m Machine) collect_sig(id blip.NodeId, mut sigs map[string]CkSig) {
 fn (m &Machine) lit_type(id blip.NodeId) string {
 	match m.arena.node(id).tag {
 		.int { return 'int' }
+		.rat { return 'rational' }
 		.float { return 'float' }
 		.str { return 'string' }
 		.bool { return 'bool' }

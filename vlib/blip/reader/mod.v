@@ -917,6 +917,21 @@ fn (mut r Reader) read_atom() ?NodeId {
 	return r.arena.str_leaf(.sym, s)
 }
 
+// read_gcd is Euclid for rational normalization. It duplicates blip.igcd
+// because the reader cannot import blip (blip owns the NodeId type the
+// arena is built from); two three-line Euclids that agree beat an import
+// cycle.
+fn read_gcd(a i64, b i64) i64 {
+	mut x := if a < 0 { -a } else { a }
+	mut y := if b < 0 { -b } else { b }
+	for y != 0 {
+		t := x % y
+		x = y
+		y = t
+	}
+	return x
+}
+
 // try_number returns none for anything that is not a number.
 @[inline]
 fn (mut r Reader) try_number(s string) ?NodeId {
@@ -941,7 +956,10 @@ fn (mut r Reader) try_number(s string) ?NodeId {
 		return none
 	}
 
-	// Rational: 1/3
+	// Rational: 1/3. Stored NORMALIZED (see blip.igcd): reduced with the
+	// sign on the numerator, so 2/4 and 1/2 are the same datum the way
+	// they are the same value, and the printer never shows an unreduced
+	// fraction it did not read.
 	idx := s.index('/') or { -1 }
 	if idx > 0 {
 		n := strconv.atoi64(s[..idx]) or { return none }
@@ -950,10 +968,17 @@ fn (mut r Reader) try_number(s string) ?NodeId {
 			r.fail('rational with zero denominator')
 			return r.arena.int_leaf(.int, 0)
 		}
+		g := read_gcd(n, d)
+		mut nn := n / g
+		mut dd := d / g
+		if dd < 0 {
+			nn = -nn
+			dd = -dd
+		}
 		id := r.arena.leaf(.rat)
 		mut node := r.arena.node(id)
-		node.i = n
-		node.den = d
+		node.i = nn
+		node.den = dd
 		return id
 	}
 

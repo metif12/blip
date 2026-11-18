@@ -297,6 +297,23 @@ fn main() {
 	s.check('string-slice past the end clamps', '(print (string-slice "hello" 3 99))')
 	s.check('string-slice backwards is empty', '(print (string-slice "hello" 4 1))')
 
+	// B-tower: rationals print, compute, and compare identically on both
+	// engines. Literals normalize at read time; arithmetic is exact
+	// without floats; int/int division keeps its rule; equality is
+	// tag-strict (2 is not 2/1); ordering is exact cross-multiplication.
+	for pair in [['(print 2/4)', '1/2'], ['(print (+ 1/3 1/6))', '1/2'],
+		['(print (- 5/4 1/4))', '1/1'], ['(print (* 2/3 9/4))', '3/2'],
+		['(print (/ 1/2 2))', '1/4'], ['(print (/ 3 2))', '1.5'],
+		['(print (/ 4 2))', '2'], ['(print (= 1/2 2/4))', '#t'],
+		['(print (= 2 2/1))', '#f'], ['(print (< 1/4 1/3))', '#t'],
+		['(print (> 3/2 1))', '#t'], ['(print (rational? 3/4))', '#t'],
+		['(print (rational? 4))', '#f'], ['(print (number? 1/3))', '#t'],
+		['(print (integer? 2/1))', '#f'], ['(print (zero? 0/9))', '#t'],
+		['(print (positive? 1/200))', '#t'], ['(print (sqrt 4/9))', '2/3'],
+		['(print (min 3/4 2/3))', '2/3'], ['(print (max 3/4 2))', '2']] {
+		s.check('tower ${pair[0]}', pair[0])
+	}
+
 	// A1: tables print in insertion order on both engines, and `=` ignores
 	// order on both (the backend used to answer #f for distinct objects).
 	s.check('table literal order', '(print {:b 1 :a 2})')

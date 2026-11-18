@@ -215,7 +215,21 @@ deterministic tooling) is already unique; fibers and PEG complete it.
 4. **Minimal numeric tower.** Racket exact, Clojure bigint, Janet
    int/float/rational. Proposal is minimal: `int`/`i64` + `rational` +
    `float` with explicit promotion, not a CL tower. Gate: promotion
-   table fixture.
+   table fixture — **done**: rationals are real values now (before: read
+   and printed, evaluated to `nil`) — a normalized `RatPayload`
+   (denominator positive, pair reduced, `2/4` reads as `1/2`),
+   reader/assembler/match-literal/printer/`=` (exact, representation-
+   strict: `2` is not `2/1`)/`compare` (exact cross-multiplication with
+   a documented range note) support; `+ - * /` exact without floats
+   (float contaminates; int/int `/` keeps its exact-or-float rule);
+   `inc`/`dec`/`sqrt` (perfect-square rationals stay exact)/`expt`
+   (exact for integer exponents) extended; `number?` includes rats,
+   new `rational?` wired both engines; node prelude mirrors with
+   normalized `[n d]` pairs (`blip_add2` family, exact `blip_cmp`,
+   rat-aware `blip_equal`/`sqrt`/`zero?`-family/`min`/`max`, which are
+   newly routed); emitter refuses nothing new. Pins: `unit`
+   `numeric_tower` (48-row printed promotion table incl. error rows),
+   `emit_js` 20 parity rows.
 5. **Modules as data.** Racket `require`/`provide` with
    `only-in`/`prefix-in`; Janet `module/*` as data. Proposal follows
    Janet (fits the existing `@` tables/prototypes). Gate: a

@@ -27,6 +27,7 @@ pub enum Tag {
 	nil // the empty value: absence of a result
 	boolean
 	integer
+	rat // an exact ratio, normalized n/d in a RatPayload
 	float
 	rune // code point, in `i`
 	string
@@ -107,6 +108,82 @@ pub mut:
 
 pub fn (v &Vector) payload_tag() Tag {
 	return v.tag
+}
+
+// RatPayload is one rational number, numerator over denominator. A heap
+// payload rather than inline fields because a rational is 128 bits of
+// payload and Value has only 64 spare. Always NORMALIZED (see igcd and
+// make_rational): the denominator is positive, the pair is reduced, and
+// zero is 0/1. Normalization is what makes `=` on rationals exact without
+// cross-multiplying: equal values have equal parts.
+@[heap]
+pub struct RatPayload {
+pub:
+	tag Tag
+pub mut:
+	n i64
+	d i64
+}
+
+pub fn (p &RatPayload) payload_tag() Tag {
+	return p.tag
+}
+
+// igcd is Euclid on integers, for rational normalization. The blip-level
+// `gcd` prim is the same algorithm over blip values; this one is over the
+// V integers underneath, shared by the reader (datum) and the prims
+// (values), because normalizing in two places two ways is how 2/4 stops
+// equaling 1/2.
+pub fn igcd(a i64, b i64) i64 {
+	mut x := if a < 0 { -a } else { a }
+	mut y := if b < 0 { -b } else { b }
+	for y != 0 {
+		t := x % y
+		x = y
+		y = t
+	}
+	return x
+}
+
+// rational builds a normalized rational. The denominator must be non-zero;
+// zero is 0/1. A zero denominator cannot happen (the reader rejects it,
+// make_rational errors it), so this takes the fast path and treats one as
+// 0/1 rather than branching on every literal.
+pub fn rational(n i64, d i64) Value {
+	if d == 0 {
+		return Value{
+			tag:     .rat
+			payload: &RatPayload{
+				tag: .rat
+				n:   0
+				d:   1
+			}
+		}
+	}
+	g := igcd(n, d)
+	mut nn := n / g
+	mut dd := d / g
+	if dd < 0 {
+		nn = -nn
+		dd = -dd
+	}
+	return Value{
+		tag:     .rat
+		payload: &RatPayload{
+			tag: .rat
+			n:   nn
+			d:   dd
+		}
+	}
+}
+
+// make_rational is the fallible half: a zero denominator is an error, not
+// a value, because silently answering 0/1 for x/0 would hide a bug.
+pub fn make_rational(n i64, d i64) !Value {
+	if d == 0 {
+		return error('rational with zero denominator')
+	}
+	return rational(n, d)
 }
 
 // Table is an immutable string-keyed map. A buffer uses the same payload with a
@@ -581,6 +658,17 @@ pub fn (v Value) as_float() !f64 {
 		return error('as_float: called on a ${tag_name(v.tag)}, not a float')
 	}
 	return v.f
+}
+
+@[inline]
+pub fn (v Value) as_rational() !&RatPayload {
+	if v.tag != .rat {
+		return error('as_rational: called on a ${tag_name(v.tag)}, not a rational')
+	}
+	if v.payload is &RatPayload {
+		return v.payload
+	}
+	return error('as_rational: payload is not a rational')
 }
 
 @[inline]

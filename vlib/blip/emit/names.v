@@ -107,6 +107,9 @@ fn mangle(name string) string {
 		'string-start-with?' { return 'string_start_with_q' }
 		'string-ends-with?' { return 'string_ends_with_q' }
 		'string-index-of' { return 'string_index_of' }
+		'rational?' { return 'rational_q' }
+		'min' { return 'min' }
+		'max' { return 'max' }
 		'vector-append' { return 'vector_append' }
 		'array-push!' { return 'array_push_b' }
 		'array-set!' { return 'array_set_b' }
@@ -232,6 +235,8 @@ const prim_names = {
 	'map':               true
 	'filter':            true
 	'fold':              true
+	'min':               true
+	'max':               true
 	'for-each':          true
 	'vector-map':        true
 	'reverse':           true
@@ -272,6 +277,7 @@ const prim_names = {
 	'list?':             true
 	'negative?':         true
 	'number?':           true
+	'rational?':         true
 	'positive?':         true
 	'string?':           true
 	'symbol?':           true

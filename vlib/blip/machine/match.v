@@ -156,6 +156,7 @@ fn datum_literal(d &reader.Datum) blip.Value {
 		.nil { return blip.nil_value() }
 		.bool { return blip.boolean(d.i != 0) }
 		.int { return blip.integer(d.i) }
+		.rat { return blip.rational(d.i, d.den) }
 		.float { return blip.float(d.f) }
 		.char { return blip.rune(u32(d.i)) }
 		.str { return blip.string(d.value) }

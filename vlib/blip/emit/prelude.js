@@ -17,15 +17,101 @@ function blip_write(s) {
   console.log(s);
 }
 
+// Exact rational helpers. A blip rational is a tagged [n, d] pair, always
+// normalized (positive denominator, reduced), mirroring blip.rational on
+// the machine. Integers widen to [n, 1]; floats contaminate to float math,
+// exactly like the prims' any_float fast path.
+function rat_gcd(a, b) {
+  a = Math.abs(a); b = Math.abs(b);
+  while (b) { const t = a % b; a = b; b = t; }
+  return a || 1;
+}
+function rat_norm(n, d) {
+  const g = rat_gcd(n, d);
+  let nn = n / g, dd = d / g;
+  if (dd < 0) { nn = -nn; dd = -dd; }
+  return { blip_rat: [nn, dd] };
+}
+function blip_rat2(x) {
+  if (x && x.blip_rat) return x.blip_rat;
+  if (typeof x === "number" && Number.isInteger(x)) return [x, 1];
+  return null;
+}
+// blip_exact asks whether exact rational math applies: at least one side
+// must BE a rational. Plain integers stay on the fast path -- widening
+// them here would print `(+ 1 2)` as `3/1` instead of `3`.
+function blip_exact(x, y) {
+  return !!(x && x.blip_rat) || !!(y && y.blip_rat);
+}
+function blip_fnum(x) {
+  return typeof x === "number" && !Number.isInteger(x);
+}
+function blip_fval(x) {
+  if (x && x.blip_rat) return x.blip_rat[0] / x.blip_rat[1];
+  return x;
+}
+function blip_add2(x, y) {
+  if (blip_fnum(x) || blip_fnum(y)) return blip_fval(x) + blip_fval(y);
+  if (!blip_exact(x, y)) return x + y;
+  const rx = blip_rat2(x), ry = blip_rat2(y);
+  return rat_norm(rx[0] * ry[1] + ry[0] * rx[1], rx[1] * ry[1]);
+}
+function blip_neg(x) {
+  if (blip_fnum(x)) return -x;
+  if (x && x.blip_rat) return rat_norm(-x.blip_rat[0], x.blip_rat[1]);
+  return -x;
+}
+function blip_sub2(x, y) {
+  if (blip_fnum(x) || blip_fnum(y)) return blip_fval(x) - blip_fval(y);
+  if (!blip_exact(x, y)) return x - y;
+  const rx = blip_rat2(x), ry = blip_rat2(y);
+  return rat_norm(rx[0] * ry[1] - ry[0] * rx[1], rx[1] * ry[1]);
+}
+function blip_mul2(x, y) {
+  if (blip_fnum(x) || blip_fnum(y)) return blip_fval(x) * blip_fval(y);
+  if (!blip_exact(x, y)) return x * y;
+  const rx = blip_rat2(x), ry = blip_rat2(y);
+  return rat_norm(rx[0] * ry[0], rx[1] * ry[1]);
+}
+function blip_div2(a, b) {
+  if (blip_fnum(a) || blip_fnum(b)) {
+    if (blip_fval(b) === 0) throw new Error("division by zero");
+    return blip_fval(a) / blip_fval(b);
+  }
+  if (!blip_exact(a, b)) return a / b;
+  const ra = blip_rat2(a), rb = blip_rat2(b);
+  if (!ra || !rb) throw new Error("cannot divide " + blip_show(a) + " by " + blip_show(b));
+  if (rb[0] === 0) throw new Error("division by zero");
+  return rat_norm(ra[0] * rb[1], ra[1] * rb[0]);
+}
+// blip_cmp orders numbers the way the prims' compare does: floats compare
+// by value, rationals (and integers) exactly by cross-multiplication.
+// Anything else falls back to `<`, which is what the old operators did.
+function blip_cmp(a, b) {
+  if (blip_fnum(a) || blip_fnum(b)) {
+    const x = blip_fval(a), y = blip_fval(b);
+    return x < y ? -1 : x > y ? 1 : 0;
+  }
+  const ra = blip_rat2(a), rb = blip_rat2(b);
+  if (ra || rb) {
+    if (!ra || !rb) return a < b ? -1 : a > b ? 1 : 0;
+    const l = ra[0] * rb[1], r = rb[0] * ra[1];
+    return l < r ? -1 : l > r ? 1 : 0;
+  }
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 const blip = {
-  add: (...a) => a.reduce((x, y) => x + y, 0),
-  sub: (...a) => a.length === 1 ? -a[0] : a.reduce((x, y) => x - y),
-  mul: (...a) => a.reduce((x, y) => x * y, 1),
-  div: (a, b) => a / b,
-  lt: (a, b) => a < b,
-  gt: (a, b) => a > b,
-  lte: (a, b) => a <= b,
-  gte: (a, b) => a >= b,
+  add: (...a) => a.reduce(blip_add2, 0),
+  sub: (...a) => a.length === 1 ? blip_neg(a[0]) : a.reduce(blip_sub2),
+  mul: (...a) => a.reduce(blip_mul2, 1),
+  div: (a, b) => blip_div2(a, b),
+  lt: (a, b) => blip_cmp(a, b) < 0,
+  gt: (a, b) => blip_cmp(a, b) > 0,
+  lte: (a, b) => blip_cmp(a, b) <= 0,
+  gte: (a, b) => blip_cmp(a, b) >= 0,
+  min: (...a) => a.reduce((x, y) => blip_cmp(x, y) <= 0 ? x : y),
+  max: (...a) => a.reduce((x, y) => blip_cmp(x, y) >= 0 ? x : y),
   eq: (...a) => {
     for (let i = 1; i < a.length; i++) if (!blip_equal(a[i - 1], a[i])) return false;
     return true;
@@ -257,17 +343,14 @@ const blip = {
   sort: (coll) => {
     const items = unvec(coll);
     return Array.isArray(items)
-      ? rewrap(coll, items.slice().sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)))
+      ? rewrap(coll, items.slice().sort((a, b) => blip_cmp(a, b)))
       : coll;
   },
   sort_by: (f, coll) => {
     const items = unvec(coll);
     if (!Array.isArray(items)) return coll;
     const keys = items.map((x) => tramp(f(x)));
-    const order = items.map((_, i) => i).sort((a, b) => {
-      const ka = keys[a], kb = keys[b];
-      return ka < kb ? -1 : ka > kb ? 1 : 0;
-    });
+    const order = items.map((_, i) => i).sort((a, b) => blip_cmp(keys[a], keys[b]));
     return rewrap(coll, order.map((i) => items[i]));
   },
   // The type predicates. Each answers the tag check its prim does
@@ -283,15 +366,16 @@ const blip = {
   table_q: (x) => !!(x && (x.blip_table || x.blip_buffer)),
   float_q: (x) => typeof x === "number" && !Number.isInteger(x),
   integer_q: (x) => typeof x === "number" && Number.isInteger(x),
+  rational_q: (x) => !!(x && x.blip_rat),
   keyword_q: (x) => !!(x && x.blip_kw !== undefined),
   list_q: (x) => Array.isArray(x),
-  negative_q: (x) => typeof x === "number" && x < 0,
+  negative_q: (x) => (typeof x === "number" || !!(x && x.blip_rat)) && blip_cmp(x, 0) < 0,
   number_q: (x) => typeof x === "number" || !!(x && x.blip_rat),
-  positive_q: (x) => typeof x === "number" && x > 0,
+  positive_q: (x) => (typeof x === "number" || !!(x && x.blip_rat)) && blip_cmp(x, 0) > 0,
   string_q: (x) => typeof x === "string",
   symbol_q: (x) => !!(x && x.blip_sym !== undefined),
   vector_q: (x) => !!(x && (x.blip_vec || x.blip_arr)),
-  zero_q: (x) => x === 0,
+  zero_q: (x) => (typeof x === "number" || !!(x && x.blip_rat)) && blip_cmp(x, 0) === 0,
   eq_q: (a, b) => blip_equal(a, b),
   // `has-key?` tests membership without reading: a present key holding nil
   // still counts (prim_has_key checks `has`, not `get`), which a `get`-based
@@ -468,6 +552,13 @@ const blip = {
     return a % b;
   },
   sqrt: (x) => {
+    if (x && x.blip_rat) {
+      const n = x.blip_rat[0], d = x.blip_rat[1];
+      if (n < 0) throw new Error("sqrt of a negative number");
+      const rn = Math.floor(Math.sqrt(n)), rd = Math.floor(Math.sqrt(d));
+      if (rn * rn === n && rd * rd === d) return rat_norm(rn, rd);
+      return Math.sqrt(n / d);
+    }
     if (x < 0) throw new Error("sqrt of a negative number");
     return Math.sqrt(x);
   },
@@ -861,6 +952,16 @@ function blip_equal(a, b) {
   if (ak || bk) {
     if (!ak || ak !== bk) return false;
     return ak === "kw" ? a.blip_kw === b.blip_kw : a.blip_sym === b.blip_sym;
+  }
+  // Rationals compare by normalized parts, like the machine's value_eq:
+  // normalization makes equal values share their representation, so no
+  // cross-multiplication is needed. A rational never equals a number,
+  // even a numerically equal one -- that distinction is the tower.
+  const ar = a && a.blip_rat ? a.blip_rat : null;
+  const br = b && b.blip_rat ? b.blip_rat : null;
+  if (ar || br) {
+    if (!ar || !br) return false;
+    return ar[0] === br[0] && ar[1] === br[1];
   }
   // Tables compare by CONTENT, not order or identity: the machine's value_eq
   // walks the maps, so `{:b 1 :a 2}` equals `{:a 2 :b 1}` on both engines.

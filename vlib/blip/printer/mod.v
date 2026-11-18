@@ -40,6 +40,10 @@ fn write_value(v blip.Value, active []u64, seen map[u64]int, depth int) string {
 		.integer {
 			return strconv.format_int(v.as_int() or { panic('unreachable: integer arm') }, 10)
 		}
+		.rat {
+			r := v.as_rational() or { panic('unreachable: rational arm') }
+			return '${r.n}/${r.d}'
+		}
 		.rune {
 			return char_literal(i32(v.i))
 		}

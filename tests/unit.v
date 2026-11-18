@@ -1174,6 +1174,95 @@ fn (mut s Suite) std_test_covers() {
 		arg.js.contains('tramp(blip.number_to_string'), 'tramp-wrapped arg')
 }
 
+// ---- numeric tower: int/i64 + rational + float (roadmap Track B) ---------
+//
+// The promotion table, as text. Literals normalize at read time (2/4 is
+// 1/2 before it ever evaluates); arithmetic is exact whenever no float is
+// involved and contaminates to float the moment one appears; int/int
+// division keeps its rule (exact int, else float); equality is
+// representation-strict across tags (2 is not 2/1, 1/2 is not 0.5).
+// `rational?` is the third predicate next to `integer?`/`float?`.
+fn (mut s Suite) numeric_tower() {
+	h := host.new_capture()
+	mut m := machine.new_standalone(h)
+	rows := [
+		['1/2', '1/2'],
+		['2/4', '1/2'],
+		['-1/2', '-1/2'],
+		['3/1', '3/1'],
+		['6/4', '3/2'],
+		['(= 1/2 2/4)', '#t'],
+		['(= 2 2/1)', '#f'],
+		['(= 1/2 0.5)', '#f'],
+		['(= 2 2.0)', '#f'],
+		['(+ 1/3 1/6)', '1/2'],
+		['(+ 1/2 1)', '3/2'],
+		['(+ 1/2 0.5)', '1.0'],
+		['(- 1/2 1/4)', '1/4'],
+		['(- 1/2)', '-1/2'],
+		['(* 2/3 9/4)', '3/2'],
+		['(* 2 3/4)', '3/2'],
+		['(/ 1/2 3)', '1/6'],
+		['(/ 3 1/2)', '6/1'],
+		['(/ 4 2)', '2'],
+		['(/ 3 2)', '1.5'],
+		['(/ 1/2 2/4)', '1/1'],
+		['(< 1/4 1/3)', '#t'],
+		['(> 3/2 1)', '#t'],
+		['(<= 2/4 1/2)', '#t'],
+		['(>= 3/2 1)', '#t'],
+		['(< 1/2 0.6)', '#t'],
+		['(rational? 1/2)', '#t'],
+		['(rational? 2)', '#f'],
+		['(number? 3/4)', '#t'],
+		['(integer? 2/1)', '#f'],
+		['(float? 1/2)', '#f'],
+		['(zero? 0/5)', '#t'],
+		['(positive? 1/200)', '#t'],
+		['(negative? -3/2)', '#t'],
+		['(inc 1/2)', '3/2'],
+		['(dec 5/2)', '3/2'],
+		['(sqrt 4/9)', '2/3'],
+		['(expt 2/3 3)', '8/27'],
+		['(expt 1/2 -1)', '2/1'],
+		['(min 1/2 1/3)', '1/3'],
+		['(max 1/2 2)', '2'],
+	]
+	for r in rows {
+		got := m.run_str(r[0]) or { blip.string('ERROR: ${err.msg()}') }
+		s.record('tower ${r[0]}', printer.write(got) == r[1], printer.write(got))
+	}
+	errs := [
+		['(/ 1 0)', 'division by zero'],
+		['(/ 1/2 0)', 'division by zero'],
+		['(+ 1/2 "a")', 'expects an integer'],
+		['(sqrt -1/4)', 'of a negative number'],
+	]
+	for r in errs {
+		if _ := m.run_str(r[0]) {
+			s.record('tower error ${r[0]}', false, 'ran clean')
+		} else {
+			s.record('tower error ${r[0]}', err.msg().contains(r[1]), err.msg())
+		}
+	}
+	// The V-level constructors behind the literals: rational() normalizes
+	// (2/4 is 1/2), igcd is Euclid, make_rational refuses zero, and
+	// as_rational reads the parts back.
+	s.eq('rational normalizes', printer.write(blip.rational(2, 4)), '1/2')
+	s.eq('igcd reduces', blip.igcd(12, 18).str(), '6')
+	mut bad_rat := false
+	blip.make_rational(1, 0) or { bad_rat = true }
+	s.record('make_rational refuses zero', bad_rat, 'no error')
+	rv := blip.rational(6, 8)
+	mut got_n := i64(0)
+	mut got_d := i64(1)
+	if rr := rv.as_rational() {
+		got_n = rr.n
+		got_d = rr.d
+	}
+	s.record('as_rational reads parts', got_n == 3 && got_d == 4, '${got_n}/${got_d}')
+}
+
 fn (mut s Suite) toolchain_pins() {
 	old_home := os.getenv('BLIP_HOME')
 	th := os.join_path(os.vtmp_dir(), 'blip_tc_pins')
@@ -1305,6 +1394,7 @@ fn main() {
 	s.std_fs_json_time_cover()
 	s.std_table_covers()
 	s.std_test_covers()
+	s.numeric_tower()
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')

@@ -82,6 +82,7 @@ pub fn core_table() map[string]blip.PrimFn {
 	p['keyword?'] = prim_keywordp
 	p['integer?'] = prim_integerp
 	p['float?'] = prim_floatp
+	p['rational?'] = prim_rationalp
 	p['number?'] = prim_numberp
 	p['vector'] = prim_vector
 	p['vector-ref'] = prim_vector_ref
@@ -227,8 +228,46 @@ fn as_f64(v blip.Value) !f64 {
 	match v.tag {
 		.integer { return f64(v.as_int() or { return error(err.msg()) }) }
 		.float { return v.as_float() or { return error(err.msg()) } }
+		.rat {
+			r := v.as_rational() or { return error(err.msg()) }
+			return f64(r.n) / f64(r.d)
+		}
 		else { return error('expected a number, got ${printer.write(v)}') }
 	}
+}
+
+fn any_rat(args []blip.Value) bool {
+	for a in args {
+		if a.tag == .rat {
+			return true
+		}
+	}
+	return false
+}
+
+// rat_arg reads an exact number (integer or rational) as a numerator and a
+// positive denominator. Anything else is the same need_int error the
+// operation always reported -- a string in a rat sum is not a new mistake.
+fn rat_arg(name string, v blip.Value) !(i64, i64) {
+	if v.tag == .integer {
+		return v.i, 1
+	}
+	if v.tag == .rat {
+		r := v.as_rational() or { return error(err.msg()) }
+		return r.n, r.d
+	}
+	return need_int(name, v)!, 1
+}
+
+// rat_reduce divides out the gcd, keeping intermediate numerators and
+// denominators small across a multi-argument exact sum. V has no mutable
+// scalar parameters, so the reduced pair is returned.
+fn rat_reduce(n i64, d i64) (i64, i64) {
+	g := blip.igcd(n, d)
+	if g > 1 {
+		return n / g, d / g
+	}
+	return n, d
 }
 
 fn any_float(args []blip.Value) bool {
@@ -241,7 +280,7 @@ fn any_float(args []blip.Value) bool {
 }
 
 fn is_number(v blip.Value) bool {
-	return v.tag == .integer || v.tag == .float
+	return v.tag == .integer || v.tag == .float || v.tag == .rat
 }
 
 fn cmp_i64(a i64, b i64) int {
@@ -274,6 +313,17 @@ fn cmp_text(a string, b string) int {
 	return 0
 }
 
+// rat_parts reads any exact number (integer or rational) as a numerator
+// and a positive denominator: integers are n/1, rationals are stored
+// normalized. Floats never reach here (they compare through as_f64).
+fn rat_parts(v blip.Value) !(i64, i64) {
+	if v.tag == .integer {
+		return v.as_int() or { return error(err.msg()) }, 1
+	}
+	r := v.as_rational() or { return error(err.msg()) }
+	return r.n, r.d
+}
+
 // compare orders numbers and strings. Anything else is an error rather than a
 // silent false, because a silent false here becomes a mystery much later.
 pub fn compare(a blip.Value, b blip.Value) !int {
@@ -288,6 +338,18 @@ pub fn compare(a blip.Value, b blip.Value) !int {
 			return error('cannot compare ${printer.write(a)} with ${printer.write(b)}')
 		}
 		return cmp_f64(as_f64(a)!, as_f64(b)!)
+	}
+	if a.tag == .rat || b.tag == .rat {
+		// Exact ordering by cross-multiplication: a/b < c/d iff a*d < c*b
+		// (denominators are positive by normalization, so no sign flip).
+		// Documented range note: products past i64 overflow wrap, so this
+		// is exact for everyday magnitudes, not astronomical ones.
+		if !is_number(a) || !is_number(b) {
+			return error('cannot compare ${printer.write(a)} with ${printer.write(b)}')
+		}
+		an, ad := rat_parts(a)!
+		bn, bd := rat_parts(b)!
+		return cmp_i64(an * bd, bn * ad)
 	}
 	if a.tag in [.string, .symbol, .keyword] && b.tag in [.string, .symbol, .keyword] {
 		return cmp_text(a.as_string() or { return error(err.msg()) }, b.as_string() or {
@@ -330,6 +392,20 @@ fn prim_add(args []blip.Value) !blip.Value {
 		}
 		return blip.float(f)
 	}
+	if any_rat(args) {
+		// Exact sum: a/b + c/d = (ad + cb)/bd, reduced per step. Floats
+		// never reach here (contagion above); anything else is the same
+		// need_int error the operation always reported.
+		mut n := i64(0)
+		mut d := i64(1)
+		for a in args {
+			an, ad := rat_arg('+', a)!
+			n = n * ad + an * d
+			d = d * ad
+			n, d = rat_reduce(n, d)
+		}
+		return blip.rational(n, d)
+	}
 	mut sum := i64(0)
 	for a in args {
 		sum += need_int('+', a)!
@@ -365,6 +441,10 @@ fn prim_sub(args []blip.Value) !blip.Value {
 		return blip.integer(acc)
 	}
 	if args.len == 1 {
+		if args[0].tag == .rat {
+			r := args[0].as_rational() or { return error(err.msg()) }
+			return blip.rational(-r.n, r.d)
+		}
 		return blip.integer(-need_int('-', args[0])!)
 	}
 	if any_float(args) {
@@ -373,6 +453,19 @@ fn prim_sub(args []blip.Value) !blip.Value {
 			f -= as_f64(args[i])!
 		}
 		return blip.float(f)
+	}
+	if any_rat(args) {
+		// Exact difference, reduced per step like the sum.
+		an0, ad0 := rat_arg('-', args[0])!
+		mut n := an0
+		mut d := ad0
+		for i in 1 .. args.len {
+			an, ad := rat_arg('-', args[i])!
+			n = n * ad - an * d
+			d = d * ad
+			n, d = rat_reduce(n, d)
+		}
+		return blip.rational(n, d)
 	}
 	mut acc := need_int('-', args[0])!
 	for i in 1 .. args.len {
@@ -411,6 +504,17 @@ fn prim_mul(args []blip.Value) !blip.Value {
 		}
 		return blip.float(f)
 	}
+	if any_rat(args) {
+		// Exact product, reduced once at the end by the constructor.
+		mut n := i64(1)
+		mut d := i64(1)
+		for a in args {
+			an, ad := rat_arg('*', a)!
+			n *= an
+			d *= ad
+		}
+		return blip.rational(n, d)
+	}
 	mut acc := i64(1)
 	for a in args {
 		acc *= need_int('*', a)!
@@ -428,6 +532,18 @@ fn prim_div(args []blip.Value) !blip.Value {
 			return error('division by zero')
 		}
 		return blip.float(as_f64(args[0])! / d)
+	}
+	if args[0].tag == .rat || args[1].tag == .rat {
+		// Exact division: (a/b) / (c/d) = (a*d)/(b*c). Integers promote
+		// to rationals here, but int/int WITHOUT a rational keeps the
+		// rule below (exact int, else float) -- that rule is what the
+		// examples pin, and changing it would reprint every decimal.
+		an, ad := rat_arg('/', args[0])!
+		cn, cd := rat_arg('/', args[1])!
+		if cn == 0 {
+			return error('division by zero')
+		}
+		return blip.rational(an * cd, ad * cn)
 	}
 	b := need_int('/', args[1])!
 	if b == 0 {
@@ -472,6 +588,15 @@ pub fn value_eq(a blip.Value, b blip.Value) bool {
 		}
 		.float {
 			return a.f == b.f
+		}
+		.rat {
+			// Normalized at construction, so equal values have equal parts:
+			// no cross-multiplication, no float detour. A rational never
+			// equals an integer or float even when numerically equal (2 vs
+			// 2/1) -- that distinction is the whole point of the tower.
+			x := a.as_rational() or { panic('unreachable: value_eq matched tags') }
+			y := b.as_rational() or { panic('unreachable: value_eq matched tags') }
+			return x.n == y.n && x.d == y.d
 		}
 		.nil, .emptylist {
 			return true
@@ -922,6 +1047,13 @@ fn prim_numberp(args []blip.Value) !blip.Value {
 		return error('number? expects at least 1 argument, got ${args.len}')
 	}
 	return blip.boolean(is_number(args[0]))
+}
+
+fn prim_rationalp(args []blip.Value) !blip.Value {
+	if args.len < 1 {
+		return error('rational? expects at least 1 argument, got ${args.len}')
+	}
+	return tag_is(args[0], .rat)
 }
 
 // list? must reject cyclic lists, so it uses tortoise and hare.
@@ -2005,6 +2137,37 @@ fn prim_expt(args []blip.Value) !blip.Value {
 	if args[0].tag == .float || args[1].tag == .float {
 		return blip.float(math.pow(as_f64(args[0])!, as_f64(args[1])!))
 	}
+	if args[0].tag == .rat || args[1].tag == .rat {
+		// Exact power for an integer exponent: (a/b)^n, flipping for a
+		// negative one. Anything else (a rational exponent is a root)
+		// falls back to float, like an irrational square root does.
+		bn, bd := rat_arg('expt', args[0])!
+		if args[1].tag != .integer {
+			return blip.float(math.pow(f64(bn) / f64(bd), as_f64(args[1])!))
+		}
+		mut e := args[1].i
+		mut nn := bn
+		mut dd := bd
+		if e < 0 {
+			if nn == 0 {
+				return error('expt: division by zero')
+			}
+			nn, dd = dd, nn
+			e = -e
+		}
+		mut rn := i64(1)
+		mut rd := i64(1)
+		for e > 0 {
+			if e & 1 == 1 {
+				rn *= nn
+				rd *= dd
+			}
+			nn *= nn
+			dd *= dd
+			e /= 2
+		}
+		return blip.rational(rn, rd)
+	}
 	mut out := i64(1)
 	mut base := need_int('expt', args[0])!
 	mut n := need_int('expt', args[1])!
@@ -2038,6 +2201,20 @@ fn prim_sqrt(args []blip.Value) !blip.Value {
 	// caller was a float, so a distance compared unequal to the number it
 	// obviously was. sqrt is exact for a perfect square, and pretending
 	// otherwise is the numeric tower leaking into a result.
+	if a.tag == .rat {
+		// A perfect-square rational has a rational root; anything else is
+		// a float, like an irrational integer root.
+		r := a.as_rational() or { return error(err.msg()) }
+		if r.n < 0 {
+			return error('sqrt of a negative number')
+		}
+		rn := int(math.sqrt(f64(r.n)))
+		rd := int(math.sqrt(f64(r.d)))
+		if i64(rn) * i64(rn) == r.n && i64(rd) * i64(rd) == r.d {
+			return blip.rational(i64(rn), i64(rd))
+		}
+		return blip.float(math.sqrt(f64(r.n) / f64(r.d)))
+	}
 	n := need_int('sqrt', a)!
 	if n < 0 {
 		return error('sqrt of a negative number')
@@ -2059,6 +2236,10 @@ fn prim_inc(args []blip.Value) !blip.Value {
 		f := args[0].as_float() or { return error(err.msg()) }
 		return blip.float(f + 1.0)
 	}
+	if args[0].tag == .rat {
+		r := args[0].as_rational() or { return error(err.msg()) }
+		return blip.rational(r.n + r.d, r.d)
+	}
 	return blip.integer(need_int('inc', args[0])! + 1)
 }
 
@@ -2069,6 +2250,10 @@ fn prim_dec(args []blip.Value) !blip.Value {
 	if args[0].tag == .float {
 		f := args[0].as_float() or { return error(err.msg()) }
 		return blip.float(f - 1.0)
+	}
+	if args[0].tag == .rat {
+		r := args[0].as_rational() or { return error(err.msg()) }
+		return blip.rational(r.n - r.d, r.d)
 	}
 	return blip.integer(need_int('dec', args[0])! - 1)
 }
