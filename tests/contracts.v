@@ -89,6 +89,33 @@ fn (mut s Suite) check_fails(label string, src string, want_msg string) {
 	s.fail(label, 'no diagnostic containing ${want_msg} (${diags.len} found)')
 }
 
+// check_warns demands a WARNING containing want_msg: the exhaustiveness
+// rule warns by default, so `check_fails` (which would also match an
+// error) cannot tell the modes apart. Severity is the assertion.
+fn (mut s Suite) check_warns(label string, src string, want_msg string) {
+	diags := machine.check_text(src, false)
+	for d in diags {
+		if d.msg.contains(want_msg) && d.severity == 'warning' {
+			s.ok(label, 'warned: ${want_msg}')
+			return
+		}
+	}
+	s.fail(label, 'no warning containing ${want_msg} (${diags.len} found)')
+}
+
+// check_strict_fails runs the checker in `#:strict` mode (`blip check
+// --strict`): the exhaustiveness warning becomes an error.
+fn (mut s Suite) check_strict_fails(label string, src string, want_msg string) {
+	diags := machine.check_text(src, true)
+	for d in diags {
+		if d.msg.contains(want_msg) && d.severity == 'error' {
+			s.ok(label, 'strict reported: ${want_msg}')
+			return
+		}
+	}
+	s.fail(label, 'no strict error containing ${want_msg} (${diags.len} found)')
+}
+
 // check_manifest runs `check` on src with a manifest applied first, and
 // demands a diagnostic containing want_msg -- or, when want_msg is empty,
 // demands silence. The manifest is what E2b adds: without it the checker
@@ -177,8 +204,28 @@ fn main() {
 		'promises string, body gives int')
 	s.check_fails('check stray contract', '(->/c even?)', '->/c outside define/contract')
 	// A pattern shaped like a mis-aritied call is data, not a call.
+	// Clauses are vectors; the else keeps the no-catch-all warning away
+	// from what this pin is actually about.
 	s.check_ok('check match pattern silent',
-		'(def (add2 (a int) (b int)) int (+ a b)) (match v [(add2 x) x])')
+		'(def (add2 (a int) (b int)) int (+ a b)) (match v [(add2 x) x] [else 0])')
+	// B3: match* arity. Two subjects, one pattern: the clause can never
+	// match, so this is an error in both modes.
+	s.check_fails('check match* arity', '(match* (list 1 2) [(x) x] [else 0])',
+		'match* clause has 1 pattern(s) for 2 subject(s)')
+	s.check_ok('check match* arity ok', '(match* (list 1 2) [(x y) (+ x y)] [else 0])')
+	// B3/B6: light exhaustiveness. No else and no catch-all warns by
+	// default; an else, a bare-symbol catch-all, or a match* all-symbols
+	// row is exhaustive and silent; --strict errors.
+	s.check_warns('check match warns when not exhaustive', "(match 5 [5 'five])",
+		'not exhaustive')
+	s.check_ok('check match else is exhaustive', "(match 5 [5 'five] [else 'other])")
+	s.check_ok('check match catch-all is exhaustive', '(match 5 [5 0] [x x])')
+	s.check_ok('check match* all-symbols row is exhaustive',
+		'(match* (list 1 2) [(a b) a] [x x])')
+	s.check_strict_fails('check strict match errors', "(match 5 [5 'five])",
+		'not exhaustive')
+	s.check_strict_fails('check strict match* errors',
+		"(match* (list 1 2) [(1 2) 'hit])", 'not exhaustive')
 	// The prim table: arithmetic over numbers, comparisons to bool.
 	s.check_ok('check prim result', '(def (f) int (+ 1 2))')
 	s.check_fails('check prim arg', '(+ 1 "s")', 'needs numbers')

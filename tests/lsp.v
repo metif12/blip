@@ -218,12 +218,28 @@ fn (mut s Suite) positions() {
 		'line ${d.range.start.line} char ${d.range.start.character}')
 }
 
+fn (mut s Suite) checker() {
+	// B3: the editor reports what `blip check` reports. A non-exhaustive
+	// match warns here too -- severity 2, warnings do not fail -- while a
+	// match* arity mismatch is severity 1, an error on both sides.
+	warn := lsp.diagnose("(match 5 [5 'five])")
+	s.record('lsp warns a non-exhaustive match', warn.len == 1
+		&& warn[0].severity == 2 && warn[0].message.contains('not exhaustive'),
+		'${warn.len} diag(s)')
+	err := lsp.diagnose('(match* (list 1 2) [(x) x] [else 0])')
+	s.record('lsp errors a short match* clause', err.len == 1 && err[0].severity == 1
+		&& err[0].message.contains('for 2 subject(s)'), '${err.len} diag(s)')
+	clean := lsp.diagnose("(match 5 [5 'five] [else 'other])")
+	s.record('lsp agrees an else is exhaustive', clean.len == 0, '${clean.len} diag(s)')
+}
+
 fn main() {
 	mut s := Suite{}
 
 	s.protocol()
 	s.lifecycle()
 	s.positions()
+	s.checker()
 
 	// The real bar: the server and the interpreter must agree that a broken
 	// file is broken, on the same text. This is the same shape as the emit-js

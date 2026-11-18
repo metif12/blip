@@ -1,6 +1,7 @@
 module machine
 
 import blip
+import blip.host
 
 // check.v -- `blip check`: the static checker for erased annotations (M10).
 //
@@ -36,6 +37,11 @@ pub:
 	line int
 	col  int
 	msg  string
+	// severity is `error` or `warning`. Errors fail `blip check`; warnings
+	// print but pass, unless `--strict` turns the exhaustiveness ones into
+	// errors. Every diagnostic the checker produced before severities
+	// existed is an error; only the exhaustiveness rule below can warn.
+	severity string = 'error'
 }
 
 struct CkParam {
@@ -90,7 +96,9 @@ fn ck_prim_sig(name string) ?CkSig {
 }
 
 // check_source checks already-read top-level forms and returns one
-// diagnostic per mismatch, in source order.
+// diagnostic per mismatch, in source order. Strict mode (`blip check
+// --strict`, the `#:strict` of the design question) reads `m.check_strict,
+// set by the caller like `applied_manifest`: warnings become errors.
 pub fn (mut m Machine) check_source(forms []blip.NodeId) []CheckDiag {
 	mut diags := []CheckDiag{}
 	mut sigs := map[string]CkSig{}
@@ -103,12 +111,43 @@ pub fn (mut m Machine) check_source(forms []blip.NodeId) []CheckDiag {
 	return diags
 }
 
+// check_text is the whole `blip check` pipeline for one source string:
+// read, then check. Reader diagnostics belong to the reader, so a broken
+// file yields nothing here (the caller reports the syntax error instead).
+// The LSP uses this; the CLI equivalent lives in main.v because it also
+// threads manifests and file names.
+pub fn check_text(src string, strict bool) []CheckDiag {
+	h := host.new_capture()
+	mut m := new_standalone(h)
+	forms := m.arena.read_source(src, 'check')
+	if forms.diags.len > 0 {
+		return []CheckDiag{}
+	}
+	m.check_strict = strict
+	return m.check_source(forms.forms)
+}
+
 fn (mut m Machine) check_diag(id blip.NodeId, msg string, mut diags []CheckDiag) {
 	o := m.arena.node(id).origin
 	diags << CheckDiag{
-		line: o.line
-		col:  o.col
-		msg:  msg
+		line:     o.line
+		col:      o.col
+		msg:      msg
+		severity: 'error'
+	}
+}
+
+// check_warn reports a warning: printed like an error but not fatal, unless
+// strict mode asked for the error instead (the caller chooses which to
+// call based on the mode, so the rule reads `warn or fail`, not `warn
+// then upgrade`).
+fn (mut m Machine) check_warn(id blip.NodeId, msg string, mut diags []CheckDiag) {
+	o := m.arena.node(id).origin
+	diags << CheckDiag{
+		line:     o.line
+		col:      o.col
+		msg:      msg
+		severity: 'warning'
 	}
 }
 
@@ -370,11 +409,49 @@ fn (mut m Machine) check_form(id blip.NodeId, env map[string]string, ret string,
 				return 'any'
 			}
 			m.check_form(args[0], env, ret, sigs, mut diags)
+			// match* arity (roadmap B3): the subjects are `(list a b …)`,
+			// so a clause pattern must destructure exactly that many. A
+			// short or long pattern is always a bug -- at run time the
+			// clause never matches, silently -- so this is an error, not
+			// a warning, in both modes.
+			subs := if head == 'match*' { m.match_subjects(args[0]) } else { -1 }
+			mut exhaustive := false
 			for c in args[1..] {
-				if m.arena.node(c).tag != .list {
+				// Clauses are vectors (`[pattern body …]`); a list works
+				// too. Anything else is not a clause and is skipped.
+				if m.arena.node(c).tag != .list && m.arena.node(c).tag != .vector {
 					continue
 				}
 				ck := m.arena.kids(c)
+				pat := m.clause_pattern(ck)
+				if pat >= 0 {
+					pn := m.arena.node(ck[pat])
+					if subs >= 0 && (pn.tag == .list || pn.tag == .vector) {
+						n := m.arena.kids(ck[pat]).len
+						if n != subs {
+							m.check_diag(ck[pat], 'match* clause has ${n} pattern(s) for ${subs} subject(s)',
+								mut diags)
+						}
+					}
+					// A bare symbol binds anything (`_` included: matching
+					// wildcards is what it is for), `else` is the spelled
+					// catch-all, and a match* row of all symbols binds every
+					// subject. Any of those makes the match exhaustive.
+					if pn.tag == .sym {
+						exhaustive = true
+					} else if head == 'match*' && (pn.tag == .list || pn.tag == .vector) {
+						mut all_sym := true
+						for sp in m.arena.kids(ck[pat]) {
+							if m.arena.node(sp).tag != .sym {
+								all_sym = false
+								break
+							}
+						}
+						if all_sym {
+							exhaustive = true
+						}
+					}
+				}
 				mut bi := 0
 				// A leading #:when guard is code; the pattern after it
 				// is data and is skipped, never checked as a call.
@@ -398,6 +475,18 @@ fn (mut m Machine) check_form(id blip.NodeId, env map[string]string, ret string,
 				}
 				for b in ck[bi..] {
 					m.check_form(b, env, ret, sigs, mut diags)
+				}
+			}
+			// Light exhaustiveness (roadmap B3/B6): without an `else` or a
+			// catch-all, some subject falls through to a run-time match
+			// failure. A warning by default, an error under `#:strict`
+			// (`blip check --strict`), so dynamic programs are not bricked
+			// by a static check they did not ask for.
+			if !exhaustive {
+				if m.check_strict {
+					m.check_diag(id, 'match is not exhaustive (no else clause)', mut diags)
+				} else {
+					m.check_warn(id, 'match is not exhaustive (no else clause)', mut diags)
 				}
 			}
 			return 'any'
@@ -429,6 +518,34 @@ fn (mut m Machine) check_form(id blip.NodeId, env map[string]string, ret string,
 			return m.check_call(id, head, args, env, ret, sigs, mut diags)
 		}
 	}
+}
+
+// match_subjects counts the values a match* dispatches on: the elements of
+// an explicit `(list …)` subject. Anything else (a variable, a call the
+// checker cannot see through) is unknown, reported as -1, and never judged.
+fn (m &Machine) match_subjects(id blip.NodeId) int {
+	kids := m.arena.kids(id)
+	if kids.len == 0 || m.arena.node(kids[0]).tag != .sym {
+		return -1
+	}
+	if m.arena.node(kids[0]).value != 'list' {
+		return -1
+	}
+	return kids.len - 1
+}
+
+// clause_pattern finds the pattern element of a match clause: the element
+// after an optional leading #:when guard. Returns -1 when the clause is
+// too short to have one (a bare guard with no pattern and no body).
+fn (m &Machine) clause_pattern(ck []blip.NodeId) int {
+	mut bi := 0
+	if bi < ck.len && m.is_when_guard(ck[bi]) {
+		bi += 2
+	}
+	if bi >= ck.len {
+		return -1
+	}
+	return bi
 }
 
 // is_when_guard reports whether id is a match guard keyword. Only `#:when`

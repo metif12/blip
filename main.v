@@ -24,7 +24,7 @@ import strings
 //   blip run <file.blip> ...   evaluate files, in order, in one machine
 //   blip <file.blip>           shorthand for `run`
 //   blip test <file.blip> ...  evaluate and check the `;=>` expectations
-//   blip check <file.blip> ... report contract/type mismatches without running
+//   blip check [--strict] <file.blip> ... report mismatches without running
 //   blip emit-js <file.blip>   compile a file to a JavaScript module on stdout
 //   blip build <file> [-o out.js]  compile a file to a self-contained .js module
 //   blip fmt [-w] <file.blip>  pretty-print (normalize) a file, write back with -w
@@ -66,7 +66,7 @@ usage:
   blip run <file.blip> ...   evaluate files in order, in one machine
   blip <file.blip>           shorthand for `blip run`
   blip test <file.blip> ...  evaluate and check the `;=>` expectations
-  blip check <file.blip> ... report contract/type mismatches without running
+  blip check [--strict] <file.blip> ... report mismatches without running
   blip emit-js <file.blip>   compile a file to a JavaScript module on stdout
   blip build <file> [-o out.js]  compile a file to a self-contained .js module
   blip fmt [-w] <file.blip>  pretty-print (normalize) a file, write back with -w
@@ -140,21 +140,27 @@ Exit status is 0 when every expectation held and 1 when any did not, so this
 works as a test gate from CI. Files without expectations are merely run.')
 		}
 		'check' {
-			println('blip check <file.blip> ... -- report mismatches without running
+			println('blip check [--strict] <file.blip> ... -- report mismatches without running
 
 The static checker for erased annotations (M10). Functions defined with
 annotated `def` -- (def (add (x int) (y int)) int ...) -- have their
 call sites judged: wrong arity and literal arguments of the wrong type are
 reported as file:line:col: message, one per mismatch. So is a body whose
-known type contradicts a declared return, and a ->/c outside
-define/contract.
+known type contradicts a declared return, a ->/c outside
+define/contract, and a match* clause destructuring the wrong number of
+subjects (always an error: the clause can never match).
 
 Anything the checker has no signature for -- unannotated functions, the
 prelude, macros -- is unknown, and unknown unifies with everything. A file
 that passes is not proven correct; a file that fails names a real
 mismatch. Nothing is evaluated, so checking a hostile file is safe.
 
-Exit status is 0 when nothing was found and 1 when any diagnostic was
+A match without an else clause (or a catch-all pattern) warns: some
+subject falls through to a run-time match failure. Warnings print but
+pass; --strict, the #:strict of the design question, turns them into
+errors, so dynamic programs are not bricked by default.
+
+Exit status is 0 when nothing was found and 1 when any error was
 reported.')
 		}
 		'lsp' {
@@ -491,7 +497,7 @@ fn main() {
 					eprintln('run `blip help check` for usage')
 					exit_code(2)
 				}
-				exit_code(check_files(args[1..]))
+				exit_code(check_files_strict(args[1..]))
 			}
 			'emit-js' {
 				if args.len < 2 {
@@ -986,7 +992,27 @@ fn run_tests(paths []string, nested bool) int {
 // the checker judges only what it has signatures for -- so a reader
 // diagnostic is the one hard failure: without a parse there is nothing to
 // check against.
-fn check_files(paths []string) int {
+// check_files_strict splits `--strict` (warnings become errors) from the
+// paths, like `run_tests_nested` splits `--nested`.
+fn check_files_strict(args []string) int {
+	mut strict := false
+	mut paths := []string{}
+	for a in args {
+		if a == '--strict' {
+			strict = true
+		} else {
+			paths << a
+		}
+	}
+	if paths.len == 0 {
+		eprintln('blip: check needs a file')
+		eprintln('run `blip help check` for usage')
+		return 2
+	}
+	return check_files(paths, strict)
+}
+
+fn check_files(paths []string, strict bool) int {
 	$if wasm32 {
 		println('blip: check not available in wasm build')
 		return 1
@@ -1009,6 +1035,7 @@ fn check_files(paths []string) int {
 				fails++
 				continue
 			}
+			m.check_strict = strict
 			forms := m.arena.read_source(src, path)
 			if forms.diags.len > 0 {
 				d := forms.diags[0]
@@ -1017,6 +1044,10 @@ fn check_files(paths []string) int {
 				continue
 			}
 			for dg in m.check_source(forms.forms) {
+				if dg.severity == 'warning' {
+					println('${path}:${dg.line}:${dg.col}: warning: ${dg.msg}')
+					continue
+				}
 				println('${path}:${dg.line}:${dg.col}: ${dg.msg}')
 				fails++
 			}

@@ -7,6 +7,7 @@ $if !wasm32 {
 }
 
 import blip.reader
+import blip.machine
 import blip.prims
 import blip.printer
 import strings
@@ -166,6 +167,29 @@ pub fn diagnose(src string) []LspDiagnostic {
 			}
 			message:  d.msg
 			severity: 1
+			source:   'blip'
+		}
+	}
+	// The static checker agrees with the CLI: `blip check` and the editor
+	// report the same mismatches, so a file the LSP calls clean passes the
+	// gate. check_text yields nothing on a broken file (the reader owns
+	// that diagnostic), and warnings map to LSP 2, errors to 1.
+	for cd in machine.check_text(src, false) {
+		line := if cd.line - 1 > 0 { cd.line - 1 } else { 0 }
+		ch := if cd.col - 1 > 0 { cd.col - 1 } else { 0 }
+		out << LspDiagnostic{
+			range:    Range{
+				start: Position{
+					line:      line
+					character: ch
+				}
+				end:   Position{
+					line:      line
+					character: ch + 1
+				}
+			}
+			message:  cd.msg
+			severity: if cd.severity == 'warning' { 2 } else { 1 }
 			source:   'blip'
 		}
 	}

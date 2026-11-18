@@ -89,6 +89,12 @@ pub mut:
 	// so E2b `blip check` can name the manifest line that disabled a
 	// capability. Empty until the embedder or CLI applies one.
 	applied_manifest manifest.Manifest
+	// check_strict is the `#:strict` mode of the exhaustiveness question:
+	// `blip check --strict` (and only it) turns the not-exhaustive warning
+	// into an error. A mode flag on the machine, set by the caller like
+	// `applied_manifest`, so the twenty-odd check_form recursions do not
+	// each carry one more parameter.
+	check_strict bool
 	// macros names the procedures defmacro created, so macex can tell a macro from
 	// a function without guessing from its shape.
 	macros []string

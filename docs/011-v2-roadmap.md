@@ -169,7 +169,15 @@ deterministic tooling) is already unique; fibers and PEG complete it.
    `lsp` diagnostics equal `blip run` diagnostics. `check` gains
    `match*` arity plus light exhaustiveness (warning by default, error
    under `#:strict`). Gate: `contracts.v` + `lsp` additions, `emit_js`
-   both-engines-agree.
+   both-engines-agree — **done**: `check` reports `match*`
+   pattern/subject count mismatches as errors (clauses are vectors --
+   the old `.list`-only walk never descended into them, so bodies went
+   unchecked too); a `match` without `else`/catch-all warns
+   (`warning: ` prefix, exit 0) and `blip check --strict` errors (exit
+   1); the LSP runs the same `check_text` (severity 1/2 mapped) so the
+   editor and the gate agree. Pins: `contracts` arity/ok/warn/else/
+   catch-all/all-symbols/strict, `lsp` severity mapping + else-clean,
+   `emit_js` unchanged 45 green (runtime untouched).
 4. **Fibers.** Janet has them now; Gleam has processes, Racket threads.
    blip sits on a CEK machine with a heap stack, so cheap fibers are the
    natural step, not OS threads. Pairs with `use` + `Result`. Gate:
@@ -180,7 +188,9 @@ deterministic tooling) is already unique; fibers and PEG complete it.
 6. **Exhaustiveness for `match`.** Gleam has it; no Lisp in the table
    does. Follows from the current `check` (which already reads `def`).
    Default warning, error under `#:strict` (open question in
-   `000-blip-design.md`). Gate: `tests/contracts.v` additions.
+   `000-blip-design.md`). Gate: `tests/contracts.v` additions — **done
+   with B3** (same rule, same pins; the design question is closed:
+   warning by default, `blip check --strict` errors).
 4. **Minimal numeric tower.** Racket exact, Clojure bigint, Janet
    int/float/rational. Proposal is minimal: `int`/`i64` + `rational` +
    `float` with explicit promotion, not a CL tower. Gate: promotion

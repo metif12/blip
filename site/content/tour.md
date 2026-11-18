@@ -278,7 +278,7 @@ Everything above uses no macros at all. When a case genuinely needs one, `defmac
 
 ## Contracts and `check`
 
-`define/contract` checks arguments (and optionally the result) on every call, desugared to `assert`, so a violation is an ordinary error. Annotations `(x int)` erase at run time — the machine never sees them — and `blip check` reports the mismatches statically: wrong arity, literal argument of the wrong type, a body contradicting its declared return.
+`define/contract` checks arguments (and optionally the result) on every call, desugared to `assert`, so a violation is an ordinary error. Annotations `(x int)` erase at run time — the machine never sees them — and `blip check` reports the mismatches statically: wrong arity, literal argument of the wrong type, a body contradicting its declared return, a `match*` clause with the wrong number of patterns. A `match` without an `else` warns; `--strict` turns the warning into an error.
 
 ```
 (define/contract (halve x) (->/c even?) (/ x 2))

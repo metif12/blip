@@ -21,7 +21,7 @@ REPL commands, at the start of a line: `,l PATH` loads a file into the running m
 
 ## Checking and building
 
-**`blip check &lt;file.blip&gt; ...`** reports contract and type mismatches without running anything: wrong arity, literal arguments of the wrong type, bodies contradicting declared returns, `->/c` outside `define/contract`. Unknown names are never errors. Exit status is 0 when nothing is found.
+**`blip check [--strict] &lt;file.blip&gt; ...`** reports contract and type mismatches without running anything: wrong arity, literal arguments of the wrong type, bodies contradicting declared returns, `->/c` outside `define/contract`, and `match*` clauses destructuring the wrong number of subjects. Unknown names are never errors. A `match` without an `else` (or catch-all) warns -- some subject falls through -- and `--strict` turns the warning into an error. Exit status is 0 when no error is found.
 
 **`blip build &lt;file&gt; [-o out.js]`** compiles a program to a self-contained JavaScript module. **`blip emit-js &lt;file.blip&gt;`** prints the same module to stdout instead of a file.
 
