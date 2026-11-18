@@ -226,6 +226,18 @@ fn main() {
 	s.record('define is refused by name, not mis-emitted', ref_def.blocked.len > 0,
 		'blocked: ${ref_def.blocked}')
 
+	// The rest of the A2 removals refuse the same way: by name, never by
+	// emitting a call to something nothing defines.
+	for pair in [['lambda', '(lambda (x) x)'], ['do', '(do 1 2)'],
+		['when', '(when #t 1)'], ['case', '(case 5 [(1 2) 10])'],
+		['first', '(first (quote (1 2)))'], ['rest', '(rest (quote (1 2)))']] {
+		name := pair[0]
+		src := pair[1]
+		res := emit.compile(src) or { emit.Result{} }
+		s.record('${name} is refused by name, not mis-emitted', res.blocked.len > 0,
+			'blocked: ${res.blocked}')
+	}
+
 	s.check('quote is a literal', '(print (quote (1 2 3)))')
 
 	s.check('a lambda applied', '(print ((fn [x] (* x x)) 7))')

@@ -191,6 +191,13 @@ fn main() {
 	// Contracted functions contribute arity, not types.
 	s.check_ok('check contract call', '(define/contract (halve x) (->/c even?) (/ x 2)) (halve 8)')
 	s.check_fails('check define removed', '(define x 1)', 'removed in v2')
+	// A2 removals report through `check` too, each naming the canonical form.
+	s.check_fails('check do removed', '(do 1 2)', 'removed in v2')
+	s.check_fails('check lambda removed', '(lambda (x) x)', 'removed in v2')
+	s.check_fails('check when removed', '(when #t 1)', 'removed in v2')
+	s.check_fails('check case removed', '(case 5 [(1 2) 10])', 'removed in v2')
+	s.check_fails('check first removed', '(first (quote (1 2)))', 'removed in v2')
+	s.check_fails('check rest removed', '(rest (quote (1 2)))', 'removed in v2')
 	s.check_fails('check contract arity',
 		'(define/contract (halve x) (->/c even?) (/ x 2)) (halve 8 9)',
 		'expects 1 arguments, got 2')

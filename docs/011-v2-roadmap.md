@@ -64,13 +64,13 @@ spelling only.
 
 | Removed | Canonical | Alias recipe location |
 |---|---|---|
-| `lambda`, `λ` | `fn` | tour appendix "from Racket/Scheme?" |
+| `lambda`, `λ` | `fn` | tour appendix "from Racket/Scheme?" — **done**: machine errors, `check` reports, emitter refuses, pins in `tail_calls` (both spellings), `contracts`, `emit_js` |
 | `define` | `def` | tour appendix "from Racket/Scheme?" (`define/contract` kept for now; becomes `def/contract` later, `defc` rejected: contract must read as definition) — **done**: machine errors, `check` reports, emitter refuses, struct codegen emits `def`, corpus+tests+tour use `def`, `tail_calls`/`contracts`/`emit_js` pin the removal (prim alias recipes verified working; special forms cannot be aliased back) |
-| `first` / `rest` | `car` / `cdr` | same appendix |
+| `first` / `rest` | `car` / `cdr` | same appendix — **done**: prims error, `check` reports, emitter refuses by name, pins in `tail_calls`/`contracts`/`emit_js` |
 | `.lip` / `.vl` loader | `.blip` only | loader errors with a migration line instead of a warning — **done**: `Machine.load` refuses `.lip`/`.vl` naming `.blip`, `resolve_module` entry is `blip.blip`, corpus renamed (18 files), `blip migrate` renames alongside rewriting (conflict errors instead of overwriting), `embedding.v` pins both refusals, `unit.v` pins the rename |
-| `do` | `begin` | same appendix (macro expansions emit `begin`) — **done**: machine errors, `check` reports, emitter refuses, `05_pipelines`/tour/`blip_in_y_min` emit `begin` |
-| `when` (bare) | `#:when` | guard appendix |
-| `case` | `match` with literals | `cond` stays (condition chains read better than `match #t`); `case` goes because literal-`match` does the same job with destructuring |
+| `do` | `begin` | same appendix (macro expansions emit `begin`) — **done**: machine errors, `check` reports, emitter refuses, `05_pipelines`/tour/`blip_in_y_min` emit `begin`, pins in `tail_calls`/`contracts`/`emit_js` |
+| `when` (bare) | `#:when` | guard appendix — **done**: machine errors, `check` reports, emitter refuses, pins in `tail_calls`/`contracts`/`emit_js` |
+| `case` | `match` with literals | `cond` stays (condition chains read better than `match #t`); `case` goes because literal-`match` does the same job with destructuring — **done**: machine errors, `check` reports, emitter refuses, pins in `tail_calls`/`contracts`/`emit_js` |
 
 Decided against removing (different semantics, not spellings):
 `print`/`display`, `->`/`->>`/`|>` (different plumbing), `=`/`eq?`,

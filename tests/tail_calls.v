@@ -123,6 +123,63 @@ fn main() {
 		}
 	}
 	{
+		// `λ` is the same removal under its other spelling.
+		res_uni := reader.read_all('(λ [x] x)')
+		mut m_uni := machine.new_machine(&res_uni.arena)
+		if _ := m_uni.run(res_uni.forms) {
+			println('FAIL uni-lambda-removed: expected a removal error, ran clean')
+		} else {
+			if err.msg().contains('removed in v2') {
+				println('ok   uni-lambda-removed => removed in v2')
+			} else {
+				println('FAIL uni-lambda-removed: wrong error: ${err.msg()}')
+			}
+		}
+	}
+	{
+		// `first`/`rest` are gone in v2 (roadmap A2): `car`/`cdr` are the
+		// one spellings. They fail as prims, not special forms, but the
+		// message still names the removal and the canonical name.
+		res_first := reader.read_all('(first (quote (1 2)))')
+		mut m_first := machine.new_machine(&res_first.arena)
+		if _ := m_first.run(res_first.forms) {
+			println('FAIL first-removed: expected a removal error, ran clean')
+		} else {
+			if err.msg().contains('removed in v2') && err.msg().contains('car') {
+				println('ok   first-removed => removed in v2')
+			} else {
+				println('FAIL first-removed: wrong error: ${err.msg()}')
+			}
+		}
+	}
+	{
+		res_rest := reader.read_all('(rest (quote (1 2)))')
+		mut m_rest := machine.new_machine(&res_rest.arena)
+		if _ := m_rest.run(res_rest.forms) {
+			println('FAIL rest-removed: expected a removal error, ran clean')
+		} else {
+			if err.msg().contains('removed in v2') && err.msg().contains('cdr') {
+				println('ok   rest-removed => removed in v2')
+			} else {
+				println('FAIL rest-removed: wrong error: ${err.msg()}')
+			}
+		}
+	}
+	{
+		// `do` is gone in v2 (roadmap A2): `begin` is the one sequencing form.
+		res_do := reader.read_all('(do 1 2)')
+		mut m_do := machine.new_machine(&res_do.arena)
+		if _ := m_do.run(res_do.forms) {
+			println('FAIL do-removed: expected a removal error, ran clean')
+		} else {
+			if err.msg().contains('removed in v2') {
+				println('ok   do-removed => removed in v2')
+			} else {
+				println('FAIL do-removed: wrong error: ${err.msg()}')
+			}
+		}
+	}
+	{
 		// `define` is gone in v2 (roadmap A2): one form, `def`.
 		// `blip migrate` rewrites it; the machine refuses with a message.
 		res_def := reader.read_all('(define x 1)')

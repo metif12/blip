@@ -412,6 +412,11 @@ fn (mut m Machine) check_form(id blip.NodeId, env map[string]string, ret string,
 			m.check_diag(id, '`when` was removed in v2; use `(if c (begin body...))`', mut diags)
 			return 'any'
 		}
+		'first', 'rest' {
+			canon := if head == 'first' { '`car`' } else { '`cdr`' }
+			m.check_diag(id, '`${head}` was removed in v2; use ${canon}', mut diags)
+			return 'any'
+		}
 		'struct', 'struct-out', 'defmacro', 'macex', 'macex1', 'require', 'provide', 'import',
 		'let-assert' {
 			return 'any'
