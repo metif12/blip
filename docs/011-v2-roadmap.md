@@ -146,14 +146,24 @@ deterministic tooling) is already unique; fibers and PEG complete it.
    `max_steps`/`max_kont` sandbox) + `blip run` + `emit-js` node-parity.
    v2 products it: stable `blip build -o .js`, one real V→blip→JS
    example, sandbox fixture. Gate: same program prints the same bytes
-   on the machine and under node.
+   on the machine and under node — **done**: `blip build` writes
+   deterministic bytes (same source twice → identical output, pinned);
+   the one real V→blip→JS program is the `interp-API parity` check in
+   `emit_js` (public `embed.Interp` evals with the embedded prelude,
+   `emit.compile` compiles the same source, node runs it, transcripts
+   compared); every example is machine-vs-node compared by
+   `check_example`; the sandbox is pinned (`embed_api` restrict_to,
+   `embedding` per-machine step limits).
 2. **Error pipelines: `Result` + `use` + `match*` + `let assert`.**
    Gleam has `use` without `match*`; Racket has `match*` without the
    `Result` convention. Together they make flat fallible pipelines
    (`05_pipelines`) without nesting. Missing piece is std: move
    `map-result`/`unwrap-or`/`flatten`/`all-results`/`lazy_*` from the
    tour into `lib/std.blip`. Gate: pipeline example with asserts on
-   every branch (ok path, err path, miss-falls-through).
+   every branch (ok path, err path, miss-falls-through) — **done**
+   (with D1): the six combinators are ordinary std; `05_pipelines`
+   §"result pipelines" asserts ok/err/miss on the machine AND under
+   node via `check_example`; `unit` pins the std source-location.
 3. **Deterministic tooling that agrees with itself.**
    `check`/`fmt`/`test`/`doc`/`lsp` share one reader position source;
    `lsp` diagnostics equal `blip run` diagnostics. `check` gains

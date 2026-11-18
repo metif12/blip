@@ -1,6 +1,7 @@
 module main
 
 import os
+import blip.embed
 import blip.emit
 import blip.host
 import blip.machine
@@ -50,6 +51,17 @@ fn blip_output(src string) string {
 	h.give_file('main.blip', src)
 	mut m := machine.new_standalone(h)
 	m.load('main.blip') or { return 'ERROR: ${err.msg()}' }
+	return h.transcript().trim_right('\n')
+}
+
+// interp_output runs the source through the PUBLIC embed facade -- the
+// embedded prelude included, no arena plumbing -- and returns what it
+// printed. This is the V→blip half of the B1 story: an embedder never
+// touches machine/host directly.
+fn interp_output(src string) string {
+	h := host.new_capture()
+	mut e := embed.new(h)
+	e.eval(src) or { return 'ERROR: ${err.msg()}' }
 	return h.transcript().trim_right('\n')
 }
 
@@ -239,6 +251,27 @@ fn main() {
 	}
 
 	s.check('quote is a literal', '(print (quote (1 2 3)))')
+
+	// B1: the embedder's path agrees too. An embedder never wires a machine
+	// by hand -- it builds an Interp (embedded prelude included), evals,
+	// emits the same source, and runs node. This is the one real V→blip→JS
+	// program: if any of the three legs disagrees, the suite says so.
+	interp_src := '(def (sq x) (* x x))\n(println (map sq [1 2 3]))\n(println (sort [3 1 2]))'
+	interp_res := emit.compile(interp_src) or { emit.Result{} }
+	if interp_res.blocked.len > 0 {
+		s.fails++
+		println('FAIL interp-API parity => refused: ${interp_res.blocked.join(', ')}')
+	} else {
+		s.eq('interp-API parity (V→blip→JS)', node_output(interp_res.js), interp_output(interp_src))
+	}
+
+	// B1: `blip build` is stable. Same source twice must give the same
+	// bytes -- a backend that reorders (map iteration, gensym counters)
+	// would break caches and lie to diff-based deploys.
+	build_a := emit.compile(interp_src) or { emit.Result{} }
+	build_b := emit.compile(interp_src) or { emit.Result{} }
+	s.record('build output is deterministic', build_a.js == build_b.js && build_a.js.len > 0,
+		'${build_a.js.len} bytes, twice')
 
 	// A1.2: `print` is verbatim on both engines -- two prints concatenate
 	// with no newline between them -- `println` ends each line, and
