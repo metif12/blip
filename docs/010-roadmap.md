@@ -260,7 +260,7 @@ see §7.3.
     v -cc gcc -path 'vlib|@vlib' -o tools\tail.exe tests\tail_calls.v       && .\tools\tail.exe
     v -cc gcc -path 'vlib|@vlib' -o tools\nt.exe   tests\non_tail.v         && .\tools\nt.exe
     v -cc gcc -path 'vlib|@vlib' -o tools\lf.exe   tests\loop_forms.v      && .\tools\lf.exe
-    v -cc gcc -path 'vlib|@vlib' -o reader_probe.exe reader_probe.v        && .\reader_probe.exe examples\*.lip
+    v -cc gcc -path 'vlib|@vlib' -o reader_probe.exe reader_probe.v        && .\reader_probe.exe examples\*.blip
     v -cc gcc -path 'vlib|@vlib' -o blip.exe main.v
     ```
 
@@ -283,8 +283,8 @@ see §7.3.
     whose generated files do not match its compiler.
 5. Re-run the probes in `src/`, which are the regression net for the
    representation decisions (section 7.2).
-6. If `-cc gcc` is no longer required, say so in the README and in both
-   workflows at the same time. Those three places drifting apart is how a
+6. If `-cc gcc` is no longer required, say so in the README and in every
+   workflow at the same time. Those places drifting apart is how a
    "works on my machine" bug gets shipped.
 7. Record anything surprising in `~/.config/opencode/lessons.md`. The module
    resolution difference above cost four CI runs to characterise and is worth

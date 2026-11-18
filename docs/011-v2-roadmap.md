@@ -78,7 +78,14 @@ per release.
 4. **Toolchain sync** (§10.4, §7.1). The pinned-compiler procedure is
    history; the stock-release workflow (`install.sh`/`install.ps1`)
    needs its own procedure, plus the two stale notes in
-   `site/content/getting-started.md` and the CI comment.
+   `site/content/getting-started.md` and the CI comment — **done**:
+   verified current, not rewritten. `getting-started.md`, `ci.yml`,
+   both install scripts, `docker/*`, and `CONTRIBUTING.md` all name
+   stock V 0.5.2 from the release archive (unpin landed in `38ac7af`;
+   `unit.v` pins no `V_COMMIT`/clone in the install scripts and
+   `V_VERSION` in every Dockerfile); §7.1 was already the
+   stock-release procedure, repaired where it had rotted
+   (`examples\*.lip` → `*.blip`, "both workflows" → every workflow).
 
 ### A2. Removals (agreed: dialect-pleasing spellings go)
 
@@ -112,6 +119,20 @@ Candidates moved to std-as-macros or dropped: `cond` stays in core
 New sugar is admitted only with an example that is ugly without it.
 Gate: every removed form has either a std-macro replacement or an alias
 recipe, and the full gate stays green without the form.
+
+**Blocked (2026-11-19, probe-verified, not assumed):** a `defmacro`
+called under `run` never expands — the machine evaluates the arguments
+(a `(println ...)` body runs) and applies the macro body as a plain
+function, discarding the expansion (probe: `(defmacro my-when (test
+body) (list 'quote 'macro-ran))` + `(my-when #t (println "expanded"))`
+prints `"expanded"` instead of answering `macro-ran`; only `macex` and
+the emitter pre-pass expand). Control-flow std-macros (`loop`,
+`dotimes`, `cond` branches, `as->` steps) would therefore run every
+branch eagerly — the same finding that forced D6 into functions
+(`unit` pins "test framework uses functions, not macros"). Shrinking
+the core this way needs a language-level decision first (auto-expansion
+in eval, or a new macro protocol), not std work. `struct-out`/`provide`
+move with the modules-as-data design (Track E), independent of macros.
 
 ## Track B — where blip becomes the reference (all agreed)
 
