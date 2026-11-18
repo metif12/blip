@@ -1,0 +1,8 @@
+;; tests/nested_checked.blip
+;; The --nested pass case: every nested print carries a TRUE expectation, so
+;; `blip test --nested` is green here. Fragments pair in source order: the
+;; inner print runs before the outer one finishes.
+(println "one") ;=> "one"
+(begin
+  (println "two") ;=> "two"
+  (println "three"))

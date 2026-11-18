@@ -64,7 +64,17 @@ per release.
 3. **Nested `;=>`** (§10.2, opt-in first). `blip test` checks only
    top-level forms today. Changing it turns decorative nested comments
    (e.g. `04_errors.blip`) into failures. Gate: a nested-vs-top-level
-   fixture pinning the rule, then an opt-in flag before any default flip.
+   fixture pinning the rule, then an opt-in flag before any default flip —
+   **done**: `tests/nested_ignored.blip` (wrong nested arrows, green by
+   default) + `tests/nested_checked.blip` (true nested arrows, green under
+   `--nested`), pins in `repl_golden` (exit codes both modes); `--nested`
+   walks the pristine pre-eval tree (post-eval rewrites carry no lines;
+   shared subtrees guarded by a seen-set; quoted data skipped, same-line
+   forms share the outer arrow), pairing nested prints with fragments in
+   order (dual reading: fragment or answered value) and failing any other
+   nested arrow loudly. Corpus fallout under `--nested` is exactly one
+   line: `05_pipelines.blip:88`, a `match*` clause — the blocker list the
+   gate asked for, and why the default stays put.
 4. **Toolchain sync** (§10.4, §7.1). The pinned-compiler procedure is
    history; the stock-release workflow (`install.sh`/`install.ps1`)
    needs its own procedure, plus the two stale notes in

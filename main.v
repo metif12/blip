@@ -126,7 +126,12 @@ A ;=> expected comment on the same line as a form is an expectation: the form is
 evaluated and its value is compared, as text, against what follows the arrow. A
 mismatch is reported with the line, the value and the expectation. Only
 top-level forms are checked: a ;=> nested inside a body is documentation,
-not a test.
+not a test. `--nested` additionally checks nested print/println/display
+forms: a nested print arrow holds when it names either the fragment the
+print wrote or the value the print answered (usually nil), and fails
+otherwise; any other nested ;=> (a match clause, a quoted datum) cannot run
+on its own, so it fails loudly, naming the line. That loud list is what
+still blocks making nested the default.
 
   (def (double x) (* 2 x))
   (double 21)   ;=> 42
@@ -478,7 +483,7 @@ fn main() {
 					eprintln('run `blip help test` for usage')
 					exit_code(2)
 				}
-				exit_code(run_tests(args[1..]))
+				exit_code(run_tests_nested(args[1..]))
 			}
 			'check' {
 				if args.len < 2 {
@@ -734,7 +739,128 @@ mut:
 	checks int
 }
 
-fn run_tests(paths []string) int {
+// NestedExpect is one nested `;=>` found by the --nested walk: the line it
+// sits on, the text after the arrow, and whether the form is a print-family
+// call (checkable: true of its fragment or of its answer) or anything else
+// (not runnable on its own: documentation by construction).
+struct NestedExpect {
+	line int
+	want string
+	head string
+}
+
+// collect_nested walks the forms under `id` in source order, skipping `id`
+// itself (the top-level form, checked by the normal path). Quoted data is
+// not code: `quote`/`quasiquote` bodies and `quoted`/`quasi` datum subtrees
+// are skipped, descending only into `unquote`, which does run. Macro
+// templates that merely CONTAIN a print are therefore never mistaken for a
+// print that ran.
+//
+// A nested form that STARTS on its parent's line shares that line's arrow
+// with it (`(map (fn [x] ...) ...) ;=> ...` annotates the map, not the fn;
+// the inner lists of a match clause share the clause's line the same way),
+// so only a form starting on its own line is a candidate: attribution
+// needs its own line. A nested NON-print on the top form's LAST line is
+// likewise skipped: the top-level rule keys on the first line, so a
+// last-line arrow is the top form's orphaned annotation, and --nested does
+// not invent a check the default never ran. But a nested PRINT on the last
+// line is checked: its fragment is real output with its own arrow
+// (`(println "all good")) ;=> "all good"`), and pairing it is exactly what
+// the flag is for. `seen` guards the walk because the machine shares
+// transformed subtrees between parents, and a naive recursion revisits
+// them exponentially.
+fn collect_nested(arena &reader.Arena, id blip.NodeId, lines []string, parent_line int, top_last int, mut out []NestedExpect, mut seen map[blip.NodeId]bool) {
+	if id in seen {
+		return
+	}
+	seen[id] = true
+	own_line := arena.node(id).line
+	for kid in arena.kids(id) {
+		d := arena.node(kid)
+		if d.tag == .quoted || d.tag == .quasi {
+			for sub in arena.kids(kid) {
+				sd := arena.node(sub)
+				if sd.tag == .unquote || sd.tag == .unquote_splice {
+					collect_nested(arena, sub, lines, d.line, top_last, mut out, mut seen)
+				}
+			}
+			continue
+		}
+		if (d.tag == .list || d.tag.is_collection()) && d.line != own_line {
+			kk := arena.kids(kid)
+			if kk.len > 0 {
+				h := arena.node(kk[0])
+				if h.tag == .sym && h.value in ['print', 'println', 'display'] {
+					want := expectation(lines, d.line)
+					if want != '' {
+						out << NestedExpect{d.line, want, h.value}
+					}
+				} else if h.tag == .sym && h.value in ['quote', 'quasiquote'] {
+					continue
+				} else if d.line != top_last {
+					want := expectation(lines, d.line)
+					if want != '' {
+						out << NestedExpect{d.line, want, ''}
+					}
+				}
+			}
+		}
+		collect_nested(arena, kid, lines, own_line, top_last, mut out, mut seen)
+	}
+}
+
+// pair_nested runs the --nested comparison for one top-level form. A nested
+// print arrow is TRUE when it names either what the print wrote (its
+// fragment, in order) or what the print answered (usually nil): `;=> nil`
+// after a println can only mean the value, `;=> "all good"` can only mean
+// the fragment, and the flag accepts either true reading. An arrow false
+// under both is stale and fails with the line attached. Extra fragments
+// (prints without their own arrow) are fine -- the top-level check already
+// compared the join. A nested print with no fragment means a branch did not
+// run, and any other nested arrow is decorative by construction, so both
+// fail with the line attached.
+fn pair_nested(mut s TestSuite, path string, found []NestedExpect, frags []string, top_val string) {
+	mut fi := 0
+	for ne in found {
+		s.checks++
+		if ne.head == '' {
+			s.fails++
+			eprintln('${path}:${ne.line}: nested expectation here is documentation, not a test (--nested only checks print/println/display)')
+			continue
+		}
+		if fi >= frags.len {
+			s.fails++
+			eprintln('${path}:${ne.line}: nested ${ne.head} printed nothing (a branch that did not run has no fragment to compare)')
+			continue
+		}
+		if frags[fi] == ne.want || top_val == ne.want {
+			fi++
+			continue
+		}
+		s.check(path, ne.line, ne.want, frags[fi])
+		fi++
+	}
+}
+
+fn run_tests_nested(args []string) int {
+	mut nested := false
+	mut paths := []string{}
+	for a in args {
+		if a == '--nested' {
+			nested = true
+		} else {
+			paths << a
+		}
+	}
+	if paths.len == 0 {
+		eprintln('blip: test needs a file')
+		eprintln('run `blip help test` for usage')
+		return 2
+	}
+	return run_tests(paths, nested)
+}
+
+fn run_tests(paths []string, nested bool) int {
 	$if wasm32 {
 		println('blip: test not available in wasm build')
 		return 1
@@ -794,21 +920,47 @@ fn run_tests(paths []string) int {
 				// against a string and calling that a failure -- while the program
 				// printed exactly what it was documented to print. The machine
 				// already routes print through the host, so the output is here.
+				// --nested (roadmap A1.3, opt-in) collects here, BEFORE evaluation:
+				// the machine rewrites match/cond/let bodies as it runs, and
+				// the rewritten nodes carry no source lines, so a post-eval
+				// walk would see nothing to attribute.
+				mut nested_found := []NestedExpect{}
+				if nested {
+					mut seen := map[blip.NodeId]bool{}
+					top_last := 1 + src[..d.origin.end].count('\n')
+					collect_nested(m.arena, id, lines, d.line, top_last, mut nested_found, mut seen)
+				}
 				before := m.out.len
 				v := m.eval_one(id) or {
 					if want.len > 0 {
 						s.check(path, d.line, want, 'error: ${err.msg()}')
 					}
+					if nested {
+						pair_nested(mut s, path, nested_found, m.out[before..], '')
+					}
 					continue
 				}
+				// The top form's own answer, for the dual-meaning last line
+				// below: what it printed when it printed, else its value.
+				printed := m.out.len > before
+				top_got := if printed {
+					m.out[before..].join('').trim_right('\n').trim_space()
+				} else {
+					printer.write(v)
+				}
+				top_val := printer.write(v)
 				if want.len > 0 {
 					s.checks++
-					if m.out.len > before {
-						printed := m.out[before..].join('').trim_right('\n').trim_space()
-						s.check(path, d.line, want, printed)
-						continue
-					}
-					s.check(path, d.line, want, printer.write(v))
+					s.check(path, d.line, want, top_got)
+				}
+				// --nested (roadmap A1.3, opt-in): nested print-family forms
+				// carrying their own `;=>` are checked per-fragment, in
+				// source order, against what the top-level form printed.
+				// Anything else nested with a `;=>` fails LOUDLY, naming
+				// the line: that is the list of what still blocks the
+				// default flip, and why the default stays top-level-only.
+				if nested {
+					pair_nested(mut s, path, nested_found, m.out[before..], top_val)
 				}
 			}
 		}

@@ -74,6 +74,8 @@ fn main() {
 	s.quit_stops_reading()
 	s.the_prompt_shows_the_depth()
 	s.golden_stdin_to_stdout()
+	s.nested_expectations_are_documentation_by_default()
+	s.nested_flag_checks_nested_prints()
 
 	if s.fails > 0 {
 		println('${s.fails} FAILURE(S)')
@@ -259,6 +261,37 @@ fn (mut s Suite) golden_stdin_to_stdout() bool {
 	}
 	s.fail('golden stdin to stdout', first_difference(expected, actual))
 	return false
+}
+
+// nested_expectations_are_documentation_by_default pins the A1.3 rule: a
+// nested `;=>` -- even a wrong one -- never fails `blip test`. The fixture
+// carries a deliberately false nested expectation and still exits 0.
+fn (mut s Suite) nested_expectations_are_documentation_by_default() bool {
+	root := repo_root()
+	exe := os.join_path(root, exe_name)
+	fix := os.join_path(root, 'tests', 'nested_ignored.blip')
+	code := os.system('"${exe}" test "${fix}" > "${os.join_path(os.vtmp_dir(), 'blip_nested.out')}" 2>&1')
+	return s.passed('nested expectations are documentation by default', code == 0,
+		'a wrong nested ;=> still exits 0', 'exit was ${code}')
+}
+
+// nested_flag_checks_nested_prints pins the opt-in half: `--nested` fails
+// the same fixture (the nested print mismatches per-fragment), passes a
+// fixture whose nested prints are true, and names the rule in the output.
+fn (mut s Suite) nested_flag_checks_nested_prints() bool {
+	root := repo_root()
+	exe := os.join_path(root, exe_name)
+	tmp := os.vtmp_dir()
+	ignored := os.join_path(root, 'tests', 'nested_ignored.blip')
+	checked := os.join_path(root, 'tests', 'nested_checked.blip')
+	out := os.join_path(tmp, 'blip_nested_flag.out')
+	bad := os.system('"${exe}" test --nested "${ignored}" > "${out}" 2>&1')
+	good := os.system('"${exe}" test --nested "${checked}" > "${out}" 2>&1')
+	msg := os.read_file(out) or { '' }
+	ok := bad != 0 && good == 0
+	return s.passed('nested flag checks nested prints', ok,
+		'--nested fails the wrong nesting and passes the true one',
+		'bad exit ${bad}, good exit ${good}, output: ${msg.limit(200)}')
 }
 
 // first_difference prints a small window around the first line that differs,

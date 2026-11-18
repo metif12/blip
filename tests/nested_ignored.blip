@@ -1,0 +1,10 @@
+;; tests/nested_ignored.blip
+;; The nested-vs-top-level rule (roadmap A1.3): `blip test` checks only
+;; top-level forms. The nested `;=>` below is deliberately WRONG -- it is
+;; documentation, not a test -- and this file still passes. `blip test
+;; --nested` fails it: the opt-in flag checks nested prints per fragment.
+(println "one") ;=> "one"
+(begin
+  (println "two") ;=> "three, and the moon is made of cheese"
+  (+ 1 2) ;=> eleven, obviously not
+  (println "three"))
