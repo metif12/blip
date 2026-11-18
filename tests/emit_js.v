@@ -319,6 +319,28 @@ fn main() {
 	s.check('table literal order', '(print {:b 1 :a 2})')
 	s.check('table equality ignores order', '(print (= {:b 1 :a 2} {:a 2 :b 1}))')
 
+	// B-modules: the loaded set is data on both engines. Requiring the
+	// same file answers the same path list under node and on the machine.
+	// blip_output serves only main.blip, so this check serves the lib
+	// file the way examples_run.v does instead of reusing it.
+	mod_src := '(require "examples/lib/geometry.blip") (print (module-paths))'
+	mh := host.new_capture()
+	mh.give_file('main.blip', mod_src)
+	mh.give_file('examples/lib/geometry.blip', os.read_file('examples/lib/geometry.blip') or { '' })
+	mut mm := machine.new_standalone(mh)
+	mm.load('main.blip') or {
+		s.fails++
+		println('FAIL module-paths names the loaded file => machine: ${err.msg()}')
+	}
+	mod_res := emit.compile(mod_src) or { emit.Result{} }
+	if mod_res.blocked.len > 0 {
+		s.fails++
+		println('FAIL module-paths names the loaded file => refused: ${mod_res.blocked.join(', ')}')
+	} else {
+		s.eq('module-paths names the loaded file', node_output(mod_res.js),
+			mh.transcript().trim_right('\n'))
+	}
+
 	s.check('a lambda applied', '(print ((fn [x] (* x x)) 7))')
 
 	// Threading. Each of these is prims and machine forms only, so the blip

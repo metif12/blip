@@ -233,7 +233,14 @@ deterministic tooling) is already unique; fibers and PEG complete it.
 5. **Modules as data.** Racket `require`/`provide` with
    `only-in`/`prefix-in`; Janet `module/*` as data. Proposal follows
    Janet (fits the existing `@` tables/prototypes). Gate: a
-   `module/paths` fixture.
+   `module/paths` fixture — **done**: `(module-paths)` answers the
+   loaded set as an ordinary list of paths, in load order (a machine
+   builtin reading `m.loaded`, so `require` twice still records once);
+   the emitter notes each inlined require with
+   `blip.note_module_loaded` at the require point, so mid-evaluation
+   queries agree too; tour documents it. Pins: `unit` (fresh machine
+   empty, loaded file named), `emit_js` machine-vs-node transcript
+   parity on a requiring snippet.
 
 ## Track C — tooling (non-breaking, continuous)
 

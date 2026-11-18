@@ -293,6 +293,8 @@ One boundary: `yield` inside a `map` callback (or macro expansion) is refused ra
 (require (prefix-in geo: "lib/geometry.blip"))
 ```
 
+The loaded set is data, not hidden state: `(module-paths)` answers the list of loaded files in load order, so a program can inspect what it stands on.
+
 ## Contracts and `check`
 
 `define/contract` checks arguments (and optionally the result) on every call, desugared to `assert`, so a violation is an ordinary error. Annotations `(x int)` erase at run time — the machine never sees them — and `blip check` reports the mismatches statically: wrong arity, literal argument of the wrong type, a body contradicting its declared return, a `match*` clause with the wrong number of patterns. A `match` without an `else` warns; `--strict` turns the warning into an error.

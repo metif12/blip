@@ -1261,6 +1261,22 @@ fn (mut s Suite) numeric_tower() {
 		got_d = rr.d
 	}
 	s.record('as_rational reads parts', got_n == 3 && got_d == 4, '${got_n}/${got_d}')
+	// Modules as data (roadmap B5): a fresh machine has loaded nothing;
+	// requiring a file records its path, once, in load order. The capture
+	// host serves only what it is given, so the lib source is handed over
+	// exactly like examples_run.v hands over the prelude.
+	empty_mods := m.run_str('(module-paths)') or { blip.nil_value() }
+	s.record('fresh machine loaded nothing', printer.write(empty_mods) == '()',
+		printer.write(empty_mods))
+	geo_src := os.read_file('examples/lib/geometry.blip') or { '' }
+	h.give_file('examples/lib/geometry.blip', geo_src)
+	m.run_str('(require "examples/lib/geometry.blip")') or {
+		s.record('require loads for module-paths', false, err.msg())
+		return
+	}
+	loaded := m.run_str('(module-paths)') or { blip.nil_value() }
+	s.record('module-paths names the loaded file',
+		printer.write(loaded) == '("examples/lib/geometry.blip")', printer.write(loaded))
 }
 
 fn (mut s Suite) toolchain_pins() {

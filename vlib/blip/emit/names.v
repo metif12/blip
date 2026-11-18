@@ -108,6 +108,7 @@ fn mangle(name string) string {
 		'string-ends-with?' { return 'string_ends_with_q' }
 		'string-index-of' { return 'string_index_of' }
 		'rational?' { return 'rational_q' }
+		'module-paths' { return 'module_paths' }
 		'min' { return 'min' }
 		'max' { return 'max' }
 		'vector-append' { return 'vector_append' }
@@ -237,6 +238,7 @@ const prim_names = {
 	'fold':              true
 	'min':               true
 	'max':               true
+	'module-paths':      true
 	'for-each':          true
 	'vector-map':        true
 	'reverse':           true
@@ -422,6 +424,11 @@ $if wasm32 {
 			for line in body {
 				e.out << line
 			}
+			// Modules as data: the machine appends each loaded path to its
+			// registry as it loads, and the emitted program does the same
+			// here, in load order, so `module-paths` agrees on both
+			// engines -- including mid-evaluation queries.
+			e.out << 'blip.note_module_loaded(${json_str(full)});'
 			k++
 		}
 	}

@@ -17,6 +17,12 @@ function blip_write(s) {
   console.log(s);
 }
 
+// The loaded-module registry (modules as data, roadmap B5). The emitter
+// notes each inlined require with `note_module_loaded`, in load order, so
+// `module_paths` answers what the machine's registry answers. A copy is
+// returned: the registry is engine state, not a value to destructure.
+let blip_module_paths = [];
+
 // Exact rational helpers. A blip rational is a tagged [n, d] pair, always
 // normalized (positive denominator, reduced), mirroring blip.rational on
 // the machine. Integers widen to [n, 1]; floats contaminate to float math,
@@ -134,6 +140,11 @@ const blip = {
   },
   display: (...a) => {
     blip_write(a.map((v) => typeof v === "string" ? v : blip_show(v)).join(" "));
+    return null;
+  },
+  module_paths: () => blip_module_paths.slice(),
+  note_module_loaded: (p) => {
+    if (!blip_module_paths.includes(p)) blip_module_paths.push(p);
     return null;
   },
   echo: (x) => { console.log(blip_show(x)); return x; },

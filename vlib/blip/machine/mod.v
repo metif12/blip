@@ -698,7 +698,7 @@ fn machine_builtin(name string) bool {
 	// which built a fresh array on every call. This runs on every symbol lookup.
 	match name {
 		'apply', 'error', 'raise', 'format', 'gensym', 'print', 'println', 'display', 'echo', 'veb-route',
-		'yield', 'spawn', 'resume', 'fiber-status', 'fiber-done?', 'read-line', 'map', 'filter', 'reject', 'keep', 'fold', 'reduce', 'for-each',
+		'yield', 'spawn', 'resume', 'fiber-status', 'fiber-done?', 'module-paths', 'read-line', 'map', 'filter', 'reject', 'keep', 'fold', 'reduce', 'for-each',
 		'vector-map', 'any?', 'every?', 'sort-by', 'ok', 'err', 'ok?', 'err?', 'ok-value',
 		'err-value', 'map-result', 'unwrap-or', 'try-result', 'lazy-unwrap', 'lazy-map-result',
 		'flatten-result', 'all-results' {
@@ -2081,6 +2081,22 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 			id := args[0].as_int() or { return error('fiber-done? expects a fiber id, got ${printer.write(args[0])}') }
 			fb := m.fibers[int(id)] or { return error('no such fiber: ${id}') }
 			m.val = blip.boolean(fb.status == 'done')
+			m.ret()
+			return
+		}
+		'module-paths' {
+			// Modules as data (roadmap B5): the loaded set is an ordinary
+			// list of paths, in load order, not hidden machine state. A
+			// program can inspect what it stands on; the emitter notes
+			// each inlined require the same way, so both engines agree.
+			if args.len != 0 {
+				return error('module-paths expects no arguments, got ${args.len}')
+			}
+			mut items := []blip.Value{}
+			for p in m.loaded {
+				items << blip.string(p)
+			}
+			m.val = blip.list_from(items)
 			m.ret()
 			return
 		}
