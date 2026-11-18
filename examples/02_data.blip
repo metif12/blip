@@ -76,7 +76,8 @@
 (merge)                           ;=> {}
 (select-keys {:a 1 :b 2 :c 3} [:a :c])  ;=> {:a 1 :c 3}
 (select-keys {:a 1} [:missing])         ;=> {}
-(vals {:b 2 :a 1})                ;=> (1 2)
+(vals {:b 2 :a 1})                ;=> (2 1)
+(sort-table {:b 2 :a 1})          ;=> {:a 1 :b 2}
 
 ;; defaults over merged configuration: later layers win.
 (def defaults {:host "localhost" :port 8080})

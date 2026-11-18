@@ -167,9 +167,9 @@ fn write_table(v blip.Value, active []u64, seen map[u64]int, depth int) string {
 
 fn write_table_body(v blip.Value, active []u64, seen map[u64]int, depth int) string {
 	mut keys := (v.as_table() or { panic('unreachable: table/buffer arm') }).keys()
-	// Sorted so that printing is deterministic: a table whose iteration order
-	// varied between runs would make every error message unreproducible.
-	keys.sort()
+	// Insertion order, which is deterministic (construction order): a table
+	// prints the way it was built. `sort-table` in the std is the explicit
+	// sort for callers that want alphabetical.
 	mut parts := []string{}
 	for k in keys {
 		parts << ':' + k + ' ' + write_value((v.as_table() or {

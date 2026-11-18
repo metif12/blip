@@ -213,15 +213,19 @@ fn (mut m Machine) assemble(id blip.NodeId, kids []blip.NodeId, built map[blip.N
 		}
 		.table {
 			mut mm := map[string]blip.Value{}
+			mut order := []string{}
 			mut i := 0
 			for i + 1 < kids.len {
 				k := built[kids[i]].as_string() or {
 					return error('quoted table keys must be strings, got ${printer.write(built[kids[i]])}')
 				}
+				if k !in mm {
+					order << k
+				}
 				mm[k] = built[kids[i + 1]] or { blip.nil_value() }
 				i += 2
 			}
-			return blip.table(mm)
+			return blip.table_ordered(mm, order)
 		}
 		.array {
 			mut items := []blip.Value{}
@@ -240,15 +244,19 @@ fn (mut m Machine) assemble(id blip.NodeId, kids []blip.NodeId, built map[blip.N
 		}
 		.buffer {
 			mut mm := map[string]blip.Value{}
+			mut order := []string{}
 			mut i := 0
 			for i + 1 < kids.len {
 				k := built[kids[i]].as_string() or {
 					return error('quoted table keys must be strings, got ${printer.write(built[kids[i]])}')
 				}
+				if k !in mm {
+					order << k
+				}
 				mm[k] = built[kids[i + 1]] or { blip.nil_value() }
 				i += 2
 			}
-			return blip.buffer(mm)
+			return blip.buffer_ordered(mm, order)
 		}
 		else { return blip.nil_value() }
 	}

@@ -240,6 +240,11 @@ fn main() {
 
 	s.check('quote is a literal', '(print (quote (1 2 3)))')
 
+	// A1: tables print in insertion order on both engines, and `=` ignores
+	// order on both (the backend used to answer #f for distinct objects).
+	s.check('table literal order', '(print {:b 1 :a 2})')
+	s.check('table equality ignores order', '(print (= {:b 1 :a 2} {:a 2 :b 1}))')
+
 	s.check('a lambda applied', '(print ((fn [x] (* x x)) 7))')
 
 	// Threading. Each of these is prims and machine forms only, so the blip

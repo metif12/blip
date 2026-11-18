@@ -3312,6 +3312,7 @@ fn (mut m Machine) build_collection(id blip.NodeId, items []blip.Value) !blip.Va
 		return error('a table literal needs an even number of elements, got ${items.len}')
 	}
 	mut pairs := map[string]blip.Value{}
+	mut order := []string{}
 	mut i := 0
 	for i + 1 < items.len {
 		key := items[i]
@@ -3327,13 +3328,16 @@ fn (mut m Machine) build_collection(id blip.NodeId, items []blip.Value) !blip.Va
 			}
 		}
 
+		if ks !in pairs {
+			order << ks
+		}
 		pairs[ks] = items[i + 1]
 		i += 2
 	}
 	if tag == .buffer {
-		return blip.buffer(pairs)
+		return blip.buffer_ordered(pairs, order)
 	}
-	return blip.table(pairs)
+	return blip.table_ordered(pairs, order)
 }
 
 // is_destructuring reports whether a binding form's left side is a PATTERN rather

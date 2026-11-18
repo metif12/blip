@@ -1107,21 +1107,35 @@ fn prim_put(args []blip.Value) !blip.Value {
 	if args[0].tag != .table && args[0].tag != .buffer {
 		return error('put expects a table, got ${printer.write(args[0])}')
 	}
-	mut mm := (args[0].as_table() or { return error(err.msg()) }).values.clone()
-	mm[need_str('put', args[1])!] = args[2]
-	if args[0].tag == .buffer {
-		return blip.buffer(mm)
+	src := args[0].as_table() or { return error(err.msg()) }
+	mut mm := src.values.clone()
+	key := need_str('put', args[1])!
+	mut order := src.order.clone()
+	if key !in mm {
+		order << key
 	}
-	return blip.table(mm)
+	mm[key] = args[2]
+	if args[0].tag == .buffer {
+		return blip.buffer_ordered(mm, order)
+	}
+	return blip.table_ordered(mm, order)
 }
 
 fn prim_remove(args []blip.Value) !blip.Value {
 	if args.len != 2 {
 		return error('remove expects 2 arguments, got ${args.len}')
 	}
-	mut mm := (args[0].as_table() or { return error(err.msg()) }).values.clone()
-	mm.delete(need_str('remove', args[1])!)
-	return blip.table(mm)
+	src := args[0].as_table() or { return error(err.msg()) }
+	mut mm := src.values.clone()
+	key := need_str('remove', args[1])!
+	mm.delete(key)
+	mut order := []string{}
+	for k in src.order {
+		if k != key {
+			order << k
+		}
+	}
+	return blip.table_ordered(mm, order)
 }
 
 fn prim_table_keys(args []blip.Value) !blip.Value {

@@ -168,13 +168,14 @@ const blip = {
     }
     return rest.length > 0 ? rest[0] : null;
   },
-  // Keys print SORTED, which is what blip's printer does: `{:name "ada" :b 2}`
-  // reads `{:b 2 :name "ada"}`. That is not incidental -- a table literal in
-  // source order would make emitted output disagree with `blip run` for any
-  // table whose keys are not already alphabetical, and most are not.
+  // Keys print in INSERTION order, which is what blip's printer does:
+  // `{:host "x" :port 80}` reads `{:host "x" :port 80}`. That is not
+  // incidental -- a table printed in any other order would make emitted
+  // output disagree with `blip run` for any table whose keys are not
+  // already alphabetical, and most are not.
   table_keys: (t) => {
     const m = unvec(t);
-    return m && m.blip_table ? Object.keys(m.blip_table).sort().map((k) => blip.kw(k)) : [];
+    return m && m.blip_table ? Object.keys(m.blip_table).map((k) => blip.kw(k)) : [];
   },
   // Higher-order forms. Each drives its callback through `tramp`, because a
   // user function emitted by this backend returns a thunk when its body ends in
@@ -765,14 +766,14 @@ function blip_show(x) {
   if (x && x.blip_kw !== undefined) return ":" + x.blip_kw;
   // A vector prints `[...]`, the way the blip printer writes one.
   if (x && x.blip_vec) return "[" + x.blip_vec.map(blip_show).join(" ") + "]";
-  // A table prints `{:k v}` and a buffer `@{:k v}`, both with SORTED keys, which
-  // is the blip printer's own ordering: `{:name "ada" :b 1815}` reads
+  // A table prints `{:k v}` and a buffer `@{:k v}`, both in INSERTION order,
+  // which is the blip printer's own ordering: `{:b 1815 :name "ada"}` reads
   // `{:b 1815 :name "ada"}`. Measured against `blip run`, not assumed.
   // A keyword prints `:k`, bare like a symbol. Storing it as a string would
   // quote it, so tables and buffers keep keys as plain names and mark them
   // here with `blip.kw`, whose printer is the `:` prefix.
   if (x && x.blip_buffer) {
-    const keys = Object.keys(x.blip_buffer).sort();
+    const keys = Object.keys(x.blip_buffer);
     if (keys.length == 0) return "@{}";
     const kv = [];
     for (const k of keys) {
@@ -782,7 +783,7 @@ function blip_show(x) {
     return "@{" + kv.map(blip_show).join(" ") + "}";
   }
   if (x && x.blip_table) {
-    const keys = Object.keys(x.blip_table).sort();
+    const keys = Object.keys(x.blip_table);
     if (keys.length == 0) return "{}";
     const kv = [];
     for (const k of keys) {
@@ -829,9 +830,26 @@ function blip_equal(a, b) {
     if (!ak || ak !== bk) return false;
     return ak === "kw" ? a.blip_kw === b.blip_kw : a.blip_sym === b.blip_sym;
   }
+  // Tables compare by CONTENT, not order or identity: the machine's value_eq
+  // walks the maps, so `{:b 1 :a 2}` equals `{:a 2 :b 1}` on both engines.
+  // A table and a buffer are different tags, hence never equal -- same as
+  // the machine's tag check.
+  const am = a && (a.blip_table || a.blip_buffer) ? (a.blip_table || a.blip_buffer) : null;
+  const bm = b && (b.blip_table || b.blip_buffer) ? (b.blip_table || b.blip_buffer) : null;
+  if (am || bm) {
+    if (!am || !bm) return false;
+    if (!!a.blip_table !== !!b.blip_table) return false;
+    const ka = Object.keys(am);
+    const kb = Object.keys(bm);
+    if (ka.length !== kb.length) return false;
+    for (const k of ka) {
+      if (!(k in bm)) return false;
+      if (!blip_equal(am[k], bm[k])) return false;
+    }
+    return true;
+  }
   const ua = unvec(a);
-  const ub = unvec(b);
-  if (Array.isArray(ua) && Array.isArray(ub)) {
+  const ub = unvec(b);  if (Array.isArray(ua) && Array.isArray(ub)) {
     if (ua.length !== ub.length) return false;
     for (let i = 0; i < ua.length; i++) if (!blip_equal(ua[i], ub[i])) return false;
     return true;

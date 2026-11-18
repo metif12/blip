@@ -1052,6 +1052,49 @@ fn (mut s Suite) std_table_covers() {
 	s.record('merge overlays', printer.write(merged) == '{:a 1 :b 2}', printer.write(merged))
 	kept := m.run_str('(select-keys {:a 1 :b 2} [:a])') or { blip.nil_value() }
 	s.record('select-keys subsets', printer.write(kept) == '{:a 1}', printer.write(kept))
+	// A1: insertion order. Literals print the way they are written, put
+	// keeps an updated key's position and appends new ones, remove drops,
+	// and equality stays order-insensitive.
+	lit := m.run_str('{:b 1 :a 2}') or { blip.nil_value() }
+	s.record('literals keep insertion order', printer.write(lit) == '{:b 1 :a 2}', printer.write(lit))
+	ks := m.run_str('(table-keys {:b 1 :a 2})') or { blip.nil_value() }
+	s.record('table-keys is insertion-ordered', printer.write(ks) == '(:b :a)', printer.write(ks))
+	upd := m.run_str('(put {:b 1 :a 2} :b 9)') or { blip.nil_value() }
+	s.record('put keeps position on update', printer.write(upd) == '{:b 9 :a 2}', printer.write(upd))
+	dropped := m.run_str('(remove {:b 1 :a 2} :b)') or { blip.nil_value() }
+	s.record('remove drops the key', printer.write(dropped) == '{:a 2}', printer.write(dropped))
+	eq := m.run_str('(= {:b 1 :a 2} {:a 2 :b 1})') or { blip.nil_value() }
+	s.record('equality ignores order', printer.write(eq) == '#t', printer.write(eq))
+	loc := m.run_str('(source-location sort-table)') or { blip.nil_value() }
+	mut file := ''
+	if loc.tag == .table {
+		if t := loc.as_table() {
+			file = t.get('file').as_string() or { '' }
+		}
+	}
+	s.record('sort-table resolves to the std', file == 'lib/std.blip', file)
+	sorted := m.run_str('(sort-table {:b 2 :a 1})') or { blip.nil_value() }
+	s.record('sort-table sorts', printer.write(sorted) == '{:a 1 :b 2}', printer.write(sorted))
+	// The V-level constructors behind the literals: an explicit order is
+	// kept, which is what every literal and `put` relies on.
+	tv := blip.table_ordered({
+		'b': blip.integer(1)
+		'a': blip.integer(2)
+	}, ['b', 'a'])
+	mut ot_keys := []string{}
+	if ott := tv.as_table() {
+		ot_keys = ott.keys()
+	}
+	s.record('table_ordered keeps insertion order', ot_keys == ['b', 'a'], ot_keys.str())
+	bv := blip.buffer_ordered({
+		'b': blip.integer(1)
+		'a': blip.integer(2)
+	}, ['b', 'a'])
+	mut ob_keys := []string{}
+	if obt := bv.as_table() {
+		ob_keys = obt.keys()
+	}
+	s.record('buffer_ordered keeps insertion order', ob_keys == ['b', 'a'], ob_keys.str())
 }
 
 // The test set is ordinary std too (roadmap D6): deftest/is/is-msg/

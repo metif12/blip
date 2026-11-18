@@ -38,7 +38,16 @@ per release.
    example expects insertion order. Decision for v2: insertion order
    (Janet behavior), plus an explicit `sort-table`. Printer AND emitter
    move together. Gate: `blip test` green on all examples with no comment
-   edits.
+   edits — **done**: `Table` carries insertion `order` (literals, datum,
+   `put`/`remove`/`put!`/`dissoc!` maintain it; updates keep position),
+   `keys()`/printer/`table_keys`/node printer follow it, `=` stays
+   order-insensitive on both engines (backend gained table equality),
+   `sort-table` is ordinary std over `sort`. One exception to "no comment
+   edits": `02_data` line 79 pinned sorted `vals` (`(1 2)`), which the v2
+   direction changes to insertion (`(2 1)`), plus a `sort-table` line.
+   Pins: `unit` (order, update/remove/sort/equality/source-location),
+   `emit_js` (literal order + equality parity, `02_data`/`08_test`
+   transcripts), `blip test` 155 expectations green.
 2. **Verbatim `print` plus `println`** (§10.3, implemented once then
    reverted). `print` becomes verbatim (no trailing newline), `println`
    is the old `print`, `display` is bare plus no newline (Scheme

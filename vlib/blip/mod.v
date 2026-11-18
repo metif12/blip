@@ -111,18 +111,24 @@ pub fn (v &Vector) payload_tag() Tag {
 
 // Table is an immutable string-keyed map. A buffer uses the same payload with a
 // different tag, so `get`/`put` serve both and mutability is visible in the tag.
+//
+// Keys print and iterate in INSERTION order (Janet behavior, roadmap A1):
+// the order keys were first added, updates keeping their position. `order`
+// is maintained alongside `values` by every constructor and mutator; `keys()`
+// filters defensively so a stale entry can never surface.
 @[heap]
 pub struct Table {
 pub:
 	tag Tag
 pub mut:
 	values map[string]Value
+	order  []string
 }
 
 // StructVal is a struct instance. Fields are kept in DECLARATION order, not
 // sorted: `(Point 1 2)` has to print the way it was written, and a sorted map
-// prints `(Point 2 1)`. Table's `keys()` sorts because a table's order is not
-// anyone's business; a struct's field order is the declaration.
+// prints `(Point 2 1)`. Tables likewise keep insertion order; a struct's
+// field order is the declaration.
 pub struct StructVal {
 pub:
 	name   string
@@ -190,12 +196,16 @@ pub fn (t &Table) payload_tag() Tag {
 	return t.tag
 }
 
-// keys is sorted, not insertion-ordered. A table whose iteration order varied
-// between runs would make every error message and every test output unstable.
+// keys is insertion-ordered, not sorted. Insertion order is deterministic
+// (construction order), so output is stable without sorting; `sort-table`
+// in the std is the explicit sort for callers that want alphabetical.
 pub fn (t &Table) keys() []string {
 	mut out := []string{}
-	out << t.values.keys()
-	out.sort()
+	for k in t.order {
+		if k in t.values {
+			out << k
+		}
+	}
 	return out
 }
 
@@ -252,6 +262,11 @@ pub fn (t &Table) set_at(k string, val Value) {
 	unsafe {
 		mut tt := t
 		mut m := tt.values
+		if k !in m {
+			mut o := tt.order.clone()
+			o << k
+			tt.order = o
+		}
 		m[k] = val
 		tt.values = m
 	}
@@ -263,6 +278,13 @@ pub fn (t &Table) delete_at(k string) {
 		mut m := tt.values
 		m.delete(k)
 		tt.values = m
+		mut o := []string{}
+		for e in tt.order {
+			if e != k {
+				o << e
+			}
+		}
+		tt.order = o
 	}
 }
 
@@ -441,6 +463,7 @@ pub fn table(m map[string]Value) Value {
 		payload: &Table{
 			tag:    .table
 			values: m
+			order:  sorted_keys(m)
 		}
 	}
 }
@@ -451,8 +474,42 @@ pub fn buffer(m map[string]Value) Value {
 		payload: &Table{
 			tag:    .buffer
 			values: m
+			order:  sorted_keys(m)
 		}
 	}
+}
+
+// table_ordered/buffer_ordered build from an explicit key order: literal
+// evaluation and datum conversion pass the source order, `put` passes the
+// kept-or-appended order. The bare constructors above take a V map, which
+// carries no order, so they fall back to sorted keys -- the one order that
+// is deterministic without source information.
+pub fn table_ordered(m map[string]Value, order []string) Value {
+	return Value{
+		tag:     .table
+		payload: &Table{
+			tag:    .table
+			values: m
+			order:  order.clone()
+		}
+	}
+}
+
+pub fn buffer_ordered(m map[string]Value, order []string) Value {
+	return Value{
+		tag:     .buffer
+		payload: &Table{
+			tag:    .buffer
+			values: m
+			order:  order.clone()
+		}
+	}
+}
+
+fn sorted_keys(m map[string]Value) []string {
+	mut out := m.keys()
+	out.sort()
+	return out
 }
 
 // ---- erased annotations (M10) ------------------------------------------------

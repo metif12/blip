@@ -101,12 +101,13 @@
       s))
 
 ;; ---------------------------------------------------------------- tables
-;; Paths, merges, and subsets. `get` is total (nil on a miss) and
-;; `table-keys` lists every key, so the rest is ordinary blip: `get-in`
-;; walks a path of keys, `merge` overlays left to right with later keys
-;; winning, `select-keys` keeps a subset, and `vals` reads every value in
-;; key order. Paths and key sets read naturally as vectors, so a small
-;; `as-list` normalizes them once instead of every caller checking twice.
+;; Paths, merges, subsets, and order. `get` is total (nil on a miss) and
+;; `table-keys` lists every key in insertion order, so the rest is ordinary
+;; blip: `get-in` walks a path of keys, `merge` overlays left to right with
+;; later keys winning, `select-keys` keeps a subset, `vals` reads every
+;; value in insertion order, and `sort-table` rebuilds a table sorted.
+;; Paths and key sets read naturally as vectors, so a small `as-list`
+;; normalizes them once instead of every caller checking twice.
 
 ;; as-list turns a vector into a list of its elements; lists pass through.
 (def (as-list xs)
@@ -156,10 +157,16 @@
           (select-keys-from t (cdr ks) (put acc (car ks) (get t (car ks))))
           (select-keys-from t (cdr ks) acc))))
 
-;; vals reads every value in key order (table-keys sorts), so the answer
-;; is deterministic whatever order the table was built in.
+;; vals reads every value in insertion order, so the answer follows the
+;; table's construction, not an imposed sort.
 (def (vals t)
   (map (fn [k] (get t k)) (table-keys t)))
+
+;; sort-table rebuilds a table with its keys sorted: the explicit sort for
+;; callers that want alphabetical. Folding the sorted keys in order is what
+;; makes the new table's insertion order the sorted one.
+(def (sort-table t)
+  (fold (fn [acc k] (put acc k (get t k))) {} (sort (table-keys t))))
 
 ;; ---------------------------------------------------------------- csv
 ;; Promoted from programs/csv_to_table.blip, which keeps its demo and its
@@ -683,8 +690,8 @@
 ;; The call shape pays for honesty: `(deftest 'name (fn [] ...))` quotes the
 ;; name and wraps the body, because no macro is there to leave them
 ;; unevaluated. `run-tests` answers the count of tests run; a failure raises
-;; past it, so a count in hand means everything passed. `table-keys` sorts,
-;; so the run order is deterministic.
+;; past it, so a count in hand means everything passed. `table-keys` is
+;; insertion order, so the run order is registration order.
 
 ;; *tests* maps names to thunks. A global, rebound by registration, which is
 ;; what `set!` is for.
