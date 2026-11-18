@@ -669,3 +669,58 @@
 ;; *debug* is a variable, not a special form, so a program can rebind it and a
 ;; macro that reads it keeps working.
 (def *debug* #f)
+
+;; ---------------------------------------------------------------- test
+;; deftest/is/run-tests: the test framework is ordinary blip, not macros.
+;; Two engine facts force that shape, and both are pinned in tests/unit.v:
+;; the machine never auto-expands a bare macro call (only `macex` and the
+;; emitter pre-pass expand), so a `defmacro` deftest would die with
+;; `unbound identifier` under `run` and a bare `is` would evaluate its
+;; argument and return the expansion as a value -- a test that cannot fail.
+;; And `assert` renders its message from SOURCE, so a function wrapping it
+;; would report the wrapper's parameter name; `raise`/`error` evaluate, so
+;; the caller's message arrives intact on both engines.
+;; The call shape pays for honesty: `(deftest 'name (fn [] ...))` quotes the
+;; name and wraps the body, because no macro is there to leave them
+;; unevaluated. `run-tests` answers the count of tests run; a failure raises
+;; past it, so a count in hand means everything passed. `table-keys` sorts,
+;; so the run order is deterministic.
+
+;; *tests* maps names to thunks. A global, rebound by registration, which is
+;; what `set!` is for.
+(def *tests* {})
+
+;; register-test stores one test under its name, answering the name.
+(def (register-test name f)
+  (set! *tests* (put *tests* name f))
+  name)
+
+;; deftest registers a named test for `run-tests`.
+(def (deftest name f)
+  (register-test name f))
+
+;; is checks one claim: nil on success, a raise carrying the message on
+;; failure. The message is explicit, defaulting to a generic one, because a
+;; function cannot capture its argument's source the way a macro could --
+;; and a macro could not run.
+(def (is test . rest)
+  (if test nil (raise (error (is-msg rest)))))
+
+;; is-msg is the defaulting half of `is`, named separately the way
+;; `enumerate-from` carries for `enumerate`: one name that decides, one that
+;; defaults. It is also directly testable, being pure.
+(def (is-msg rest)
+  (if (null? rest) "is: check failed" (car rest)))
+
+;; run-tests runs every registered test in key order, answering the count.
+(def (run-tests)
+  (run-each (table-keys *tests*)))
+
+;; run-each is the index-free walk over the key list: call, count, recurse.
+;; A test that raises never returns, so the count only completes when all
+;; pass -- there is no separate tally of failures to consult.
+(def (run-each ks)
+  (if (null? ks)
+      0
+      (let _ ((get *tests* (car ks)))
+        (+ 1 (run-each (cdr ks))))))

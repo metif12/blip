@@ -200,6 +200,16 @@ fn main() {
 
 	s.check('if in expression position', '(print (if #t "yes" "no"))')
 
+	// A call in an `if` branch used as a CALL ARGUMENT reached node as a
+	// thunk object: the machine answered "v:42" and node "v:[object Object]".
+	// Arguments are strict positions, so the emitter drives them now.
+	s.check('calls in argument position are driven', '(print (string-append "v:" (if #f "a" (number->string 42))))')
+
+	// Symbol keys are first-class in machine tables (need_str accepts
+	// string/symbol/keyword alike); the backend stringified every symbol key
+	// to "[object Object]", collapsing them into one entry.
+	s.check('symbol keys survive the backend', '(print (get (put {} (quote a) 1) (quote a)))')
+
 	s.check('begin sequences', '(print (begin 1 2 3))')
 
 	// `defined?` compiles to a `typeof` probe, so both engines can answer the
@@ -247,6 +257,10 @@ fn main() {
 
 	s.check_example('04_errors')
 
+	// 08_test is the D6 framework running under node: the registry, the
+	// counted run, and the symbol keys all have to survive the backend.
+	s.check_example('08_test')
+
 	s.real_programs()
 
 	if s.fails > 0 {
@@ -271,7 +285,7 @@ fn main() {
 // is acceptance with no output, which is what this used to do.
 fn (mut s Suite) real_programs() {
 	examples := ['01_basics', '02_data', '03_match', '04_errors', '05_pipelines', '06_modules',
-		'07_config']
+		'07_config', '08_test']
 	mut silent := []string{}
 	mut refused := []string{}
 	mut running := []string{}

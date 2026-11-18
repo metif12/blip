@@ -1869,7 +1869,15 @@ fn (mut e Emitter) application(id reader.NodeId, kids []reader.NodeId) string {
 			kwparts << json_str(d.value)
 			continue
 		}
-		v := e.value(a)
+		mut v := e.value(a)
+		// An argument is a STRICT position: the call consumes the value, so a
+		// thunk left behind by a branch-form (if/cond/use/match with calls in
+		// its branches) must be driven here, not handed to the callee as an
+		// object. Calls arrive already tramp'd (tail = 0 above); bare closures
+		// and plain values pass through `tramp` untouched, so wrapping every
+		// argument is safe. Without this `(error (if c "a" (car xs)))` gave
+		// node "[object Object]" where the machine gave the string.
+		v = 'tramp(${v})'
 		if in_kwargs && d.tag != .kw {
 			kwparts[kwparts.len - 1] = kwparts[kwparts.len - 1] + ': ' + v
 			continue

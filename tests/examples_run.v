@@ -6,7 +6,7 @@ module main
 // "basics ok", "data ok", "match ok", "errors ok", "pipelines ok",
 // "modules ok", "config ok" -- and the `;=>` comments along the way record what each form
 // is supposed to produce. This file runs them and asserts the markers, which
-// is the cheapest gate that catches a regression in any of the seven.
+// is the cheapest gate that catches a regression in any of the eight.
 //
 // The output is captured through the machine's own `out` slice rather than
 // through the host, so the test does not depend on stdout being line-buffered
@@ -83,9 +83,9 @@ fn (mut s Suite) check_example(label string, path string, want string) {
 fn main() {
 	mut s := Suite{}
 
-	// The seven examples, in the order they are meant to be read. Each one builds
+	// The eight examples, in the order they are meant to be read. Each one builds
 	// on the previous: 01 is the language, 02 is data, 03 is match, 04 is
-	// errors, 05 is macros and pipes, 06 is modules, 07 is config.
+	// errors, 05 is macros and pipes, 06 is modules, 07 is config, 08 is tests.
 	s.check_example('01_basics', 'examples/01_basics.blip', 'basics ok')
 	s.check_example('02_data', 'examples/02_data.blip', 'data ok')
 	s.check_example('03_match', 'examples/03_match.blip', 'match ok')
@@ -93,6 +93,7 @@ fn main() {
 	s.check_example('05_pipelines', 'examples/05_pipelines.blip', 'pipelines ok')
 	s.check_example('06_modules', 'examples/06_modules.blip', 'modules ok')
 	s.check_example('07_config', 'examples/07_config.blip', 'config ok')
+	s.check_example('08_test', 'examples/08_test.blip', 'test ok')
 
 	if s.fails > 0 {
 		println('${s.fails} FAILURE(S)')

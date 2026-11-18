@@ -221,6 +221,23 @@ Order (one PR each, each with an example + asserts, never `;=>`-only):
    pins the std source locations, `now` answers an integer, and the
    emitter routes it.
 6. `test`: `deftest`/`is` in the Racket shape, over the existing `assert`.
+   — **done**, with the shape changed by evidence: FUNCTIONS, not macros.
+   The machine never auto-expands a bare macro call (only `macex` and the
+   emitter pre-pass expand), so a `defmacro` `is` would evaluate its
+   argument and return the expansion as a value -- a test that cannot fail
+   -- and a `defmacro` `deftest` dies with `unbound identifier` under `run`.
+   Hence `(deftest 'name (fn [] ...))` (quoted name, explicit thunk) and
+   `(is test msg)` with an explicit message defaulting to a generic one.
+   `is` raises through `error` rather than wrapping `assert`, because
+   `assert` renders its message from source and a wrapper would report the
+   wrapper's parameter name. `run-tests` answers the count; a failure raises
+   past it. `examples/08_test.blip` demos it with `;=>` expectations.
+   Along the way: symbol table keys are unwrapped in the emitter's `keyof`
+   (every symbol key collapsed to `"[object Object]"`), and call arguments
+   are `tramp`-driven (an `if` with calls in its branches reached the callee
+   as a thunk object). Gate: `unit` pins std locations, the no-macros rule,
+   counts, messages, and emitter acceptance; `emit_js` runs 08 plus both
+   parity snippets on node.
 
 Rules:
 

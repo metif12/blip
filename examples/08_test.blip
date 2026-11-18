@@ -1,0 +1,31 @@
+;; examples/08_test.blip
+;; Tests as values.
+;;
+;; `deftest` registers a named test, `is` checks one claim inside it, and
+;; `run-tests` runs everything registered, answering the count. A failure
+;; raises past the count, so a count in hand means everything passed -- try
+;; breaking one of the claims below and the file stops with the message.
+;;
+;; The framework is ordinary blip (see lib/std.blip): quoted names and
+;; explicit thunks, because no macro is there to leave them unevaluated,
+;; and explicit messages, because `assert` renders its message from source.
+
+;; A pure helper, checkable on its own: no message means the generic one.
+(is-msg nil)                                    ;=> "is: check failed"
+(is-msg (list "custom"))                        ;=> "custom"
+
+;; Two tests. Each is a name and a thunk; `is` inside checks the claims.
+(deftest 'arithmetic
+  (fn []
+    (is (= (+ 1 1) 2) "one plus one")
+    (is (= (* 3 4) 12) "three times four")))
+
+(deftest 'results
+  (fn []
+    (is (ok? (ok 42)) "ok is ok")
+    (is (= (ok-value (ok 42)) 42) "ok carries its value")))
+
+;; Running them answers the count: two registered, two run.
+(print (run-tests))                             ;=> 2
+
+(print "test ok")

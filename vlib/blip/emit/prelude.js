@@ -503,10 +503,15 @@ function rewrap(orig, items) {
 // a string WITH its quotes, the way the blip printer does -- printing one without
 // them would make emitted output disagree with `blip run`.
 // keyof normalises a lookup key. A keyword datum and its bare name are the same
-// key -- `blip get :a` and `blip get "a"` find the same entry -- so every table
-// operation runs its key through this instead of trusting the caller's spelling.
+// key -- `blip get :a` and `blip get "a"` find the same entry -- and so is a
+// QUOTED SYMBOL: the machine's need_str accepts string/symbol/keyword
+// uniformly, so `(put {} 'a 1)` lands on "a". Without the sym unwrap a
+// symbol key stringified to "[object Object]", collapsing every symbol key
+// into one entry (found via a test registry keyed by quoted names).
 function keyof(k) {
-  return k && k.blip_kw !== undefined ? k.blip_kw : k;
+  if (k && k.blip_kw !== undefined) return k.blip_kw;
+  if (k && k.blip_sym !== undefined) return k.blip_sym;
+  return k;
 }
 
 // pat_match matches a COMPILED pattern -- a tree of tagged arrays built by the

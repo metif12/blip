@@ -1054,6 +1054,68 @@ fn (mut s Suite) std_table_covers() {
 	s.record('select-keys subsets', printer.write(kept) == '{:a 1}', printer.write(kept))
 }
 
+// The test set is ordinary std too (roadmap D6): deftest/is/is-msg/
+// run-tests/register-test resolve to lib/std.blip. They are FUNCTIONS, not
+// macros, and that is pinned, not incidental: the machine never auto-expands
+// a bare macro call (only macex and the emitter pre-pass expand), so a
+// defmacro `is` would evaluate its argument and return the expansion as a
+// value -- a test that cannot fail. And `is` raises through error rather
+// than wrapping `assert`, because assert renders its message from source and
+// a wrapper would report the wrapper's parameter name.
+fn (mut s Suite) std_test_covers() {
+	h := host.new_capture()
+	mut m := machine.new_standalone(h)
+	m.source = 'lib/std.blip'
+	std_src := os.read_file('lib/std.blip') or { '' }
+	m.run_str(std_src) or {
+		s.record('std loads for test pins', false, err.msg())
+		return
+	}
+	for name in ['deftest', 'is', 'is-msg', 'run-tests', 'register-test'] {
+		loc := m.run_str('(source-location ${name})') or { blip.nil_value() }
+		mut file := ''
+		if loc.tag == .table {
+			if t := loc.as_table() {
+				file = t.get('file').as_string() or { '' }
+			}
+		}
+		s.record('${name} resolves to the std', file == 'lib/std.blip', file)
+	}
+	mut macro_def := false
+	for line in std_src.split_into_lines() {
+		t := line.trim_space()
+		if t.starts_with('(defmacro deftest') || t.starts_with('(defmacro is') {
+			macro_def = true
+		}
+	}
+	s.record('test framework uses functions, not macros', !macro_def, 'no defmacro test defs')
+	named := m.run_str("(deftest 't1 (fn [] (is (= 1 1) \"one\")))") or { blip.nil_value() }
+	s.record('deftest answers the name', printer.write(named) == 't1', printer.write(named))
+	count := m.run_str('(run-tests)') or { blip.nil_value() }
+	s.record('run-tests counts the suite', printer.write(count) == '1', printer.write(count))
+	m.run_str('(is (= 1 2) "boom")') or {
+		s.record('is raises the message', err.msg().contains('boom'), err.msg())
+		return
+	}
+	s.record('is raises the message', false, 'a failing is passed instead of raising')
+	m.run_str('(is (= 1 2))') or {
+		s.record('is defaults the message', err.msg().contains('is: check failed'), err.msg())
+		return
+	}
+	s.record('is defaults the message', false, 'a default-message is passed instead of raising')
+	js := emit.compile_file('examples/08_test.blip') or {
+		s.record('emitter accepts the test example', false, err.msg())
+		return
+	}
+	s.record('emitter accepts the test example', js.blocked.len == 0, js.blocked.str())
+	arg := emit.compile_program('(print (string-append "v:" (if #f "a" (number->string 42))))') or {
+		s.record('emitter drives calls in argument position', false, err.msg())
+		emit.Result{}
+	}
+	s.record('emitter drives calls in argument position',
+		arg.js.contains('tramp(blip.number_to_string'), 'tramp-wrapped arg')
+}
+
 fn (mut s Suite) toolchain_pins() {
 	old_home := os.getenv('BLIP_HOME')
 	th := os.join_path(os.vtmp_dir(), 'blip_tc_pins')
@@ -1184,6 +1246,7 @@ fn main() {
 	s.std_string_covers()
 	s.std_fs_json_time_cover()
 	s.std_table_covers()
+	s.std_test_covers()
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')
