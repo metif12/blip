@@ -35,7 +35,7 @@
   [5.0 'five]
   [_  'other])                      ;=> five
 
-(print (greeting "world"))          ;=> "Hello, world."
+(println (greeting "world"))          ;=> "Hello, world."
 
 ;; =====================================================================
 ;; lib/geometry.blip
@@ -51,4 +51,4 @@
 ;; (define (greeting name) ...)
 ;; (define (upper s) ...)
 
-(print "modules ok")
+(println "modules ok")

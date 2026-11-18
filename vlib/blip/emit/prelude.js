@@ -6,6 +6,17 @@
 // could terminate the string silently. Keeping it as real JavaScript means the
 // file can be read as what it is.
 
+// blip_write writes text VERBATIM: no newline added. console.log always ends
+// the line, so it cannot spell `print`/`display`. In node this is stdout;
+// outside node (the playground) logging with a newline is the fallback.
+function blip_write(s) {
+  if (typeof process !== "undefined" && process.stdout && process.stdout.write) {
+    process.stdout.write(s);
+    return;
+  }
+  console.log(s);
+}
+
 const blip = {
   add: (...a) => a.reduce((x, y) => x + y, 0),
   sub: (...a) => a.length === 1 ? -a[0] : a.reduce((x, y) => x - y),
@@ -19,11 +30,24 @@ const blip = {
     for (let i = 1; i < a.length; i++) if (!blip_equal(a[i - 1], a[i])) return false;
     return true;
   },
-  // `print` joins its arguments with SPACES onto ONE line. Printing each on its
-  // own line looked equivalent until a program printed two, which is how
-  // `(print "parsed:" r1 "=" r2)` became four lines here and one there.
+  // `print` writes VERBATIM with no trailing newline; `println` is the old
+  // `print` (same joining, then the line ends); `display` is bare (strings
+  // without quotes) plus no newline, the Scheme spelling. Printing each arg
+  // on its own line looked equivalent until a program printed two, which is
+  // how `(print "parsed:" r1 "=" r2)` became four lines here and one there.
+  // Verbatim writes go through stdout directly: console.log always ends the
+  // line, so it cannot spell `print`. Outside node (the playground) there is
+  // no stdout, and logging with a newline is the honest fallback.
   print: (...a) => {
+    blip_write(a.map(blip_show).join(" "));
+    return null;
+  },
+  println: (...a) => {
     console.log(a.map(blip_show).join(" "));
+    return null;
+  },
+  display: (...a) => {
+    blip_write(a.map((v) => typeof v === "string" ? v : blip_show(v)).join(" "));
     return null;
   },
   echo: (x) => { console.log(blip_show(x)); return x; },

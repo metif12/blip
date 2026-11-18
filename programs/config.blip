@@ -22,12 +22,12 @@
   (use (write-file tmp "host: localhost\nport: 8080\n\ndebug: true\n")
     (let cfg (read-config tmp)
       (begin
-        (print "host:" (get cfg "host"))
-        (print "port:" (get cfg "port"))
-        (print "debug:" (get cfg "debug"))
-        (print "missing:" (get cfg "nope"))
-        (print (if (file-exists? tmp) "file present" "file absent"))
-        (print "config ok")))
+        (println "host:" (get cfg "host"))
+        (println "port:" (get cfg "port"))
+        (println "debug:" (get cfg "debug"))
+        (println "missing:" (get cfg "nope"))
+        (println (if (file-exists? tmp) "file present" "file absent"))
+        (println "config ok")))
 
 ;; The clock is environment too: `now` answers unix seconds, and a
 ;; non-negative integer is all an assert can pin without flaking.

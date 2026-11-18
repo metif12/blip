@@ -121,4 +121,4 @@
 (assert (err? (parse "1 2")) "missing op is error")
 (assert (err? (parse "(1 + 2")) "unclosed paren is error")
 
-(print "pratt ok")
+(println "pratt ok")

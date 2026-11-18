@@ -113,8 +113,8 @@
   (even? 100))                        ; recursive binding
 
 ;; --- control flow ---
-(if #t (begin (print "when")))
-(unless #f (print "unless"))
+(if #t (begin (println "when")))
+(unless #f (println "unless"))
 
 (cond [(= 1 2) 'no]
       [(= 1 1) 'yes]
@@ -139,12 +139,12 @@
 
 ;; --- loops ---
 (loop i 0 (< i 5)
-  (print i))                        ; named let
+  (println i))                        ; named let
 
-(dotimes i 3 (print i))             ; zero to n-1
+(dotimes i 3 (println i))             ; zero to n-1
 
 ;; --- sequencing ---
-(begin (print 1) (print 2) 'done)
+(begin (println 1) (println 2) 'done)
 
 ;; --- higher order functions ---
 (map (fn [x] (* x x)) [1 2 3])      ;=> [1 4 9]
@@ -154,4 +154,4 @@
 
 ((fn [a b] (+ a b)) 1 2)            ; immediately applied
 
-(print "basics ok")
+(println "basics ok")

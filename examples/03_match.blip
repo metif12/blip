@@ -195,4 +195,4 @@
            'divide-by-zero)
   "a match* miss falls through to the next clause")
 
-(print "match ok")
+(println "match ok")

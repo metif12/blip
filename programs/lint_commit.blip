@@ -30,5 +30,5 @@
       (let r (lint msg)
         (if (err? r)
           (raise (err (err-value r)))
-          (print "lint ok"))))
-    (print "lint ok")))
+          (println "lint ok"))))
+    (println "lint ok")))

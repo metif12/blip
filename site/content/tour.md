@@ -94,8 +94,8 @@ Bindings destructure, in `let` and in parameter position:
 `if` plus `when`/`unless` for one branch, `cond` for many, `case` for value dispatch. `and`/`or` return the deciding value, not a boolean.
 
 ```
-(if #t (begin (print "when")))
-(unless #f (print "unless"))
+(if #t (begin (println "when")))
+(unless #f (println "unless"))
 
 (cond [(= 1 2) 'no]
       [(= 1 1) 'yes]
@@ -119,9 +119,9 @@ Bindings destructure, in `let` and in parameter position:
 `loop` is named-let recursion, `dotimes` counts from zero, `begin` sequences side effects.
 
 ```
-(loop i 0 (< i 5) (print i))
-(dotimes i 3 (print i))
-(begin (print 1) (print 2) 'done)
+(loop i 0 (< i 5) (println i))
+(dotimes i 3 (println i))
+(begin (println 1) (println 2) 'done)
 ```
 
 ## Data
@@ -200,9 +200,16 @@ Literals in pattern position are the self-evaluating ones: numbers, strings, key
 
 ## Printing
 
-`print` joins its arguments with spaces and ends the line; strings print
-with their quotes and `display` shows them bare. (A verbatim `print` plus
-`println` is proposed for the next version; see the roadmap.)
+`print` writes its arguments joined with spaces and VERBATIM -- no trailing
+newline; strings print with their quotes. `println` is the old `print` (same
+joining, then the line ends). `display` is bare (strings without quotes) plus
+no newline, the Scheme spelling.
+
+```
+(println "a" 1)      ; "a" 1, then the line ends
+(print "a" 1)        ; "a" 1, no newline after it
+(display "a" 1)      ; a 1, no newline after it
+```
 
 ## Errors are values, `use` keeps them flat
 
@@ -210,16 +217,16 @@ with their quotes and `display` shows them bare. (A verbatim `print` plus
 
 ```
 (use (parse-in "key: value")
-  (print "parsed:" r1 "=" r2)
-  (print "all good"))
+  (println "parsed:" r1 "=" r2)
+  (println "all good"))
 ```
 
 `raise` is the other mechanism, for invariant violations — bugs, not outcomes. `try` catches with `#:catch` and always runs `#:finally`.
 
 ```
 (try (raise (error "index ~a out of range" 99))
-  #:catch [(err e) (print "caught:" (err-message e))]
-  #:finally [(print "cleanup runs either way")])
+  #:catch [(err e) (println "caught:" (err-message e))]
+  #:finally [(println "cleanup runs either way")])
 ```
 
 The rule of thumb: if the caller should handle it, return a Result; if it is impossible, raise.
@@ -256,8 +263,8 @@ Everything above uses no macros at all. When a case genuinely needs one, `defmac
 (defmacro unless-zero (value body)
   (list 'if (list '= value 0) '(begin) body))
 
-(macex1 (unless-zero 0 (print "never")))
-;=> (if (= 0 0) (begin) (print "never"))
+(macex1 (unless-zero 0 (println "never")))
+;=> (if (= 0 0) (begin) (println "never"))
 ```
 
 ## Modules

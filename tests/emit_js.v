@@ -240,6 +240,14 @@ fn main() {
 
 	s.check('quote is a literal', '(print (quote (1 2 3)))')
 
+	// A1.2: `print` is verbatim on both engines -- two prints concatenate
+	// with no newline between them -- `println` ends each line, and
+	// `display` shows strings bare. The outputs are trimmed on the right,
+	// so the pins put the newline-sensitive join in the middle.
+	s.check('verbatim print concatenates', '(print "a") (print "b")')
+	s.check('println ends the line', '(println "a") (println "b")')
+	s.check('display shows strings bare', '(display "a" 1)')
+
 	// A1: tables print in insertion order on both engines, and `=` ignores
 	// order on both (the backend used to answer #f for distinct objects).
 	s.check('table literal order', '(print {:b 1 :a 2})')

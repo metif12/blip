@@ -142,8 +142,8 @@ million-deep countdown is a loop, not a crash:
 ; `if` is an expression: it answers, not just branches
 (if (< n 2) n (* n (fact (- n 1))))
 
-(if #t (begin (print "when")))
-(unless #f (print "unless"))
+(if #t (begin (println "when")))
+(unless #f (println "unless"))
 
 (cond [(= x 1) 'one]
       [(= x 2) 'two]
@@ -162,9 +162,9 @@ million-deep countdown is a loop, not a crash:
 (and 1 2 3)        ;=> 3   (returns the deciding value, not a boolean)
 (or #f #f 7)       ;=> 7
 
-(loop i 0 (< i 5) (print i))          ; named let: `loop` IS a named `let`
-(dotimes i 3 (print i))               ; 0..n-1: counting loops read better
-(begin (print 1) (print 2) 'done)     ; sequencing: run all, answer the last
+(loop i 0 (< i 5) (println i))          ; named let: `loop` IS a named `let`
+(dotimes i 3 (println i))               ; 0..n-1: counting loops read better
+(begin (println 1) (println 2) 'done)     ; sequencing: run all, answer the last
 ```
 
 ## Collections
@@ -267,7 +267,7 @@ that says so -- `(ok v)` or `(err 'why)` -- instead of throwing:
 
 ; use: flat chains, skips body on error -- no staircase of nested checks
 (use (parse-in "key: value")
-  (print "parsed:" r1 "=" r2))
+  (println "parsed:" r1 "=" r2))
 ```
 
 `raise` is the other mechanism, for the cases that are bugs rather than
@@ -276,8 +276,8 @@ outcomes: invariant violations, impossible states. `try` catches with
 
 ```lisp
 (try (raise (error "index ~a out of range" 99))
-  #:catch [(err e) (print "caught:" (err-message e))]
-  #:finally [(print "cleanup")])
+  #:catch [(err e) (println "caught:" (err-message e))]
+  #:finally [(println "cleanup")])
 ```
 
 The rule of thumb: if the caller should handle it, return a `Result`. If it
@@ -333,8 +333,8 @@ the cases that genuinely need them -- new syntax, not new functions.
   (list 'if (list '= value 0) '(begin) body))
 
 ; macex1 expands one step -- the debugging window a macro language needs
-(print (macex1 (unless-zero 0 (print "never"))))
-;=> (if (= 0 0) (begin) (print "never"))
+(println (macex1 (unless-zero 0 (println "never"))))
+;=> (if (= 0 0) (begin) (println "never"))
 
 ; quasiquote builds code without nested list constructors
 (defmacro my-when (test . body)
@@ -366,16 +366,16 @@ require it.
 
 ## Printing
 
-`print` joins its arguments with spaces and ends the line; strings print
-with their quotes and `display` shows them bare:
+`print` writes its arguments joined with spaces and VERBATIM -- no trailing
+newline; strings print with their quotes. `println` is the old `print` (same
+joining, then the line ends). `display` is bare (strings without quotes)
+plus no newline, the Scheme spelling:
 
 ```lisp
-(print "a" 1)        ; "a" 1, then the line ends
-(display "a" 1)      ; a 1, then the line ends
+(println "a" 1)      ; "a" 1, then the line ends
+(print "a" 1)        ; "a" 1, no newline after it
+(display "a" 1)      ; a 1, no newline after it
 ```
-
-(A verbatim `print` plus `println` is proposed for the next version; see
-the roadmap.)
 
 ## Running
 

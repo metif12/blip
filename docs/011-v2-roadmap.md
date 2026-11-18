@@ -54,7 +54,13 @@ per release.
    spelling). Migration: every line-ending `print` becomes `println`;
    `blip test` comparisons catch the rest. Gate: `tests/embedding.v`,
    `tests/emit_js.v` (both engines agree), `programs_run` hello-world,
-   re-blessed goldens.
+   re-blessed goldens — **done**: machine routes `print`/`display`
+   through `host_write` and `println` through `host_print` (`m.out` one
+   fragment per call either way); emitter prelude splits the same way and
+   gains `display`/`println`; corpus migrated (15 files); `blip test`
+   comparisons unchanged (fragments join); pins in `embedding` (transcript
+   vs lines), `emit_js` (verbatim/println/bare parity), `repl_golden`
+   (golden input uses `println`, fixture byte-identical).
 3. **Nested `;=>`** (§10.2, opt-in first). `blip test` checks only
    top-level forms today. Changing it turns decorative nested comments
    (e.g. `04_errors.blip`) into failures. Gate: a nested-vs-top-level

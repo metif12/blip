@@ -12,12 +12,12 @@
 (let sample "name,age,city\nalice,30,paris\nbob,25,\n"
   (let t (csv->table sample)
     (begin
-      (print "rows:" (length t))
-      (print "first name:" (get (get t 0) "name"))
-      (print "first age:" (get (get t 0) "age"))
-      (print "second city:" (get (get t 1) "city"))
-      (print "csv ok"))))
+      (println "rows:" (length t))
+      (println "first name:" (get (get t 0) "name"))
+      (println "first age:" (get (get t 0) "age"))
+      (println "second city:" (get (get t 1) "city"))
+      (println "csv ok"))))
 
 ;; A short row does not crash: missing cells are nil.
 (let t2 (csv->table "a,b\n1\n")
-  (print "short row ok:" (nil? (get (get t2 0) "b"))))
+  (println "short row ok:" (nil? (get (get t2 0) "b"))))

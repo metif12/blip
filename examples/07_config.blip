@@ -39,12 +39,12 @@
 
 ;; `use` propagates a failure without aborting the surrounding program:
 (use (checked-config :host "x" :port 80)
-  (print "loaded" checked-config))   ;=> nil
+  (println "loaded" checked-config))   ;=> nil
 
 ;; A failing check is reported, not raised:
 (let r (checked-config :host "" :port 80)
   (if (err? r)
-    (print "rejected:" (err-value r))   ;=> nil
-    (print "accepted" (ok-value r))))
+    (println "rejected:" (err-value r))   ;=> nil
+    (println "accepted" (ok-value r))))
 
-(print "config ok")
+(println "config ok")

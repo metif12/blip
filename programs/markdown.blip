@@ -169,4 +169,4 @@
     (assert (string-contains? html "<h1>Title</h1>") "render heading")
     (assert (string-contains? html "<strong>world</strong>") "render bold")
     (assert (string-contains? html "<li>a</li>") "render list")
-    (print "markdown ok")))
+    (println "markdown ok")))

@@ -51,13 +51,13 @@
 ;; body at the SAME indentation level. No staircase, no early returns.
 
 (use (parse-in "key: value")
-  (print "parsed:" r1 "=" r2)          ;=> "parsed:" "key" "=" "value"
-  (print "all good"))                  ;=> "all good"
+  (println "parsed:" r1 "=" r2)          ;=> "parsed:" "key" "=" "value"
+  (println "all good"))                  ;=> "all good"
 
 ;; if any step is an error, the body is skipped entirely and the error is the
 ;; value of the whole `use` expression
 (use (parse-in "garbage")
-  (print "never reached"))             ; nothing printed
+  (println "never reached"))             ; nothing printed
 ;=> (err malformed)
 
 ;; --- a single-form body is still one form ---
@@ -81,7 +81,7 @@
     (use (open-transaction connect)
       (execute connect "INSERT ...")
       (commit connect)))
-  (print "four levels, no nesting"))
+  (println "four levels, no nesting"))
 ;=> four levels, no nesting
 
 ;; Compare with a Lisp that lacks `use`, where the same code is four nested
@@ -105,8 +105,8 @@
 
 ;; --- raise carries a message, and catch sees it ---
 (try (raise (error "index ~a out of range" 99))
-  #:catch [(err e) (print "caught:" (err-message e))]
-  #:finally [(print "cleanup runs either way")])
+  #:catch [(err e) (println "caught:" (err-message e))]
+  #:finally [(println "cleanup runs either way")])
 ;=> caught: index 99 out of range
 ;   cleanup runs either way
 
@@ -134,4 +134,4 @@
 ;; assert failure aborts with a clear message, not a bare "false"
 (assert (= 1 1) "one equals one")
 
-(print "errors ok")
+(println "errors ok")

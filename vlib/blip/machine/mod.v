@@ -606,8 +606,8 @@ fn (mut m Machine) eval_symbol(name string) ! {
 // machine_builtin is the list of names call_primitive handles itself rather than
 // through the prims table, because each one needs the machine: `apply` re-enters
 // it, `error` and `raise` abort, `format` and `gensym` read machine state, the
-// sequence functions call a user's closure, and `print`/`display` write to the
-// host.
+// sequence functions call a user's closure, and `print`/`println`/`display`
+// write to the host.
 //
 // They have to be listed in eval_symbol as well as handled here. They were not,
 // and `(error "boom")` therefore failed as "unbound identifier: error" before it
@@ -617,7 +617,7 @@ fn machine_builtin(name string) bool {
 	// Match is O(1) dispatch and allocates nothing, unlike `name in [...]`,
 	// which built a fresh array on every call. This runs on every symbol lookup.
 	match name {
-		'apply', 'error', 'raise', 'format', 'gensym', 'print', 'display', 'echo', 'veb-route',
+		'apply', 'error', 'raise', 'format', 'gensym', 'print', 'println', 'display', 'echo', 'veb-route',
 		'yield', 'read-line', 'map', 'filter', 'reject', 'keep', 'fold', 'reduce', 'for-each',
 		'vector-map', 'any?', 'every?', 'sort-by', 'ok', 'err', 'ok?', 'err?', 'ok-value',
 		'err-value', 'map-result', 'unwrap-or', 'try-result', 'lazy-unwrap', 'lazy-map-result',
@@ -630,8 +630,10 @@ fn machine_builtin(name string) bool {
 	}
 }
 
-// show_value renders one argument. `quoted` distinguishes `print` from `display`:
-// `print` shows strings with their quotes and `display` does not.
+// show_value renders one argument. `quoted` distinguishes `print`/`println`
+// from `display`: the first two show strings with their quotes and `display`
+// shows them bare. The newline policy lives one level up: `println` ends the
+// line, `print` and `display` are verbatim.
 fn show_value(a blip.Value, quoted bool) string {
 	if a.tag == .string && !quoted {
 		return a.as_string() or { panic('unreachable: show_value matched .string') }
@@ -1709,26 +1711,36 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 			m.ret()
 			return
 		}
-		'print', 'display' {
-			// These two are machine builtins rather than table entries because
-			// they have to reach `host` and `out`, which the prims table cannot
-			// see: PrimFn deliberately takes only its arguments, so that prims
-			// and the machine do not become mutually dependent.
+		'print', 'println', 'display' {
+			// `print` and `display` are VERBATIM: they write with no trailing
+			// newline (roadmap A1.2, v2). `println` is the old `print` -- the
+			// same joining, then the line ends. They are machine builtins
+			// rather than table entries because they have to reach `host`
+			// and `out`, which the prims table cannot see: PrimFn
+			// deliberately takes only its arguments, so that prims and the
+			// machine do not become mutually dependent.
 			//
 			// The line goes to the host AND to `out`. `out` is what a host
 			// inspects afterwards; the host call is what makes a terminal show
-			// anything at all.
+			// anything at all. `print`/`display` use `host_write` (verbatim);
+			// `println` uses `host_print` (one line). `m.out` collects one
+			// fragment per call either way -- the newline is the host's
+			// business -- and `blip test` joins the fragments before comparing.
 			mut text := ''
 			mut i := 0
 			for i < args.len {
 				if i > 0 {
 					text += ' '
 				}
-				text += show_value(args[i], name == 'print')
+				text += show_value(args[i], name != 'display')
 				i++
 			}
 			m.out << text
-			m.host.host_print(text)
+			if name == 'println' {
+				m.host.host_print(text)
+			} else {
+				m.host.host_write(text)
+			}
 			m.val = blip.nil_value()
 			m.ret()
 			return

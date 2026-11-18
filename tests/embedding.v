@@ -235,13 +235,21 @@ fn (mut s Suite) a_missing_file_is_an_error() bool {
 }
 
 fn (mut s Suite) print_goes_to_the_host_and_to_out() bool {
+	// v2 (roadmap A1.2): `print` is VERBATIM -- no trailing newline -- so it
+	// reaches the host's transcript but completes no line; `println` is the
+	// old `print` and completes one. `m.out` collects one fragment per call
+	// either way; the newline is the host's business.
 	_, mut m, _, h := pair()
 	m.run_str('(print "hello" 42)') or {
 		s.fail('print goes to the host', err.msg())
 		return false
 	}
-	if h.lines().len != 1 || h.lines()[0] != '"hello" 42' {
-		s.fail('print goes to the host', 'host.lines() = ${h.lines()}')
+	if h.lines().len != 0 {
+		s.fail('print is verbatim', 'host.lines() = ${h.lines()}')
+		return false
+	}
+	if h.transcript() != '"hello" 42' {
+		s.fail('print goes to the host', 'transcript = ${h.transcript()}')
 		return false
 	}
 	if m.out.len != 1 || m.out[0] != '"hello" 42' {
@@ -249,19 +257,34 @@ fn (mut s Suite) print_goes_to_the_host_and_to_out() bool {
 		return false
 	}
 	// `display` differs from `print` in exactly one way: no quotes on strings.
+	// It is verbatim too, so it appends to the same transcript, no new line.
 	m.run_str('(display "raw" :kw)') or {}
 	if m.out.len != 2 || m.out[1] != 'raw :kw' {
 		s.fail('display shows strings raw', 'machine.out = ${m.out}')
 		return false
 	}
+	if h.transcript() != '"hello" 42raw :kw' {
+		s.fail('display is verbatim', 'transcript = ${h.transcript()}')
+		return false
+	}
+	// `println` ends the line: one entry in host.lines(), same fragment in out.
+	m.run_str('(println "done" 7)') or {}
+	if h.lines().len != 1 || h.lines()[0] != '"done" 7' {
+		s.fail('println ends the line', 'host.lines() = ${h.lines()}')
+		return false
+	}
+	if m.out.len != 3 || m.out[2] != '"done" 7' {
+		s.fail('println goes to out', 'machine.out = ${m.out}')
+		return false
+	}
 	return s.record('print goes to the host and to out', true,
-		'one line each in host.lines() and machine.out', '')
+		'verbatim print/display in transcript and out, println in lines', '')
 }
 
 fn (mut s Suite) output_stays_with_its_machine() bool {
 	mut a, mut b, ha, hb := pair()
-	a.run_str('(print "from a")') or {}
-	b.run_str('(print "from b")') or {}
+	a.run_str('(println "from a")') or {}
+	b.run_str('(println "from b")') or {}
 	ok := ha.lines().len == 1 && ha.lines()[0] == '"from a"' && hb.lines().len == 1 && hb.lines()[0] == '"from b"'
 	return s.record('output stays with its machine', ok, 'each host saw only its own line',
 		'a=${ha.lines()} b=${hb.lines()}')

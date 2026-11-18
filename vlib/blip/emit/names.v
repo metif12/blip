@@ -48,6 +48,8 @@ fn mangle(name string) string {
 		'<=' { return 'lte' }
 		'>=' { return 'gte' }
 		'print' { return 'print' }
+		'println' { return 'println' }
+		'display' { return 'display' }
 		'echo' { return 'echo' }
 		'apply' { return 'apply' }
 		'car' { return 'car' }
@@ -207,6 +209,8 @@ const prim_names = {
 	'>=':                true
 	'=':                 true
 	'print':             true
+	'println':           true
+	'display':           true
 	'echo':              true
 	'apply':             true
 	'car':               true

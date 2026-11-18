@@ -26,6 +26,6 @@
     (is (= (ok-value (ok 42)) 42) "ok carries its value")))
 
 ;; Running them answers the count: two registered, two run.
-(print (run-tests))                             ;=> 2
+(println (run-tests))                             ;=> 2
 
-(print "test ok")
+(println "test ok")

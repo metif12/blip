@@ -60,4 +60,4 @@
   (assert (nil? (get (get rt "a") 2)) "round trip array null")
   (assert (= (length (table-keys (get rt "b"))) 0) "round trip empty object"))
 
-(print "json ok")
+(println "json ok")

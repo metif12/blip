@@ -99,15 +99,15 @@
   (list 'if (list '= value 0) '(begin) body))
 
 ;; macex1 expands one step -- the debugging window a macro language needs
-(print (macex1 (unless-zero 0 (print "never"))))
-;=> (if (= 0 0) (begin) (print "never"))
+(println (macex1 (unless-zero 0 (println "never"))))
+;=> (if (= 0 0) (begin) (println "never"))
 
 ;; quasiquote builds code without nested list constructors
 (defmacro my-when (test . body)
   `(if ,test (begin ,@body) (begin)))
 
-(print (macex (my-when #t (print "a") (print "b"))))
-;=> (if #t (begin (print "a") (print "b")) (begin))
+(println (macex (my-when #t (println "a") (println "b"))))
+;=> (if #t (begin (println "a") (println "b")) (begin))
 
 ;; gensym for generated names -- the fix for capture, which is the sharp edge
 ;; of an unhygienic macro system
@@ -121,7 +121,7 @@
 
 ;; --- and a genuinely macro-shaped problem: an assert with no cost when on ---
 (defmacro debug-check (test)
-  `(if *debug* (begin (print "check" ',test))))
+  `(if *debug* (begin (println "check" ',test))))
 
 ;; =====================================================================
 ;; a program that uses none of the above macros
@@ -141,9 +141,9 @@
 (def report
   (top-words "the quick brown fox jumps over the lazy dog the end the end" 3))
 
-(print (map car report))          ;=> ("the" "end" "quick")
+(println (map car report))          ;=> ("the" "end" "quick")
 
-(print "pipelines ok")
+(println "pipelines ok")
 
 ;; =====================================================================
 ;; result pipelines: every branch asserted
@@ -201,7 +201,7 @@
                 99)
   "a match* miss falls through to the next clause")
 
-(print "results ok")
+(println "results ok")
 
 ;; =====================================================================
 ;; seq: zipping, indexing, chunking (ordinary std, lists in and out)

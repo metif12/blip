@@ -130,7 +130,7 @@
 (eq? 'a 'a)             ;=> #t    identity, for symbols
 
 ;; print shows structure, so a wrong value is visible immediately
-(print '(1 "two" :three))
-(print [1 2 3])
-(print {:a 1 :b [2 3]})
-(print "data ok")
+(println '(1 "two" :three))
+(println [1 2 3])
+(println {:a 1 :b [2 3]})
+(println "data ok")

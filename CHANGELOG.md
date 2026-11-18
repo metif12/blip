@@ -64,18 +64,23 @@ lives in `docs/010-roadmap.md`; this file is the record.
   threading, labelled args); `03_match` keeps zero `match*` asserts,
   which is exactly the gap item 5 names.
 
-### Verbatim `print` plus `println` (deferred, not landed)
+### Verbatim `print` plus `println` (landed, v2)
 
 `print` writes its joined arguments with no trailing newline and `println`
-is the old `print` (same joining, then the line ends); `display` goes fully
-verbatim. Deferred -- not implemented -- because every downstream program
-that relies on one-line-per-`print` would change output: it lands behind a
-version bump with a migration note (`println` for every line-ending print;
-`blip test` comparisons catch the rest). A complete implementation was built
-and verified in-tree (both engines agreeing, golden re-blessed) and then
-reverted to avoid breaking downstream programs; redo from the roadmap item,
-not from memory. Gate (when it lands): `tests/embedding.v`,
-`tests/emit_js.v`, `tests/programs_run.v`, `tests/repl_golden.v`.
+is the old `print` (same joining, then the line ends); `display` is bare
+(strings without quotes) plus no newline, the Scheme spelling. Landed behind
+the version bump with a migration note: every line-ending `print` in
+`examples/`, `programs/`, the tour, and `blip_in_y_min.md` became `println`;
+`blip test` comparisons needed no changes (fragments join before comparing).
+Machine routes `print`/`display` through `host_write` (verbatim) and
+`println` through `host_print` (one line); the emitter's prelude does the
+same split (`process.stdout.write` vs `console.log`), with `display` added
+alongside `println` (both were missing from the backend). Gate, all green:
+`tests/embedding.v` (verbatim transcript vs lines pins), `tests/emit_js.v`
+(verbatim-concatenation, println, bare-display parity plus all example
+transcripts), `tests/programs_run.v` (newline-insensitive hello-world gate,
+unchanged), `tests/repl_golden.v` (golden input uses `println`; fixture
+byte-identical).
 
 ### `json` is gone: migrate to `json2` on the master toolchain
 

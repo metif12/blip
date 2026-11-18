@@ -111,12 +111,13 @@ fn (mut s Suite) an_unfinished_string_is_not_an_error() bool {
 	mut r := repl.new(h)
 	r.run_lines(lines)
 	// The newline the two lines were joined with is INSIDE the string literal --
-	// the reader accepts a literal newline there -- so the first captured line
-	// contains one. What matters is that nothing errored and both halves arrived.
-	got := h.lines().join('')
+	// the reader accepts a literal newline there -- so the captured transcript
+	// contains one. `display` is verbatim (roadmap A1.2), so nothing lands in
+	// lines; what matters is that nothing errored and both halves arrived.
+	got := h.transcript()
 	ok := got.contains('one') && got.contains(' two') && !got.contains('error')
 	return s.passed('an unfinished string is not an error', ok,
-		'a string spanning two lines was read whole', 'got ${h.lines()}')
+		'a string spanning two lines was read whole', 'got ${h.lines()} / ${got}')
 }
 
 fn (mut s Suite) a_bad_form_does_not_end_the_session() bool {
@@ -220,7 +221,7 @@ fn (mut s Suite) golden_stdin_to_stdout() bool {
 		'(greet "again")',
 		',l no-such-file.blip',
 		'(greet "still here")',
-		'(print "a string',
+		'(println "a string',
 		'that spans two lines")',
 		'(format "~s" "quoted here")',
 		',q',

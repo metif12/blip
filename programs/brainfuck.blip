@@ -82,6 +82,9 @@
   (let tape (make-tape 30000)
     (bf-run tape 0 0 program)))
 
-;; Hello World: the canonical first program.
+;; Hello World: the canonical first program. The `.` command is `display`,
+;; which is verbatim, so the greeting leaves the cursor mid-line and a bare
+;; `println` ends it before the marker line.
 (brainfuck "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.")
-(print "brainfuck ok")
+(println)
+(println "brainfuck ok")
