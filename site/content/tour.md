@@ -267,6 +267,21 @@ Everything above uses no macros at all. When a case genuinely needs one, `defmac
 ;=> (if (= 0 0) (begin) (println "never"))
 ```
 
+## Fibers
+
+A fiber is a suspended computation: `spawn` takes a thunk and answers an id, `resume` drives the fiber to its next `yield` (or to the end), `fiber-status` names its state (`ready`, `suspended`, `paused`, `done`, `failed`), and `fiber-done?` asks if it finished. `resume` takes an optional step budget: a fiber that outruns it pauses and continues on the next resume, so no fiber runs away. Fibers pair with `use` and `Result` — a fiber that yields errors is just data to match on — and they run on the machine only: node output cannot suspend, so the emitter refuses them.
+
+```
+(def f (spawn (fn [] (yield 1) (yield 2) 'done)))
+(resume f)        ;=> 1
+(fiber-status f)  ;=> :suspended
+(resume f)        ;=> 2
+(resume f)        ;=> done
+(fiber-done? f)   ;=> #t
+```
+
+One boundary: `yield` inside a `map` callback (or macro expansion) is refused rather than silently corrupted — the callback lives in a host-side loop the saved state cannot resume. Yield in straight-line code and plain function calls suspends fine.
+
 ## Modules
 
 `provide` exports names, `require` loads a file, `only-in` imports selected names, `prefix-in` qualifies a whole module. Resolution is file-relative — `./x.blip` means next to this file — and each module loads once.

@@ -287,7 +287,18 @@ pub fn (mut m Machine) quasi_to_value(id blip.NodeId) !blip.Value {
 		m.kstack = []blip.Kont{}
 		m.ctl = .eval_form
 		m.form = inner
-		out := m.drive() or { blip.nil_value() }
+		// A V-stack boundary like call_value: `yield` across it would
+		// abandon this frame on resume, and a budget must wait for open
+		// code for the same reason.
+		m.vdepth++
+		out := m.drive() or {
+			if m.current_fiber >= 0 {
+				m.vdepth--
+				return err
+			}
+			blip.nil_value()
+		}
+		m.vdepth--
 		m.kstack = saved_k
 		m.ctl = saved_ctl
 		m.form = saved_form

@@ -1840,6 +1840,16 @@ fn (mut e Emitter) application(id reader.NodeId, kids []reader.NodeId) string {
 			e.refuse(removed)
 			return 'null'
 		}
+		// Fibers (roadmap B4) are machine-only: suspending needs the
+		// CEK stack, which the emitted code does not have. Emitting a
+		// call would produce `blip.spawn(...)` -- undefined at run
+		// time -- so refuse loudly instead. (`yield` was already refused
+		// through unsupported_forms; this covers the fiber builtins.)
+		if head.value == 'spawn' || head.value == 'resume' || head.value == 'fiber-status'
+			|| head.value == 'fiber-done?' {
+			e.refuse('fibers run on the machine only (blip run); node output cannot suspend')
+			return 'null'
+		}
 	}
 	callee := if head.tag == .sym { e.callable(head.value) } else { e.value(kids[0]) }
 	// An argument's value is CONSUMED by the call, so it is never in tail

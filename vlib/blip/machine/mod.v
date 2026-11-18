@@ -111,6 +111,53 @@ pub mut:
 	cache_val  blip.Value
 	cache_gen  u64
 	cache_ok   bool
+	// ---- fibers (roadmap B4) -------------------------------------------
+	//
+	// A fiber is saved CEK control state: the continuation stack plus the
+	// registers around it. The stack is a plain heap array, so suspending
+	// is a struct copy and resuming is the reverse -- no representation
+	// work, which is why fibers are cheap here and threads are not.
+	fibers map[int]Fiber
+	// fiber_seq hands out fiber ids. Ids are never reused: a stale id
+	// fails loudly (`no such fiber`) instead of addressing a stranger.
+	fiber_seq int
+	// current_fiber is the fiber whose control state is loaded, or -1 for
+	// the top level. `yield` outside a fiber is a passthrough.
+	current_fiber int = -1
+	// suspended/suspend_val/suspend_why is the yield protocol: `yield`
+	// inside a fiber records its value and reason, and the drive loop
+	// exits at the top of its next iteration with drv_val set.
+	suspended   bool
+	suspend_val blip.Value
+	suspend_why string
+	// fiber_deadline is an absolute step count for a budgeted resume, or
+	// -1 for none. Checked only between V-stack boundaries (see vdepth):
+	// a budget that fired mid-callback would abandon the callback's
+	// V frame, so it waits for open code instead.
+	fiber_deadline int = -1
+	// vdepth counts V-stack machine re-entries (call_value, macro
+	// expansion, generated evaluation). Yielding across one would
+	// abandon its V frame on resume, so `yield` refuses loudly there
+	// instead of corrupting -- straight-line code and plain function
+	// calls (goto, no V frame) suspend fine.
+	vdepth int
+}
+
+// Fiber is one suspended computation: the thunk that started it plus the
+// control state saved at its last suspension, or its answer.
+struct Fiber {
+pub mut:
+	thunk  blip.Value
+	kstack []blip.Kont
+	ctl    Ctl
+	form   blip.NodeId
+	env    blip.EnvId
+	val    blip.Value
+	val2   blip.Value
+	// status: ready | suspended | paused | done | failed.
+	status string
+	result blip.Value
+	errmsg string
 }
 
 // new_machine builds a machine over an arena the caller already owns. The suites
@@ -176,6 +223,11 @@ fn (mut m Machine) reset() {
 	m.env = m.globals
 	m.form = blip.no_node
 	m.val = blip.nil_value()
+	// A fresh evaluation is never a resumed suspension: without this, a
+	// stale flag would exit the drive loop before stepping.
+	m.suspended = false
+	m.suspend_val = blip.nil_value()
+	m.suspend_why = ''
 }
 
 // run evaluates top-level forms in order and returns the last value.
@@ -334,6 +386,10 @@ fn (mut m Machine) eval_generated(src string) !blip.Value {
 		m.arena.nodes[i].col = origin.col
 	}
 	defer { m.form = form }
+	// A V-stack boundary: `yield` across it would abandon this frame on
+	// resume, and a budget must wait for open code for the same reason.
+	m.vdepth++
+	defer { m.vdepth-- }
 	return m.run_checked(res)
 }
 
@@ -362,10 +418,28 @@ fn (mut m Machine) drive() !blip.Value {
 fn (mut m Machine) drive_steps() bool {
 	m.step_err = ''
 	for {
+		// A fiber suspension exits here, before stepping: `yield`
+		// records the value and the loop hands it back as the answer.
+		// `resume` reads the flag to tell suspension from completion.
+		if m.suspended {
+			m.drv_val = m.suspend_val
+			return true
+		}
 		m.steps++
 		if m.steps > m.max_steps {
 			m.step_err = 'step limit exceeded: the program did not terminate'
 			return false
+		}
+		// A budgeted resume pauses between V-stack boundaries (see
+		// vdepth): firing mid-callback would abandon the callback's
+		// frame, so the deadline waits for open code.
+		if m.current_fiber >= 0 && m.fiber_deadline >= 0 && m.vdepth == 0
+			&& m.steps >= m.fiber_deadline {
+			m.suspend_val = blip.nil_value()
+			m.suspend_why = 'paused'
+			m.suspended = true
+			m.drv_val = blip.nil_value()
+			return true
 		}
 		if m.kstack.len > m.max_kont {
 			m.step_err = 'continuation too deep: non-tail recursion is too deep'
@@ -624,7 +698,7 @@ fn machine_builtin(name string) bool {
 	// which built a fresh array on every call. This runs on every symbol lookup.
 	match name {
 		'apply', 'error', 'raise', 'format', 'gensym', 'print', 'println', 'display', 'echo', 'veb-route',
-		'yield', 'read-line', 'map', 'filter', 'reject', 'keep', 'fold', 'reduce', 'for-each',
+		'yield', 'spawn', 'resume', 'fiber-status', 'fiber-done?', 'read-line', 'map', 'filter', 'reject', 'keep', 'fold', 'reduce', 'for-each',
 		'vector-map', 'any?', 'every?', 'sort-by', 'ok', 'err', 'ok?', 'err?', 'ok-value',
 		'err-value', 'map-result', 'unwrap-or', 'try-result', 'lazy-unwrap', 'lazy-map-result',
 		'flatten-result', 'all-results' {
@@ -809,14 +883,170 @@ pub fn (mut m Machine) call_value(f blip.Value, args []blip.Value) !blip.Value {
 	m.kstack = []blip.Kont{}
 	m.ctl = .eval_form
 	m.env = m.globals
-	m.apply_values(f, args)!
-	out := m.drive() or { blip.nil_value() }
+	m.vdepth++
+	m.apply_values(f, args) or {
+		m.vdepth--
+		return err
+	}
+	out := m.drive() or {
+		// A nested failure inside a fiber belongs to the fiber: swallowing
+		// it here (the embedder's convenience outside fibers) would hide
+		// the loud yield-across-boundary refusal as a silent nil and let
+		// the fiber run on corrupted. Propagate; `resume` marks it failed.
+		if m.current_fiber >= 0 {
+			m.vdepth--
+			return err
+		}
+		blip.nil_value()
+	}
+	m.vdepth--
 	m.kstack = saved_k
 	m.ctl = saved_ctl
 	m.form = saved_form
 	m.env = saved_env
 	m.val = saved_val
 	return out
+}
+
+// fiber_resume runs a fiber until it yields, pauses on its budget, finishes,
+// or fails. The protocol is save/swap/drive/harvest: the outer control
+// state is parked in locals, the fiber's is loaded, a nested drive runs it,
+// and afterwards the fiber's state is written back and the outer restored.
+// A nested drive is sound here because suspension can only happen with a
+// clean V stack: `yield` refuses across V-stack boundaries (see vdepth),
+// and the budget waits for open code the same way.
+fn (mut m Machine) fiber_resume(name string, args []blip.Value) ! {
+	if args.len < 1 || args.len > 2 {
+		return error('resume expects a fiber id and an optional step budget, got ${args.len} argument(s)')
+	}
+	id := args[0].as_int() or {
+		return error('resume expects a fiber id, got ${printer.write(args[0])}')
+	}
+	mut fb := m.fibers[int(id)] or { return error('no such fiber: ${id}') }
+	if fb.status == 'done' {
+		return error('fiber ${id} is done')
+	}
+	if fb.status == 'failed' {
+		return error('fiber ${id} failed: ${fb.errmsg}')
+	}
+	if int(id) == m.current_fiber {
+		return error('a fiber cannot resume itself')
+	}
+	budget := if args.len == 2 {
+		args[1].as_int() or {
+			return error('resume expects a step budget, got ${printer.write(args[1])}')
+		}
+	} else {
+		i64(-1)
+	}
+	if budget < -1 {
+		return error('resume budget must be non-negative, got ${budget}')
+	}
+	// Park the outer control state. The fiber owns the machine until the
+	// nested drive returns; the cache goes with the env, so it is dropped.
+	saved_k := m.kstack
+	saved_ctl := m.ctl
+	saved_form := m.form
+	saved_env := m.env
+	saved_val := m.val
+	saved_val2 := m.val2
+	saved_cur := m.current_fiber
+	saved_deadline := m.fiber_deadline
+	m.cache_ok = false
+	if fb.status == 'ready' {
+		m.kstack = []blip.Kont{}
+		m.ctl = .eval_form
+		m.env = m.globals
+		m.form = blip.no_node
+		m.val = blip.nil_value()
+		m.val2 = blip.nil_value()
+		m.apply_values(fb.thunk, []blip.Value{}) or {
+			fb.status = 'failed'
+			fb.errmsg = err.msg()
+			m.fibers[int(id)] = fb
+			m.kstack = saved_k
+			m.ctl = saved_ctl
+			m.form = saved_form
+			m.env = saved_env
+			m.val = saved_val
+			m.val2 = saved_val2
+			m.current_fiber = saved_cur
+			m.fiber_deadline = saved_deadline
+			m.cache_ok = false
+			return error('fiber ${id} failed to start: ${err.msg()}')
+		}
+	} else {
+		m.kstack = fb.kstack
+		m.ctl = fb.ctl
+		m.form = fb.form
+		m.env = fb.env
+		m.val = fb.val
+		m.val2 = fb.val2
+	}
+	m.current_fiber = int(id)
+	m.suspended = false
+	m.suspend_val = blip.nil_value()
+	m.suspend_why = ''
+	m.fiber_deadline = if budget >= 0 { m.steps + int(budget) } else { -1 }
+	res := m.drive() or {
+		msg := err.msg()
+		mut gone := m.fibers[int(id)] or { Fiber{status: 'failed'} }
+		gone.status = 'failed'
+		gone.errmsg = msg
+		m.fibers[int(id)] = gone
+		m.kstack = saved_k
+		m.ctl = saved_ctl
+		m.form = saved_form
+		m.env = saved_env
+		m.val = saved_val
+		m.val2 = saved_val2
+		m.current_fiber = saved_cur
+		m.fiber_deadline = saved_deadline
+		m.suspended = false
+		m.cache_ok = false
+		return error('fiber ${id} failed: ${msg}')
+	}
+	if m.suspended {
+		// Yield or budget pause: harvest the loaded control state back
+		// into the fiber, then park it and hand the value to the outer.
+		mut held := m.fibers[int(id)] or { Fiber{} }
+		held.kstack = m.kstack
+		held.ctl = m.ctl
+		held.form = m.form
+		held.env = m.env
+		held.val = m.val
+		held.val2 = m.val2
+		held.status = if m.suspend_why == 'paused' { 'paused' } else { 'suspended' }
+		held.result = m.suspend_val
+		m.fibers[int(id)] = held
+		m.kstack = saved_k
+		m.ctl = saved_ctl
+		m.form = saved_form
+		m.env = saved_env
+		m.val = m.suspend_val
+		m.val2 = saved_val2
+		m.current_fiber = saved_cur
+		m.fiber_deadline = saved_deadline
+		m.suspended = false
+		m.cache_ok = false
+		m.ret()
+		return
+	}
+	mut fin := m.fibers[int(id)] or { Fiber{} }
+	fin.status = 'done'
+	fin.result = res
+	m.fibers[int(id)] = fin
+	m.kstack = saved_k
+	m.ctl = saved_ctl
+	m.form = saved_form
+	m.env = saved_env
+	m.val = res
+	m.val2 = saved_val2
+	m.current_fiber = saved_cur
+	m.fiber_deadline = saved_deadline
+	m.cache_ok = false
+	m.ret()
+	return
 }
 
 // -------------------------------------------------------------- Result
@@ -1789,12 +2019,68 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 			return
 		}
 		'yield' {
-			// Green-continuation hook: passes its value through.
+			// Green-continuation hook: passes its value through. Inside a
+			// fiber it suspends instead: the value is recorded, the drive
+			// loop exits at its next top, and `resume` harvests the
+			// control state there. Yielding across a V-stack boundary
+			// (a map callback, macro expansion) would abandon that
+			// boundary's V frame on resume, so it is refused loudly.
 			if args.len == 0 {
 				m.val = blip.nil_value()
 			} else {
 				m.val = args[0]
 			}
+			if m.current_fiber >= 0 {
+				if m.vdepth > 0 {
+					return error('yield cannot cross a host boundary (map callback, macro expansion, generated code)')
+				}
+				m.suspend_val = m.val
+				m.suspend_why = 'yield'
+				m.suspended = true
+			}
+			m.ret()
+			return
+		}
+		'spawn' {
+			// A fiber is a thunk plus saved control state. Ids are never
+			// reused: `resume` on a stale id fails instead of addressing
+			// a stranger.
+			if args.len != 1 {
+				return error('spawn expects a thunk, got ${args.len} argument(s)')
+			}
+			if args[0].tag != .closure && args[0].tag != .primitive {
+				return error('spawn expects a function, got ${printer.write(args[0])}')
+			}
+			id := m.fiber_seq
+			m.fiber_seq++
+			m.fibers[id] = Fiber{
+				thunk:  args[0]
+				status: 'ready'
+			}
+			m.val = blip.integer(i64(id))
+			m.ret()
+			return
+		}
+		'resume' {
+			return m.fiber_resume(name, args)
+		}
+		'fiber-status' {
+			if args.len != 1 {
+				return error('fiber-status expects a fiber id, got ${args.len} argument(s)')
+			}
+			id := args[0].as_int() or { return error('fiber-status expects a fiber id, got ${printer.write(args[0])}') }
+			fb := m.fibers[int(id)] or { return error('no such fiber: ${id}') }
+			m.val = blip.keyword(fb.status)
+			m.ret()
+			return
+		}
+		'fiber-done?' {
+			if args.len != 1 {
+				return error('fiber-done? expects a fiber id, got ${args.len} argument(s)')
+			}
+			id := args[0].as_int() or { return error('fiber-done? expects a fiber id, got ${printer.write(args[0])}') }
+			fb := m.fibers[int(id)] or { return error('no such fiber: ${id}') }
+			m.val = blip.boolean(fb.status == 'done')
 			m.ret()
 			return
 		}

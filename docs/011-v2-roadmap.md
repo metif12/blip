@@ -181,7 +181,19 @@ deterministic tooling) is already unique; fibers and PEG complete it.
 4. **Fibers.** Janet has them now; Gleam has processes, Racket threads.
    blip sits on a CEK machine with a heap stack, so cheap fibers are the
    natural step, not OS threads. Pairs with `use` + `Result`. Gate:
-   a bounded-step fiber fixture plus `examples_run` green.
+   a bounded-step fiber fixture plus `examples_run` green — **done**:
+   `spawn`/`resume`/`yield`/`fiber-status`/`fiber-done?` machine
+   builtins; fibers are saved CEK control state (kstack + registers),
+   `resume` save/swap/drives/harvests with an optional step budget
+   (`paused` status, continues on the next resume), errors mark the
+   fiber `failed` with the message; `yield` across a V-stack boundary
+   (map callback, macro expansion, generated code) is refused loudly
+   via a depth guard instead of corrupting, and a budget waits for
+   open code the same way. Nested resume works; ids are never reused.
+   Machine-only by construction: the emitter refuses all five by name.
+   Pins: `fibers` (round-trip, interleave, budget-pause-and-finish,
+   five refusals, boundary guard), `emit_js` machine-only refusals,
+   tour section with probe-verified claims.
 5. **PEGs as data.** Janet is PEG-only; Racket is regex+PEG. Proposal:
    PEG as a data structure (Janet shape), since `match` covers structure
    and PEG covers text. Gate: a grammar fixture independent of `match`.

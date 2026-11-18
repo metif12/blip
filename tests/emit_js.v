@@ -250,6 +250,19 @@ fn main() {
 			'blocked: ${res.blocked}')
 	}
 
+	// B4: fibers are machine-only. Suspending needs the CEK stack, which
+	// emitted code does not have, so every fiber builtin refuses instead
+	// of emitting a call into a run-time ReferenceError. (`yield` was
+	// already refused through unsupported_forms.)
+	for name in ['spawn', 'resume', 'fiber-status', 'fiber-done?'] {
+		res := emit.compile('(${name} 1)') or { emit.Result{} }
+		s.record('${name} is machine-only, not mis-emitted', res.blocked.len > 0
+			&& res.blocked[0].contains('machine only'), 'blocked: ${res.blocked}')
+	}
+	yres := emit.compile('(yield 1)') or { emit.Result{} }
+	s.record('yield is refused, not mis-emitted', yres.blocked.len > 0,
+		'blocked: ${yres.blocked}')
+
 	s.check('quote is a literal', '(print (quote (1 2 3)))')
 
 	// B1: the embedder's path agrees too. An embedder never wires a machine
