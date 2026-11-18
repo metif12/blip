@@ -115,6 +115,14 @@ const blip = {
   string_split: (s, sep) => s.split(sep),
   string_trim: (s) => s.trim(),
   string_index_of: (hay, needle) => hay.indexOf(needle),
+  // `string-slice` clamps like the prim (negative to 0, past-the-end to
+  // the length, end below start to start): JS slice already clamps the
+  // same way once the order is fixed, so mirror the prim exactly.
+  string_slice: (s, start, end) => {
+    const lo = Math.max(0, Math.min(start, s.length));
+    const hi = Math.max(lo, Math.min(end, s.length));
+    return s.slice(lo, hi);
+  },
   // `vector-append` answers a new VECTOR (`blip.vector(out)`), so it rewraps;
   // `append` answers a list and does not. That asymmetry is the prims', not an
   // invention here.

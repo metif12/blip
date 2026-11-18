@@ -613,6 +613,187 @@
                                     (string-trim (list-ref parts 1)))]
           [else (err 'malformed)])))
 
+;; ---------------------------------------------------------------- peg
+;; PEGs as data (roadmap B5): the grammar is an ordinary table, so `match`
+;; covers structure and PEG covers text, and neither knows about the other.
+;; No match, no macros anywhere in this section: the gate demands a grammar
+;; fixture independent of match, so the dispatcher is `cond` over the head
+;; keyword and every combinator is a function. A rule is a vector:
+;;   [:lit "key"]      literal text at the position
+;;   [:any]            any single character (fails at end of input)
+;;   [:one-of "ae"]    one character from the set
+;;   [:range "a" "z"]  one character in the range, inclusive
+;;   [:seq r ...]      each rule in order; the value is the list of values
+;;   [:choice r ...]   the first rule that matches (ordered, like PEG)
+;;   [:star r]         zero or more; the value is the list of values
+;;   [:plus r]         one or more
+;;   [:opt r]          the value, or nil when it misses (position kept)
+;;   [:not r]          succeeds empty when r fails, fails when r matches
+;;   [:look r]         succeeds empty when r matches (lookahead)
+;;   [:cap r]         the matched TEXT (a substring, not the value)
+;;   [:ref :name]     another rule in the same grammar (recursion)
+;; Left recursion does not terminate -- that is the PEG bargain, not a bug --
+;; so grammars loop with star and plus. A star over a rule that matches
+;; empty stops after one empty step rather than spinning: progress is what
+;; keeps it honest.
+
+;; peg-char reads the character at pos, or "" past the end.
+(def (peg-char input pos)
+  (if (>= pos (string-length input))
+      ""
+      (string-slice input pos (+ pos 1))))
+
+;; peg-fail builds the failure value: what was expected, and where.
+(def (peg-fail desc pos)
+  (err {:expected desc :at pos}))
+
+;; peg-at reads the failure position back out of an (err ...) value.
+(def (peg-at e)
+  (get (err-value e) :at))
+
+;; peg-furthest keeps the error that got furthest: the one whose position
+;; names the real problem, which in a choice is rarely the last branch.
+(def (peg-furthest a b)
+  (if (>= (peg-at a) (peg-at b)) a b))
+
+;; peg-exec runs one rule at pos: (ok [value newpos]) or (err ...).
+(def (peg-exec g rule input pos)
+  (if (vector? rule)
+      (cond [(equal? (vector-ref rule 0) :lit) (peg-lit rule input pos)]
+        [(equal? (vector-ref rule 0) :any) (peg-any rule input pos)]
+        [(equal? (vector-ref rule 0) :one-of) (peg-one-of rule input pos)]
+        [(equal? (vector-ref rule 0) :range) (peg-range rule input pos)]
+        [(equal? (vector-ref rule 0) :seq) (peg-seq g (cdr (as-list rule)) input pos nil)]
+        [(equal? (vector-ref rule 0) :choice) (peg-choice g (cdr (as-list rule)) input pos nil)]
+        [(equal? (vector-ref rule 0) :star) (peg-star g (vector-ref rule 1) input pos nil)]
+        [(equal? (vector-ref rule 0) :plus) (peg-plus g (vector-ref rule 1) input pos)]
+        [(equal? (vector-ref rule 0) :opt) (peg-opt g (vector-ref rule 1) input pos)]
+        [(equal? (vector-ref rule 0) :not) (peg-not g (vector-ref rule 1) input pos)]
+        [(equal? (vector-ref rule 0) :look) (peg-look g (vector-ref rule 1) input pos)]
+        [(equal? (vector-ref rule 0) :cap) (peg-cap g (vector-ref rule 1) input pos)]
+        [(equal? (vector-ref rule 0) :ref) (peg-ref g (vector-ref rule 1) input pos)]
+        [else (peg-fail [:unknown-rule rule] pos)])
+      (peg-fail :rule pos)))
+
+;; peg-lit matches literal text at the position.
+(def (peg-lit rule input pos)
+  (let ([want (vector-ref rule 1)]
+        [n (string-length (vector-ref rule 1))])
+    (if (equal? (string-slice input pos (+ pos n)) want)
+        (ok [want (+ pos n)])
+        (peg-fail want pos))))
+
+;; peg-any matches one character, failing past the end.
+(def (peg-any rule input pos)
+  (let ([ch (peg-char input pos)])
+    (if (equal? ch "")
+        (peg-fail :any pos)
+        (ok [ch (+ pos 1)]))))
+
+;; peg-one-of matches one character from the set.
+(def (peg-one-of rule input pos)
+  (let ([ch (peg-char input pos)])
+    (if (and (not (equal? ch "")) (>= (string-index-of (vector-ref rule 1) ch) 0))
+        (ok [ch (+ pos 1)])
+        (peg-fail (vector-ref rule 1) pos))))
+
+;; peg-range matches one character between lo and hi, inclusive.
+(def (peg-range rule input pos)
+  (let ([ch (peg-char input pos)])
+    (if (and (not (equal? ch "")) (<= (vector-ref rule 1) ch) (<= ch (vector-ref rule 2)))
+        (ok [ch (+ pos 1)])
+        (peg-fail [:range (vector-ref rule 1) (vector-ref rule 2)] pos))))
+
+;; peg-seq runs each rule in order, threading the position; the value is
+;; the list of values. Tail-recursive: the accumulator carries the work.
+(def (peg-seq g rules input pos acc)
+  (if (null? rules)
+      (ok [(reverse acc) pos])
+      (let ([r (peg-exec g (car rules) input pos)])
+        (if (ok? r)
+            (peg-seq g (cdr rules) input (get (ok-value r) 1) (cons (get (ok-value r) 0) acc))
+            r))))
+
+;; peg-choice tries each rule in order and takes the first that matches.
+;; The failure is the furthest any branch reached, not merely the last.
+(def (peg-choice g rules input pos best)
+  (if (null? rules)
+      (if (nil? best) (peg-fail :choice pos) best)
+      (let ([r (peg-exec g (car rules) input pos)])
+        (if (ok? r)
+            r
+            (peg-choice g (cdr rules) input pos
+                        (if (nil? best) r (peg-furthest best r)))))))
+
+;; peg-star runs until the rule misses; the value is the list of values.
+;; A step that makes no progress stops the loop: a star over a rule that
+;; matches empty would otherwise spin forever on the same position.
+(def (peg-star g rule input pos acc)
+  (let ([r (peg-exec g rule input pos)])
+    (if (ok? r)
+        (let ([next (get (ok-value r) 1)])
+          (if (= next pos)
+              (ok [(reverse acc) pos])
+              (peg-star g rule input next (cons (get (ok-value r) 0) acc))))
+        (ok [(reverse acc) pos]))))
+
+;; peg-plus runs once (which must succeed) and then stars.
+(def (peg-plus g rule input pos)
+  (let ([first (peg-exec g rule input pos)])
+    (if (err? first)
+        first
+        (let ([rest (peg-star g rule input (get (ok-value first) 1)
+                              (cons (get (ok-value first) 0) nil))])
+          (ok [(get (ok-value rest) 0) (get (ok-value rest) 1)])))))
+
+;; peg-opt takes the value, or nil with the position kept on a miss.
+(def (peg-opt g rule input pos)
+  (let ([r (peg-exec g rule input pos)])
+    (if (ok? r) r (ok [nil pos]))))
+
+;; peg-not succeeds empty exactly when the rule fails.
+(def (peg-not g rule input pos)
+  (let ([r (peg-exec g rule input pos)])
+    (if (err? r) (ok [nil pos]) (peg-fail [:not-expected rule] pos))))
+
+;; peg-look succeeds empty exactly when the rule matches, consuming nothing.
+(def (peg-look g rule input pos)
+  (let ([r (peg-exec g rule input pos)])
+    (if (ok? r) (ok [nil pos]) r)))
+
+;; peg-cap answers the matched TEXT: the substring the rule consumed.
+(def (peg-cap g rule input pos)
+  (let ([r (peg-exec g rule input pos)])
+    (if (err? r)
+        r
+        (ok [(string-slice input pos (get (ok-value r) 1)) (get (ok-value r) 1)]))))
+
+;; peg-ref follows a grammar rule by name.
+(def (peg-ref g name input pos)
+  (let ([rule (get g name)])
+    (if (nil? rule)
+        (peg-fail [:no-rule name] pos)
+        (peg-exec g rule input pos))))
+
+;; peg-match runs the start rule at position 0: (ok [value end]) or (err ...).
+;; The end position travels with the value so the caller decides what a
+;; complete parse means; peg-parse demands the whole input.
+(def (peg-match g start input)
+  (let ([rule (get g start)])
+    (if (nil? rule)
+        (peg-fail [:no-rule start] 0)
+        (peg-exec g rule input 0))))
+
+;; peg-parse parses the WHOLE input: a trailing remainder is an error, not
+;; a shorter answer. Most programs want this; peg-match is for scanning.
+(def (peg-parse g start input)
+  (let ([r (peg-match g start input)])
+    (if (err? r)
+        r
+        (if (= (get (ok-value r) 1) (string-length input))
+            (ok (get (ok-value r) 0))
+            (peg-fail :eof (get (ok-value r) 1))))))
+
 ;; ---------------------------------------------------------------- symbols
 
 ;; lookup-sym finds a name in a small table of symbols. `nil` means absent, which

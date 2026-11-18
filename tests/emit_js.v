@@ -293,6 +293,9 @@ fn main() {
 	s.check('verbatim print concatenates', '(print "a") (print "b")')
 	s.check('println ends the line', '(println "a") (println "b")')
 	s.check('display shows strings bare', '(display "a" 1)')
+	s.check('string-slice clamps and cuts', '(print (string-slice "hello" 1 4))')
+	s.check('string-slice past the end clamps', '(print (string-slice "hello" 3 99))')
+	s.check('string-slice backwards is empty', '(print (string-slice "hello" 4 1))')
 
 	// A1: tables print in insertion order on both engines, and `=` ignores
 	// order on both (the backend used to answer #f for distinct objects).

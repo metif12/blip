@@ -1,0 +1,91 @@
+;; programs/peg.blip -- PEGs as data, in blip.
+;;
+;; The engine lives in lib/std.blip (peg-match, peg-parse and friends); what
+;; stays here is the self tests that prove it -- the file that proved the
+;; code is the file that still runs it. No match FORMS anywhere in this
+;; file (the word below is prose): the gate demands a grammar fixture
+;; independent of match, so every branch below is if/cond/use.
+;;
+;; The demo grammar parses a tiny sectioned config: [name] headers own the
+;; key: value lines under them, values run to end of line.
+
+(def cfg-grammar
+  {:blank [:star [:one-of " \t"]]
+   :eol [:lit "\n"]
+   :name [:cap [:plus [:choice [:range "a" "z"] [:range "A" "Z"] [:range "0" "9"] [:lit "-"] [:lit "_"]]]]
+   :rest [:cap [:star [:seq [:not [:ref :eol]] [:any]]]]
+   :pair [:seq [:ref :name] [:ref :blank] [:lit ":"] [:ref :blank] [:ref :rest] [:ref :eol]]
+   :head [:seq [:lit "["] [:ref :name] [:lit "]"] [:ref :eol]]
+   :line [:choice [:ref :head] [:ref :pair]]
+   :main [:star [:ref :line]]})
+
+;; pair-value reads the value out of a :pair row: [key blank ":" blank val eol].
+(def (pair-value row)
+  (get row 4))
+
+;; pair-key reads the key out of a :pair row.
+(def (pair-key row)
+  (get row 0))
+
+;; row-head? is true when the row is a [name] header rather than a pair:
+;; a header row is [lit name lit eol], a pair row starts with a bare key.
+(def (row-head? row)
+  (equal? (get row 0) "["))
+
+;; --- self tests ---
+
+;; Letters parse; a digit stops a full parse with an :eof error.
+(assert (ok? (peg-parse {:main [:plus [:range "a" "z"]]} :main "hello")) "letters parse")
+(assert (equal? (ok-value (peg-parse {:main [:plus [:range "a" "z"]]} :main "hello"))
+                 '("h" "e" "l" "l" "o"))
+        "plus collects each char")
+(assert (err? (peg-parse {:main [:plus [:range "a" "z"]]} :main "hi5")) "trailing garbage errors")
+(assert (equal? (get (err-value (peg-parse {:main [:plus [:range "a" "z"]]} :main "hi5")) :at) 2)
+        "the error names the position")
+
+;; Choice is ordered: the first branch that matches wins.
+(assert (equal? (ok-value (peg-parse {:main [:choice [:lit "ab"] [:lit "a"]]} :main "ab")) "ab")
+        "choice prefers the first match")
+(assert (equal? (ok-value (peg-parse {:main [:choice [:lit "ab"] [:lit "a"]]} :main "a")) "a")
+        "choice falls through")
+
+;; Star over an empty-matching rule stops instead of spinning.
+(assert (equal? (ok-value (peg-parse {:main [:star [:opt [:lit "a"]]]} :main "")) '())
+        "empty star is empty")
+(assert (equal? (ok-value (peg-parse {:main [:plus [:one-of "ab"]]} :main "aab")) '("a" "a" "b"))
+        "plus collects")
+
+;; Lookahead and negation consume nothing (partial matches, so peg-match).
+(assert (equal? (get (ok-value (peg-match {:main [:seq [:look [:lit "a"]] [:any]]} :main "ab")) 0)
+                 (list nil "a"))
+        "lookahead sees without eating")
+(assert (ok? (peg-match {:main [:seq [:not [:lit "b"]] [:any]]} :main "ab"))
+        "negation passes on a miss")
+(assert (err? (peg-match {:main [:seq [:not [:lit "a"]] [:any]]} :main "ab"))
+        "negation fails on a hit")
+
+;; The config grammar: two sections, three pairs, values to end of line.
+(def sample "[server]\nhost: localhost\nport: 8080\n[limits]\nretries: 3\n")
+
+(def parsed (peg-parse cfg-grammar :main sample))
+(assert (ok? parsed) "the sample parses whole")
+
+(let ([rows (ok-value parsed)])
+  (assert (= (length rows) 5) "five rows")
+  (assert (row-head? (get rows 0)) "first row is a header")
+  (assert (equal? (get (get rows 0) 1) "server") "header names the section")
+  (assert (not (row-head? (get rows 1))) "second row is a pair")
+  (assert (equal? (pair-key (get rows 1)) "host") "first key")
+  (assert (equal? (pair-value (get rows 1)) "localhost") "first value")
+  (assert (equal? (pair-value (get rows 2)) "8080") "second value")
+  (assert (equal? (get (get rows 3) 1) "limits") "second header")
+  (assert (equal? (pair-value (get rows 4)) "3") "third value"))
+
+;; A bad section header is an error, and the error names the position.
+(assert (err? (peg-parse cfg-grammar :main "[oops\nkey: v\n")) "unclosed header errors")
+
+;; Missing rules are errors, not crashes; empty input parses to no rows.
+(assert (err? (peg-match cfg-grammar :missing "x")) "missing rule errors")
+(assert (equal? (ok-value (peg-parse cfg-grammar :main "")) '()) "empty input, empty file")
+
+(println "peg ok")

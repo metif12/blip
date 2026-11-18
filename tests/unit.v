@@ -1075,6 +1075,21 @@ fn (mut s Suite) std_table_covers() {
 	s.record('sort-table resolves to the std', file == 'lib/std.blip', file)
 	sorted := m.run_str('(sort-table {:b 2 :a 1})') or { blip.nil_value() }
 	s.record('sort-table sorts', printer.write(sorted) == '{:a 1 :b 2}', printer.write(sorted))
+	// B5: the PEG engine is ordinary std too: peg-match resolves to
+	// lib/std.blip and parses without match anywhere in the call.
+	ploc := m.run_str('(source-location peg-match)') or { blip.nil_value() }
+	mut pfile := ''
+	if ploc.tag == .table {
+		if t := ploc.as_table() {
+			pfile = t.get('file').as_string() or { '' }
+		}
+	}
+	s.record('peg-match resolves to the std', pfile == 'lib/std.blip', pfile)
+	pgram := m.run_str('(peg-parse {:main [:plus [:range "a" "z"]]} :main "hey")') or {
+		blip.nil_value()
+	}
+	s.record('peg parses in-process', printer.write(pgram) == '(ok ("h" "e" "y"))',
+		printer.write(pgram))
 	// The V-level constructors behind the literals: an explicit order is
 	// kept, which is what every literal and `put` relies on.
 	tv := blip.table_ordered({

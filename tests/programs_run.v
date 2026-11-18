@@ -106,6 +106,7 @@ fn main() {
 	s.check_program('lint_commit', 'programs/lint_commit.blip', 'lint ok')
 	s.check_program('markdown', 'programs/markdown.blip', 'markdown ok')
 	s.check_program('pratt', 'programs/pratt.blip', 'pratt ok')
+	s.check_program('peg', 'programs/peg.blip', 'peg ok')
 
 	if s.fails > 0 {
 		println('${s.fails} FAILURE(S)')

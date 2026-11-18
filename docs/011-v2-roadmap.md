@@ -196,7 +196,16 @@ deterministic tooling) is already unique; fibers and PEG complete it.
    tour section with probe-verified claims.
 5. **PEGs as data.** Janet is PEG-only; Racket is regex+PEG. Proposal:
    PEG as a data structure (Janet shape), since `match` covers structure
-   and PEG covers text. Gate: a grammar fixture independent of `match`.
+   and PEG covers text. Gate: a grammar fixture independent of `match` —
+   **done**: `peg-match`/`peg-parse` plus eleven rule forms
+   (`lit`/`any`/`one-of`/`range`/`seq`/`choice`/`star`/`plus`/`opt`/
+   `not`/`look`/`cap`/`ref`) as ordinary `lib/std.blip` over wired
+   prims (`string-slice` wired through the emitter for it: names,
+   prelude with machine-matching clamps, parity pins); failures are
+   `(err {:expected … :at pos})` Results with furthest-position choice;
+   `programs/peg.blip` parses a sectioned config with asserts on every
+   combinator and contains no `match` forms; `unit` pins the std
+   source-location; `programs_run` checks the `peg ok` marker.
 6. **Exhaustiveness for `match`.** Gleam has it; no Lisp in the table
    does. Follows from the current `check` (which already reads `def`).
    Default warning, error under `#:strict` (open question in
