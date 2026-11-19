@@ -1264,7 +1264,21 @@ fn doc_file(path string) int {
 				}
 				// name is the next token, possibly parenthesized signature
 				if rest.starts_with('(') {
-					mut end := rest.index(')') or { -1 }
+					// The signature may nest (annotated params `(x int)`),
+					// so the close is found by depth, not by first `)`.
+					mut depth := 0
+					mut end := -1
+					for i, ch in rest.bytes() {
+						if ch == `(` {
+							depth++
+						} else if ch == `)` {
+							depth--
+							if depth == 0 {
+								end = i
+								break
+							}
+						}
+					}
 					if end >= 0 {
 						sig := rest[1..end]
 						parts := sig.split(' ')

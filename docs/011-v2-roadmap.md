@@ -254,7 +254,15 @@ deterministic tooling) is already unique; fibers and PEG complete it.
   the normalized text re-parses cleanly, over every `.blip` file).
   Comments are trivia the reader drops, so `fmt -w` strips them; that
   is the documented tradeoff, not a bug.
-- `doc`: from `;;` comments; site gains API references.
+- `doc`: from `;;` comments; site gains API references — **done**:
+  `blip doc`'s signature parser matches nested parens (annotated
+  multi-param signatures printed truncated before); `tests/doc_demo.blip`
+  covers every shape plus the ignore-rules with a byte-exact golden
+  (`tests/golden/doc_demo.md`); `site/content/api.md` is
+  `blip doc lib/std.blip` under a fixed header, rendered by
+  `site/build.blip`, linked from the nav, listed in the pages gate;
+  `repl_golden.v` pins the golden and the api.md freshness (std edit
+  without regenerating fails).
 - `lsp`: parity with `blip run` diagnostics (today 26 checks) — **done**
   (29 checks; editor and CLI report the same diagnostics).
 - `build`: `emit-js` is done; `.wasm` waits on V wasm32 stdlib

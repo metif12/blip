@@ -1,0 +1,28 @@
+;; doc fixture: every shape `blip doc` understands, plus the shapes it
+;; must ignore. The golden file tests/golden/doc_demo.md pins the output
+;; byte for byte.
+
+;; Version marker; carries the header doc above.
+(def fixture-version 1)
+
+;; Adds two numbers.
+;; Second paragraph, kept.
+;;
+;; Third paragraph after a blank doc line.
+(def (add2 (a int) (b int)) int (+ a b))
+
+;; A plain value.
+(def *debug* #f)
+
+(def undocumented 1)
+
+(println "not a definition: resets the doc buffer")
+
+;; A macro.
+(defmacro unless-zero (value body)
+  (list 'if (list '= value 0) '(begin) body))
+
+;; A struct.
+(struct Point (x y))
+
+;; Trailing doc with no definition is ignored.

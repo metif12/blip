@@ -51,3 +51,10 @@
   (use (write-file "site_out/status.html"
           (render-page "Status — blip" read-file))
     (print "wrote site_out/status.html")))
+
+;; api reference (generated from lib/std.blip; see tests/golden/doc_demo.md
+;; for the pinned `blip doc` format and repl_golden.v for the freshness gate)
+(use (read-file "site/content/api.md")
+  (use (write-file "site_out/api.html"
+          (render-page "API reference — blip" read-file))
+    (print "wrote site_out/api.html")))
