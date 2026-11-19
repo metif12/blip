@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=blip
+Comment=A Lisp dialect with real tail calls
+Exec=blip
+Icon=blip
+Type=Application
+Categories=Development;
+Terminal=true
+StartupNotify=false
