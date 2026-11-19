@@ -500,9 +500,13 @@ table has them, core runs arithmetic and refuses IO, enable restores) +
 the C-library dist. v2 adds formats one at a time, each gated the same
 way: CI produces the artifact AND a smoke step runs it (`blip version`
 minimum, plus the `clib_smoke` marker where a library ships). v2
-must-haves are the current set plus DEB, MSI, and RPM; Snap, Flatpak,
-AppImage, DMG, and the rest follow as their gates clear, each in its
-own change. Signing/notarization (DMG, MSI) is called out now because
+must-haves are the current set plus DEB, MSI, RPM, and Snap; Flatpak,
+AppImage, DMG, and the rest follow as their gates clear, each in
+its own change. Snap joins DEB/MSI/RPM as done: `packaging/snap/`
+(snapcraft.yaml template plus `build.sh`), classic confinement with
+the same payload and prelude lookup; verified end to end in WSL
+Ubuntu (snapd + snapcraft from the store, stock-release `blip`
+rebuilt there, `snap install --dangerous`, smoke, `snap remove`). Signing/notarization (DMG, MSI) is called out now because
 it is the known blocker, not because v2 promises it.
 
 - DEB — **done**: `packaging/deb/` holds the control template, the

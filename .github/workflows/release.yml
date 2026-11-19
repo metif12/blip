@@ -278,8 +278,59 @@ jobs:
             blip_*.rpm
             SHA256SUMS.rpm
 
+  snap:
+    # The Snap package: same payload as the .deb/.rpm, assembled with
+    # snapcraft and smoke-tested installed with --dangerous (no store
+    # account is wired up in v2, so sideloading is the distribution path;
+    # classic confinement, as befits a dev tool). Signing/store review
+    # are out of scope the same way MSI signing is.
+    needs: [build]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: blip-dist
+          path: dist
+
+      - name: Install snapcraft
+        run: sudo snap install snapcraft --classic
+
+      - name: Build the snap
+        run: |
+          set -e
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="0.0.0"
+          fi
+          echo "packaging blip $VERSION"
+          bash packaging/snap/build.sh "$VERSION" dist/blip-linux .
+          ls -la blip_*.snap
+
+      - name: Smoke test the installed snap
+        run: |
+          set -e
+          sudo snap install --dangerous --classic blip_*.snap
+          blip version
+          printf '(println "snap smoke ok")\n' > /tmp/snap_smoke.blip
+          test "$(blip run /tmp/snap_smoke.blip)" = '"snap smoke ok"'
+          blip test examples/01_basics.blip
+          sudo snap remove blip
+          if blip version; then echo "::error::uninstall left blip behind"; exit 1; fi
+          sha256sum blip_*.snap > SHA256SUMS.snap
+          cat SHA256SUMS.snap
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blip-snap-dist
+          path: |
+            blip_*.snap
+            SHA256SUMS.snap
+
   publish:
-    needs: [build, clib, msi, rpm]
+    needs: [build, clib, msi, rpm, snap]
     # Only tags publish. A manual dispatch builds and verifies, then stops, so a
     # dry run can never create a release by accident.
     if: startsWith(github.ref, 'refs/tags/v')
@@ -302,6 +353,11 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          name: blip-snap-dist
+          path: dist/snap
+
+      - uses: actions/download-artifact@v4
+        with:
           pattern: blip-clib-dist-*
           merge-multiple: true
           path: dist/clib
@@ -319,6 +375,8 @@ jobs:
             dist/msi/SHA256SUMS.msi
             dist/rpm/blip_*.rpm
             dist/rpm/SHA256SUMS.rpm
+            dist/snap/blip_*.snap
+            dist/snap/SHA256SUMS.snap
             dist/clib/blip-clib-linux.tar.gz
             dist/clib/blip-clib-windows.zip
             dist/clib/SHA256SUMS.clib-linux
@@ -341,8 +399,10 @@ jobs:
             `blip_*.deb` installs on Debian/Ubuntu (`sudo dpkg -i`);
             `blip_*.msi` installs on Windows (double-click or
             `msiexec /i`); `blip_*.rpm` installs on Fedora/RHEL
-            derivatives (`sudo rpm -i`). Each was smoke-tested
-            installed before publishing.
+            derivatives (`sudo rpm -i`); `blip_*.snap` sideloads
+            anywhere with snapd
+            (`sudo snap install --dangerous --classic`). Each was
+            smoke-tested installed before publishing.
 
 
   # The C library release. Same compiler pins as `verify` above and the same

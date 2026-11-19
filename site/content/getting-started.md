@@ -21,7 +21,8 @@ below) by double-clicking it, or headless with
 `msiexec /i blip_<version>_amd64.msi /qn`.
 
 Debian/Ubuntu, from a release (the `.deb` attached to each version tag).
-Fedora/RHEL derivatives take the `.rpm` the same way (`sudo rpm -i blip_<version>-1.x86_64.rpm`):
+Fedora/RHEL derivatives take the `.rpm` the same way (`sudo rpm -i blip_<version>-1.x86_64.rpm`).
+Anywhere with snapd, sideload the `.snap` (`sudo snap install --dangerous --classic blip_<version>_amd64.snap` classic confinement, like the other native packages):
 
 ```
 sudo dpkg -i blip_<version>_amd64.deb

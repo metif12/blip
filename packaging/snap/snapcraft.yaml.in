@@ -1,0 +1,27 @@
+name: blip
+version: '@VERSION@'
+summary: A Lisp dialect with real tail calls
+description: |
+  blip is a Lisp dialect implemented in V, with real tail calls,
+  pattern matching, and errors as values. The interpreter, standard
+  library, example programs, and readme ship in the snap; run
+  `blip run prog.blip`, check `blip test`, or start the REPL with a
+  bare `blip`.
+grade: stable
+title: blip
+license: MIT
+contact: https://github.com/metif12/blip/issues
+website: https://github.com/metif12/blip
+source-code: https://github.com/metif12/blip
+issues: https://github.com/metif12/blip/issues
+confinement: classic
+base: core24
+
+apps:
+  blip:
+    command: usr/bin/blip
+
+parts:
+  blip:
+    plugin: dump
+    source: .
