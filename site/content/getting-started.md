@@ -22,7 +22,7 @@ below) by double-clicking it, or headless with
 
 Debian/Ubuntu, from a release (the `.deb` attached to each version tag).
 Fedora/RHEL derivatives take the `.rpm` the same way (`sudo rpm -i blip-<version>-1.x86_64.rpm`).
-Anywhere with FUSE, download the `.AppImage`, `chmod +x` it, and run it directly -- no install step:
+Anywhere with FUSE, download the `.AppImage`, `chmod +x` it, and run it directly -- no install step. With flatpak, install the `.flatpak` bundle (`flatpak install blip_<version>_amd64.flatpak`) and run it as `flatpak run io.github.metif12.blip`:
 Anywhere with snapd, sideload the `.snap` (`sudo snap install --dangerous --classic blip_<version>_amd64.snap` classic confinement, like the other native packages):
 
 ```

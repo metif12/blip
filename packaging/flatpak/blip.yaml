@@ -1,0 +1,25 @@
+app-id: io.github.metif12.blip
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: blip
+summary: A Lisp dialect with real tail calls
+finish-args:
+  # A console program, not a desktop app: no Wayland, no X11, no GPU,
+  # no D-Bus session or system talk, no network. It reads and writes
+  # files and stdout wherever it is pointed, like the tarball binary
+  # does. Home and /tmp are visible so `blip run ~/prog.blip` works
+  # the way it does outside the sandbox.
+  - --filesystem=home
+  - --filesystem=/tmp
+modules:
+  - name: blip
+    buildsystem: simple
+    build-commands:
+      - install -D -m755 blip /app/bin/blip
+      - install -D -m644 lib/std.blip /app/share/blip/lib/std.blip
+      - mkdir -p /app/share/blip/programs && cp programs/*.blip /app/share/blip/programs/ && chmod 644 /app/share/blip/programs/*.blip
+      - install -D -m644 README.md /app/share/doc/blip/README.md
+    sources:
+      - type: dir
+        path: .

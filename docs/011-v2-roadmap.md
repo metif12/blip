@@ -500,13 +500,10 @@ table has them, core runs arithmetic and refuses IO, enable restores) +
 the C-library dist. v2 adds formats one at a time, each gated the same
 way: CI produces the artifact AND a smoke step runs it (`blip version`
 minimum, plus the `clib_smoke` marker where a library ships). v2
-must-haves are the current set plus DEB, MSI, RPM, Snap, and AppImage; Flatpak,
-DMG, and the rest follow as their gates clear, each in
-its own change. Snap joins DEB/MSI/RPM as done: `packaging/snap/`
-(snapcraft.yaml template plus `build.sh`), classic confinement with
-the same payload and prelude lookup; verified end to end in WSL
-Ubuntu (snapd + snapcraft from the store, stock-release `blip`
-rebuilt there, `snap install --dangerous`, smoke, `snap remove`).
+must-haves are the current set plus DEB, MSI, RPM, Snap, AppImage, and Flatpak;
+DMG and the rest follow as their gates clear, each in its own change.
+
+- Snap — **done**: `packaging/snap/` (snapcraft.yaml template plus `build.sh`), classic confinement with the same payload and prelude lookup; CI builds, installs with `--dangerous`, smokes version/run/`blip test`/uninstall, and publishes with checksums. Verified end to end in WSL Ubuntu (snapd + snapcraft from the store, stock-release `blip` rebuilt there, `snap install --dangerous`, smoke, `snap remove`).
 - AppImage — **done**: `packaging/appimage/` (desktop file, pinned appimagetool 1.9.1 download plus a `build.sh` that stages usr/ + AppRun symlink and runs it); CI builds, runs version/run/`blip test` straight from the file (no install step exists), and publishes with checksums. Verified end to end in WSL Ubuntu: build, admin-install extraction layout check, and binary smoke with CWD-independent prelude. Signing/notarization (DMG, MSI) is called out now because
 it is the known blocker, not because v2 promises it.
 
@@ -537,6 +534,7 @@ it is the known blocker, not because v2 promises it.
    and publishes with checksums. Verified end to end in WSL Ubuntu
    with the pinned stock toolchain (stock-release `blip` binary
    rebuilt there, not the Windows one).
+- Flatpak — **done**: `packaging/flatpak/` (manifest plus a `build.sh` that stages the same tree and runs flatpak-builder destructively, no store submission in v2); CI builds, installs from the local repo file, smokes version/run/`blip test`/uninstall, and publishes with checksums. Verified end to end in WSL Ubuntu (stock toolchain plus flathub runtime/sdk, `flatpak install`, smoke, `flatpak uninstall`).
 
 ## Track G — packages, tools, workspaces (agreed, registry later)
 

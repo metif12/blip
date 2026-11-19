@@ -373,8 +373,64 @@ jobs:
             blip_*.AppImage
             SHA256SUMS.appimage
 
+  flatpak:
+    # The Flatpak: same payload as the .deb, assembled with
+    # flatpak-builder against the Freedesktop runtime and smoke-tested
+    # installed from a local repo (no Flathub submission in v2, same as
+    # snap's no-store stance). No signing step: distribution is the
+    # .flatpak file itself.
+    needs: [build]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: blip-dist
+          path: dist
+
+      - name: Install flatpak tooling and runtime
+        run: |
+          set -e
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install -y flathub org.freedesktop.Platform//25.08 org.freedesktop.Sdk//25.08
+
+      - name: Build the flatpak
+        run: |
+          set -e
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="0.0.0"
+          fi
+          echo "packaging blip $VERSION"
+          bash packaging/flatpak/build.sh "$VERSION" dist/blip-linux .
+          ls -la blip_*.flatpak
+
+      - name: Smoke test the installed flatpak
+        run: |
+          set -e
+          sudo flatpak install -y ./blip_*.flatpak
+          flatpak run io.github.metif12.blip version
+          printf '(println "flatpak smoke ok")\n' > /tmp/flatpak_smoke.blip
+          test "$(flatpak run io.github.metif12.blip run /tmp/flatpak_smoke.blip)" = '"flatpak smoke ok"'
+          flatpak run io.github.metif12.blip test examples/01_basics.blip
+          sudo flatpak uninstall -y io.github.metif12.blip
+          if flatpak list --app 2>/dev/null | grep -q io.github.metif12.blip; then echo "::error::uninstall left blip behind"; exit 1; fi
+          sha256sum blip_*.flatpak > SHA256SUMS.flatpak
+          cat SHA256SUMS.flatpak
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blip-flatpak-dist
+          path: |
+            blip_*.flatpak
+            SHA256SUMS.flatpak
+
   publish:
-    needs: [build, clib, msi, rpm, snap, appimage]
+    needs: [build, clib, msi, rpm, snap, appimage, flatpak]
     # Only tags publish. A manual dispatch builds and verifies, then stops, so a
     # dry run can never create a release by accident.
     if: startsWith(github.ref, 'refs/tags/v')
@@ -407,6 +463,11 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          name: blip-flatpak-dist
+          path: dist/flatpak
+
+      - uses: actions/download-artifact@v4
+        with:
           pattern: blip-clib-dist-*
           merge-multiple: true
           path: dist/clib
@@ -428,6 +489,8 @@ jobs:
             dist/snap/SHA256SUMS.snap
             dist/appimage/blip_*.AppImage
             dist/appimage/SHA256SUMS.appimage
+            dist/flatpak/blip_*.flatpak
+            dist/flatpak/SHA256SUMS.flatpak
             dist/clib/blip-clib-linux.tar.gz
             dist/clib/blip-clib-windows.zip
             dist/clib/SHA256SUMS.clib-linux
@@ -454,7 +517,10 @@ jobs:
             anywhere with snapd
             (`sudo snap install --dangerous --classic`);
             `blip_*.AppImage` runs anywhere with FUSE (just `chmod +x`
-            and run it). Each was smoke-tested before publishing.
+            and run it); `blip_*.flatpak` installs anywhere with
+            flatpak (`flatpak install` the file, then `flatpak run
+            io.github.metif12.blip`). Each was smoke-tested before
+            publishing.
 
 
   # The C library release. Same compiler pins as `verify` above and the same
