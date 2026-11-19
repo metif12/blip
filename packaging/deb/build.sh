@@ -32,7 +32,7 @@ cp "$BIN" "$ROOT/usr/bin/blip"
 chmod 755 "$ROOT/usr/bin/blip"
 cp lib/*.blip "$ROOT/usr/share/blip/lib/"
 cp programs/*.blip "$ROOT/usr/share/blip/programs/"
-cp packaging/deb/copyright "$ROOT/usr/share/doc/blip/copyright"
+cp packaging/copyright "$ROOT/usr/share/doc/blip/copyright"
 cp README.md "$ROOT/usr/share/doc/blip/README.md"
 chmod 644 "$ROOT/DEBIAN/control" "$ROOT/usr/share/blip/lib/"*.blip \
   "$ROOT/usr/share/blip/programs/"*.blip \

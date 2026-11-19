@@ -495,7 +495,7 @@ table has them, core runs arithmetic and refuses IO, enable restores) +
 the C-library dist. v2 adds formats one at a time, each gated the same
 way: CI produces the artifact AND a smoke step runs it (`blip version`
 minimum, plus the `clib_smoke` marker where a library ships). v2
-must-haves are the current set plus DEB and MSI; RPM, Snap, Flatpak,
+must-haves are the current set plus DEB, MSI, and RPM; Snap, Flatpak,
 AppImage, DMG, and the rest follow as their gates clear, each in its
 own change. Signing/notarization (DMG, MSI) is called out now because
 it is the known blocker, not because v2 promises it.
@@ -519,6 +519,14 @@ it is the known blocker, not because v2 promises it.
    PATH-registration and clean uninstall, and publishes with
    checksums. Verified locally: `wix build`, MSI table inspection,
    admin-install extraction, and binary smoke from the extracted tree.
+ - RPM — **done**: `packaging/rpm/` (spec template, `AutoReqProv: no` —
+   the binary is self-contained C and rpm auto-deps name deb-provided
+   libraries the rpm database cannot resolve — plus a `build.sh`
+   staging the same tree as the .deb); CI builds from the tag version,
+   installs with `rpm -i`, smokes version/run/`blip test`/uninstall,
+   and publishes with checksums. Verified end to end in WSL Ubuntu
+   with the pinned stock toolchain (stock-release `blip` binary
+   rebuilt there, not the Windows one).
 
 ## Track G — packages, tools, workspaces (agreed, registry later)
 

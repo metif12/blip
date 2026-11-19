@@ -1,0 +1,44 @@
+Name:           blip
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        A Lisp dialect with real tail calls
+License:        MIT
+URL:            https://github.com/metif12/blip
+BuildArch:      x86_64
+
+# No automatic Requires/Provides: the binary is self-contained C (V/gcc,
+# libc only), and rpm's soname scan names deb-provided libraries the rpm
+# database cannot resolve. An explicit dependency list would be a lie on
+# deb-based systems and noise elsewhere; libc is universal.
+AutoReqProv:    no
+
+%description
+blip is a Lisp dialect implemented in V, with real tail calls,
+pattern matching, and errors as values. This package ships the
+interpreter plus its standard library; run `blip run prog.blip`,
+check `blip test`, or start the REPL with a bare `blip`.
+
+%install
+mkdir -p %{buildroot}/usr/bin
+mkdir -p %{buildroot}/usr/share/blip/lib
+mkdir -p %{buildroot}/usr/share/blip/programs
+mkdir -p %{buildroot}/usr/share/doc/blip
+cp -a %{stagedir}/bin/blip %{buildroot}/usr/bin/blip
+chmod 755 %{buildroot}/usr/bin/blip
+cp -a %{stagedir}/lib/*.blip %{buildroot}/usr/share/blip/lib/
+cp -a %{stagedir}/programs/*.blip %{buildroot}/usr/share/blip/programs/
+cp -a %{stagedir}/doc/copyright %{buildroot}/usr/share/doc/blip/copyright
+cp -a %{stagedir}/doc/README.md %{buildroot}/usr/share/doc/blip/README.md
+chmod 644 %{buildroot}/usr/share/blip/lib/*.blip \
+  %{buildroot}/usr/share/blip/programs/*.blip \
+  %{buildroot}/usr/share/doc/blip/copyright \
+  %{buildroot}/usr/share/doc/blip/README.md
+
+%files
+/usr/bin/blip
+/usr/share/blip/
+/usr/share/doc/blip/
+
+%changelog
+* @DATE@ metif12 <metif12@gmail.com> - @VERSION@-1
+- v2 RPM packaging.
