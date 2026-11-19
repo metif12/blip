@@ -16,6 +16,16 @@ Windows (PowerShell):
 irm https://metif12.github.io/blip/install.ps1 | iex
 ```
 
+Debian/Ubuntu, from a release (the `.deb` attached to each version tag):
+
+```
+sudo dpkg -i blip_<version>_amd64.deb
+```
+
+The package puts the interpreter on `PATH` and the standard library
+under `/usr/share/blip`, which is where an installed `blip` looks for
+it.
+
 This needs stock V 0.5.2 — the official release archive, not a master build, which resolves project modules differently. To build from a checkout instead, use stock V 0.5.2 exactly as `.github/workflows/ci.yml` does, then run `v -cc gcc -path 'vlib|@vlib' -o blip main.v`. See `CONTRIBUTING.md` for the full recipe.
 
 ## First run

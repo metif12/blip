@@ -1,0 +1,12 @@
+Package: blip
+Version: @VERSION@
+Section: interpreters
+Priority: optional
+Architecture: amd64
+Maintainer: metif12 <metif12@gmail.com>
+Homepage: https://github.com/metif12/blip
+Description: a Lisp dialect with real tail calls
+ blip is a Lisp dialect implemented in V, with real tail calls,
+ pattern matching, and errors as values. This package ships the
+ interpreter plus its standard library; run `blip run prog.blip`,
+ check `blip test`, or start the REPL with a bare `blip`.

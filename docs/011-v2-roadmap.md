@@ -500,6 +500,20 @@ AppImage, DMG, and the rest follow as their gates clear, each in its
 own change. Signing/notarization (DMG, MSI) is called out now because
 it is the known blocker, not because v2 promises it.
 
+- DEB — **done**: `packaging/deb/` holds the control template, the
+  MIT copyright (Format 1.0), and a `build.sh` that lays out
+  `/usr/bin/blip` + `/usr/share/blip/{lib,programs}` + docs and runs
+  `dpkg-deb`; `main.v resource_path` gains a Linux-only
+  `/usr/share/blip` candidate (a tree next to the binary still wins,
+  so development never reads installed files); CI builds the package
+  from the tag version (dry runs use `0.0.0-dryrun`), installs it with
+  `dpkg -i`, and smokes version + run + `blip test`, then publishes the
+  `.deb` with checksums. Verified end to end in WSL Ubuntu 24.04 with
+  the pinned stock toolchain: build, `dpkg-deb --build`, install,
+  smoke (version, run, and `blip test` of an example against the
+  installed prelude), uninstall. MSI is the next format, in its own
+  change.
+
 ## Track G — packages, tools, workspaces (agreed, registry later)
 
 Grows the `blip pkg` seed (`install`/`list`/`remove` + `blip.lock` +

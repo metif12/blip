@@ -130,6 +130,34 @@ jobs:
           sha256sum blip-*.tar.gz blip-*.zip blip-site.tar.gz > SHA256SUMS
           cat SHA256SUMS
 
+      # The .deb reuses dist/blip-linux plus the repo's lib/ and programs/.
+      # Version is the tag without the leading v; a dry run (no tag) still
+      # builds and smokes the package with a 0.0.0 placeholder version.
+      - name: Debian package
+        run: |
+          set -e
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="0.0.0-dryrun"
+          fi
+          echo "packaging blip $VERSION"
+          bash packaging/deb/build.sh "$VERSION" dist/blip-linux "blip_${VERSION}_amd64.deb"
+          ls -la blip_*.deb
+
+      # Smoking the installed package, not the build tree: this proves the
+      # prelude resolves from /usr/share/blip and the binary runs from PATH.
+      - name: Smoke test the installed package
+        run: |
+          set -e
+          sudo dpkg -i blip_*.deb
+          blip version
+          printf '(println "deb smoke ok")\n' > /tmp/blip_smoke.blip
+          test "$(blip run /tmp/blip_smoke.blip)" = '"deb smoke ok"'
+          blip test examples/01_basics.blip
+          sha256sum blip_*.deb >> SHA256SUMS
+          cat SHA256SUMS
+
       - uses: actions/upload-artifact@v4
         with:
           name: blip-dist
@@ -139,6 +167,7 @@ jobs:
             blip-linux.tar.gz
             blip-windows.zip
             blip-site.tar.gz
+            blip_*.deb
             SHA256SUMS
 
   publish:
@@ -166,6 +195,7 @@ jobs:
             dist/blip-linux.tar.gz
             dist/blip-windows.zip
             dist/blip-site.tar.gz
+            dist/blip_*.deb
             dist/SHA256SUMS
             dist/clib/blip-clib-linux.tar.gz
             dist/clib/blip-clib-windows.zip

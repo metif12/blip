@@ -304,7 +304,17 @@ fn resource_path(rel string) string {
 	} $else {
 		exe := os.executable()
 		dir := os.dir(exe)
-		for candidate in [os.join_path(dir, rel), os.join_path(os.dir(dir), rel)] {
+		mut cands := [os.join_path(dir, rel), os.join_path(os.dir(dir), rel)]
+		// A system install (the .deb) keeps arch-independent data in
+		// /usr/share/blip while the binary lives in /usr/bin: neither
+		// exe-relative candidate reaches it, so it is listed here, on
+		// Linux only. The order matters -- a tree next to the binary
+		// (a checkout build, a workspace install) wins over the system
+		// one, so development never accidentally reads installed files.
+		$if linux {
+			cands << os.join_path('/usr/share/blip', rel)
+		}
+		for candidate in cands {
 			if os.exists(candidate) {
 				return candidate
 			}
@@ -775,7 +785,7 @@ struct NestedExpect {
 // the flag is for. `seen` guards the walk because the machine shares
 // transformed subtrees between parents, and a naive recursion revisits
 // them exponentially.
-fn collect_nested(arena &reader.Arena, id blip.NodeId, lines []string, parent_line int, top_last int, mut out []NestedExpect, mut seen map[blip.NodeId]bool) {
+fn collect_nested(arena &reader.Arena, id blip.NodeId, lines []string, top_last int, mut out []NestedExpect, mut seen map[blip.NodeId]bool) {
 	if id in seen {
 		return
 	}
@@ -787,7 +797,7 @@ fn collect_nested(arena &reader.Arena, id blip.NodeId, lines []string, parent_li
 			for sub in arena.kids(kid) {
 				sd := arena.node(sub)
 				if sd.tag == .unquote || sd.tag == .unquote_splice {
-					collect_nested(arena, sub, lines, d.line, top_last, mut out, mut seen)
+					collect_nested(arena, sub, lines, top_last, mut out, mut seen)
 				}
 			}
 			continue
@@ -811,7 +821,7 @@ fn collect_nested(arena &reader.Arena, id blip.NodeId, lines []string, parent_li
 				}
 			}
 		}
-		collect_nested(arena, kid, lines, own_line, top_last, mut out, mut seen)
+		collect_nested(arena, kid, lines, top_last, mut out, mut seen)
 	}
 }
 
@@ -934,7 +944,7 @@ fn run_tests(paths []string, nested bool) int {
 				if nested {
 					mut seen := map[blip.NodeId]bool{}
 					top_last := 1 + src[..d.origin.end].count('\n')
-					collect_nested(m.arena, id, lines, d.line, top_last, mut nested_found, mut seen)
+					collect_nested(m.arena, id, lines, top_last, mut nested_found, mut seen)
 				}
 				before := m.out.len
 				v := m.eval_one(id) or {

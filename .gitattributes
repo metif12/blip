@@ -1,0 +1,5 @@
+# Shell scripts and Debian packaging must stay LF: a CRLF shebang does not
+# execute on Linux, and control fields with trailing CR fail to parse.
+packaging/deb/* text eol=lf
+*.sh text eol=lf
+*.vsh text eol=lf
