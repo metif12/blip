@@ -605,6 +605,46 @@ packages suffice for v2; a central registry/index is a follow-up.
 Deliberately out of v2: a `scripts` stanza (`.blip` files already run;
 it would duplicate them).
 
+## Track H — performance (post-v2, not a v2.0 gate)
+
+Agreed direction, explicitly after v2.0: no custom machine-code JIT in
+v2. The CEK cost is honest on tight numeric loops (`000-blip-design.md`
+§The machine), but v2 workloads are string/table/Result plumbing, and a
+JIT would break B1 machine-vs-node parity, fiber capture (saved CEK
+state), step-budget sandboxing, and the wasm target (`p8-wasm.md`,
+already toolchain-blocked). Steel's four JIT miscompilations
+(`000-blip-design.md` §Rationale) are the cautionary datum. Order is
+fixed: H0 first, then H1; H2 only on H0 numbers; H3 is already the
+standing recommendation.
+
+1. **H0 trustworthy bench harness.** `src/bench_value.v` produced three
+   wrong numbers before being corrected (incl. a 1000x unit error);
+   `010-roadmap.md` §7.2 treats the probes as design events, not
+   benchmarks. Gate: best-of-3 per process, median of alternating A/B
+   runs, same flags/toolchain pinned in the script, byte-identical
+   `reader_probe` output as a correctness guard; numbers recorded with
+   machine, toolchain hash, and date, never as bare claims.
+2. **H1 interpreter fast paths (no semantics change).**
+   `call_primitive` already does ctx-miss + prims-hit instead of `!in`
+   + `in` + index (E3); what remains is `probe_fnptr.v`-driven dispatch
+   tuning, last-use move (`MOVEREADLOCAL`, Steel 123ms→23ms on list
+   reverse, adopted in `000-blip-design.md`), and inline `Payload` tag
+   checks. Gate: each lands separately behind H0 numbers plus the full
+   battery with zero `FAIL` lines.
+3. **H2 bytecode backend, per-function, from `Program` IR.** Already
+   planned as additive in `000-blip-design.md` §Future possibilities.
+   Per-function (not per-program) so fibers, tail calls, and step
+   budgets keep working; the staged pipeline makes it additive, not a
+   rewrite. Gate: same-bytes machine-vs-bytecode fixture on the
+   examples plus fibers/sandbox green; only starts when H0 proves CEK
+   dispatch (not allocation/GC/prim-crossing) is the bottleneck.
+4. **H3 AOT via JS is the standing JIT.** `blip build -o .js` is
+   deterministic (B1); hot blip → emit → node/V8 beats any custom
+   x64/arm64 emitter written in V, with zero executable-memory,
+   signing, or per-OS backend work. Recommendation, not a gate: route
+   long-running hot code through the JS backend and keep the machine as
+   the reference semantics.
+
 ## Order of work (agreed)
 
 1. Track C continuously (no version gate).
@@ -622,6 +662,8 @@ it would duplicate them).
 6. Track G4 once Track F artifacts are mature enough to install from
    (starts against the current release layout).
 7. Track F formats incrementally throughout, DEB and MSI first.
+8. Track H after v2.0 (H0, then H1; H2 only on H0 numbers; H3 is the
+   standing recommendation for hot code).
 
 ## Open questions (not promises)
 
