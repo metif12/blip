@@ -244,12 +244,22 @@ deterministic tooling) is already unique; fibers and PEG complete it.
 
 ## Track C — tooling (non-breaking, continuous)
 
-- `blip check`: `match*` arity plus light exhaustiveness.
-- `fmt -w`: stable normalization (reader keeps no trivia).
+- `blip check`: `match*` arity plus light exhaustiveness — **done** (B3).
+- `fmt -w`: stable normalization (reader keeps no trivia) — **done**:
+  `pp_form`/`write_datum` render every datum tag back to re-parseable
+  source (the `@{...}` buffer shape fell through to `#<datum>`, which
+  neither re-parses nor repeats -- `fmt` of any buffer file was not a
+  fixed point); `unit` pins buffer round-trips plus a corpus-wide
+  fixed-point gate (`fmt_is_stable`: format twice is format once, and
+  the normalized text re-parses cleanly, over every `.blip` file).
+  Comments are trivia the reader drops, so `fmt -w` strips them; that
+  is the documented tradeoff, not a bug.
 - `doc`: from `;;` comments; site gains API references.
-- `lsp`: parity with `blip run` diagnostics (today 26 checks).
+- `lsp`: parity with `blip run` diagnostics (today 26 checks) — **done**
+  (29 checks; editor and CLI report the same diagnostics).
 - `build`: `emit-js` is done; `.wasm` waits on V wasm32 stdlib
-  (`docs/p8-wasm.md`). Until then stabilize `build -o .js`.
+  (`docs/p8-wasm.md`). Until then stabilize `build -o .js` — **done**
+  (B1: deterministic bytes + interp-API parity).
 
 ## Track D — stdlib expansion (`lib/std.blip`)
 

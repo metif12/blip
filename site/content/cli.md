@@ -27,7 +27,7 @@ REPL commands, at the start of a line: `,l PATH` loads a file into the running m
 
 ## Working with code
 
-**`blip fmt [-w] &lt;file.blip&gt;`** pretty-prints a file; without `-w` it prints to stdout, with `-w` it writes back.
+**`blip fmt [-w] &lt;file.blip&gt;`** pretty-prints a file; without `-w` it prints to stdout, with `-w` it writes back. Formatting is a fixed point (formatting twice answers what formatting once did), but comments are trivia the reader drops, so `fmt -w` strips them.
 
 **`blip doc &lt;file.blip&gt;`** generates documentation from doc comments.
 

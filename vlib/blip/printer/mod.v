@@ -283,6 +283,7 @@ pub fn write_datum(a &reader.Arena, id reader.NodeId) string {
 		.list { return wrap('(', a, id) }
 		.vector { return wrap('[', a, id) }
 		.table { return wrap('{', a, id) }
+		.buffer { return wrap('@{', a, id) }
 		.array { return wrap('@[', a, id) }
 		.bytes { return wrap('#(', a, id) }
 		.quoted { return wrap1("'", a, id) }
@@ -332,6 +333,7 @@ fn close_for(open string) string {
 		'(' { ')' }
 		'[' { ']' }
 		'{' { '}' }
+		'@{' { '}' }
 		'@[' { ']' }
 		'#(' { ')' }
 		else { ')' }
@@ -419,6 +421,16 @@ pub fn pp_form(a &reader.Arena, id reader.NodeId, depth int) string {
 				ki += 2
 			}
 			return '{' + parts.join(' ') + '}'
+		}
+		.buffer {
+			kids := a.kids_view(id)
+			mut parts := []string{}
+			mut ki := 0
+			for ki < kids.len {
+				parts << pp_form(a, kids[ki], depth + 1) + ' ' + pp_form(a, kids[ki + 1], depth + 1)
+				ki += 2
+			}
+			return '@{' + parts.join(' ') + '}'
 		}
 		.array {
 			kids := a.kids_view(id)

@@ -279,6 +279,55 @@ fn (mut s Suite) printing() {
 	mut a := reader.Arena{}
 	f := a.read_forms('(+ 1 2)')
 	s.eq('write_datum round trips', printer.write_datum(&a, f.forms[0]), '(+ 1 2)')
+	// Buffers render back to readable source: without the @{ arm both
+	// write_datum and pp_form fell through to #<datum>, which does not
+	// re-parse -- and fmt of any file containing a buffer was not a
+	// fixed point.
+	mut b := reader.Arena{}
+	bf := b.read_forms('(def buf @{:count 0})')
+	s.eq('write_datum round trips a buffer', printer.write_datum(&b, bf.forms[0]),
+		'(def buf @{:count 0})')
+	s.eq('pp_form renders a buffer', printer.pp_form(&b, bf.forms[0], 0),
+		'(def buf @{:count 0})')
+}
+
+// ---- fmt: stable normalization (roadmap Track C) ---------------------------
+//
+// `blip fmt` parses and reprints: comments are gone (the reader keeps no
+// trivia) and every form is pp_form canonical. The gate is the fixed
+// point: formatting twice answers what formatting once did, on every
+// .blip file in the repo, and the normalized text re-parses cleanly.
+// A file that moves under its own formatting would make `fmt -w` a
+// different program every run.
+fn (mut s Suite) fmt_is_stable() {
+	mut files := []string{}
+	collect_unit('examples', mut files)
+	collect_unit('programs', mut files)
+	collect_unit('lib', mut files)
+	for f in files {
+		if !f.ends_with('.blip') {
+			continue
+		}
+		src := os.read_file(f) or { continue }
+		once := fmt_text(src)
+		twice := fmt_text(once)
+		if once != twice {
+			s.record('fmt fixes ${f}', false, 'not a fixed point')
+			continue
+		}
+		rd := reader.read_all(once)
+		s.record('fmt output re-parses ${f}', rd.diags.len == 0,
+			if rd.diags.len > 0 { rd.diags[0].msg } else { 'clean' })
+	}
+}
+
+fn fmt_text(src string) string {
+	res := reader.read_all(src)
+	mut out := []string{}
+	for id in res.forms {
+		out << printer.pp_form(res.arena, id, 0)
+	}
+	return out.join('\n\n') + '\n'
 }
 
 // ---- prims ----------------------------------------------------------------
@@ -1412,6 +1461,7 @@ fn main() {
 	s.std_test_covers()
 	s.numeric_tower()
 	s.public_api_boundary()
+	s.fmt_is_stable()
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')
