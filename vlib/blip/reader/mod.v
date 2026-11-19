@@ -81,10 +81,12 @@ pub enum DatumTag as u8 {
 	unquote_splice
 }
 
+// stability: stable
 pub fn (t DatumTag) is_collection() bool {
 	return t in [.list, .vector, .table, .array, .bytes, .buffer]
 }
 
+// stability: stable
 pub fn (t DatumTag) is_stringy() bool {
 	return t in [.str, .sym, .kw]
 }
@@ -110,6 +112,7 @@ pub mut:
 }
 
 @[inline]
+// stability: stable
 pub fn (mut a Arena) leaf(tag DatumTag) NodeId {
 	a.nodes << Datum{
 		tag: tag
@@ -118,6 +121,7 @@ pub fn (mut a Arena) leaf(tag DatumTag) NodeId {
 }
 
 @[inline]
+// stability: stable
 pub fn (mut a Arena) str_leaf(tag DatumTag, s string) NodeId {
 	a.nodes << Datum{
 		tag:   tag
@@ -127,6 +131,7 @@ pub fn (mut a Arena) str_leaf(tag DatumTag, s string) NodeId {
 }
 
 @[inline]
+// stability: stable
 pub fn (mut a Arena) int_leaf(tag DatumTag, n i64) NodeId {
 	a.nodes << Datum{
 		tag: tag
@@ -136,6 +141,7 @@ pub fn (mut a Arena) int_leaf(tag DatumTag, n i64) NodeId {
 }
 
 @[inline]
+// stability: stable
 pub fn (mut a Arena) float_leaf(f f64) NodeId {
 	a.nodes << Datum{
 		tag: .float
@@ -152,6 +158,7 @@ pub fn (mut a Arena) float_leaf(f f64) NodeId {
 // time points into the middle of the inner list's children. That bug made
 // `(+ (+ 1 2) (+ 3 4))` read as a flat `(+ + 1)`.
 @[inline]
+// stability: stable
 pub fn (mut a Arena) open(tag DatumTag) NodeId {
 	a.nodes << Datum{
 		tag: tag
@@ -162,6 +169,7 @@ pub fn (mut a Arena) open(tag DatumTag) NodeId {
 // finish appends a node's children as one contiguous run and records where it
 // began. Appending the run at the END, rather than interleaving with whatever a
 // nested node appended meanwhile, is what makes (start, count) a valid range.
+// stability: stable
 pub fn (mut a Arena) finish(id NodeId, items []NodeId) {
 	start := i32(a.children.len)
 	// Reserve the run up front: without this every element pays a bounds/cap
@@ -190,6 +198,7 @@ pub fn (mut a Arena) finish(id NodeId, items []NodeId) {
 // printed it -- silently, because the value it produced was a perfectly valid
 // symbol. `finish` has no such precondition; use it.
 @[inline]
+// stability: stable
 pub fn (mut a Arena) add_child(parent NodeId, child NodeId) {
 	start := i32(a.children.len)
 	a.children << child
@@ -199,11 +208,13 @@ pub fn (mut a Arena) add_child(parent NodeId, child NodeId) {
 }
 
 @[inline]
+// stability: stable
 pub fn (a &Arena) node(id NodeId) &Datum {
 	return &a.nodes[int(id)]
 }
 
 @[inline]
+// stability: stable
 pub fn (mut a Arena) set_pos(id NodeId, line int, col int) {
 	mut node := &a.nodes[int(id)]
 	node.line = line
@@ -215,6 +226,7 @@ pub fn (mut a Arena) set_pos(id NodeId, line int, col int) {
 // per form -- which is pure overhead on small dense forms, where the stamp
 // is a large share of the per-form cost.
 @[inline]
+// stability: stable
 pub fn (mut a Arena) set_pos_origin(id NodeId, line int, col int, origin blip.SourceLocation) {
 	mut node := &a.nodes[int(id)]
 	node.line = line
@@ -229,6 +241,7 @@ pub fn (mut a Arena) set_pos_origin(id NodeId, line int, col int, origin blip.So
 // slice, the append performed by the transform would reallocate that slice and
 // leave the caller holding a dangling reference. Copying is cheap next to the
 // failure mode it removes.
+// stability: stable
 pub fn (a &Arena) kids(id NodeId) []NodeId {
 	d := a.nodes[int(id)]
 	mut out := []NodeId{}
@@ -249,6 +262,7 @@ pub fn (a &Arena) kids(id NodeId) []NodeId {
 // transform that could append -- i.e. extract the scalar NodeId values first and
 // never hold the slice across a goto/transform. `kids` (the copying version)
 // remains the default; this is an opt-in fast path.
+// stability: stable
 pub fn (a &Arena) kids_view(id NodeId) []NodeId {
 	d := a.nodes[int(id)]
 	start := int(d.start)
@@ -256,6 +270,7 @@ pub fn (a &Arena) kids_view(id NodeId) []NodeId {
 	return unsafe { a.children[start..start + count] }
 }
 
+// stability: stable
 pub fn (a &Arena) count() int {
 	return a.nodes.len
 }
@@ -274,6 +289,7 @@ pub:
 	incomplete bool
 }
 
+// stability: stable
 pub fn (d &Diagnostic) render(path string) string {
 	return '${path}:${d.line}:${d.col}: ${d.msg}'
 }
@@ -460,6 +476,7 @@ fn (mut r Reader) skip_block_comment() {
 // byte of the form are recorded on the node, so an error message can later show
 // where in the source the form was written.
 @[direct_array_access; inline]
+// stability: stable
 pub fn (mut r Reader) read() ?NodeId {
 	r.skip_ws()
 	if r.eof() {
@@ -1040,6 +1057,7 @@ pub mut:
 // user has no intention of typing. Byte iteration, not rune iteration: V iterates
 // a string as bytes, and a rune loop mangles every multi-byte character -- which
 // here would mean the offset arithmetic is wrong for any input containing one.
+// stability: stable
 pub fn depth(src string) Depth {
 	mut d := Depth{
 		n: 0
@@ -1138,11 +1156,13 @@ pub mut:
 // value and trusting that V passes `mut` parameters by reference -- makes the
 // aliasing depend on a language rule, which is exactly the sort of thing this
 // project has been bitten by before.
+// stability: stable
 pub fn (mut a Arena) read_forms(src string) Forms {
 	return a.read_source(src, 'blip')
 }
 
 // read_source retains a stable filename on every node, including nested forms.
+// stability: stable
 pub fn (mut a Arena) read_source(src string, source string) Forms {
 	mut r := Reader{
 		src:    src
@@ -1165,6 +1185,7 @@ pub fn (mut a Arena) read_source(src string, source string) Forms {
 }
 
 // read_all parses a whole source file into top-level forms, in a fresh arena.
+// stability: stable
 pub fn read_all(src string) ReadResult {
 	mut a := Arena{}
 	f := a.read_forms(src)

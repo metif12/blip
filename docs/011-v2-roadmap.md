@@ -423,7 +423,17 @@ inspect, rewrite, evaluate); live machine-state mutation (envs,
 continuations) is a follow-up, not a promise. Gate: a fixture that uses
 only the public API to parse, inspect, and rewrite a form before
 evaluation, plus an `api_coverage` rule that fails when a new `pub`
-item has no stability note.
+item has no stability note. — **done**: every one of the 287 `pub fn`
+items carries a `stability:` note (`stable` = frozen v2 promise,
+`internal` = may move); the frozen surface is the reader/arena/datum
+modules, value constructors and readers, `new_machine`/`run_str`/`run`/
+`eval_one`/`check_text`/`datum_to_value`, the host interface and capture
+host, the manifest parser, and the whole `embed` facade. Gate pins:
+`api_coverage` fails any `pub fn` without a note (negative-controlled),
+`unit` `public_api_boundary` parses, inspects, rewrites (`40` → `41`
+through the arena reference), and evaluates (`43`) through stable calls
+only, plus pins each used marker; `site/content/embedding.md`
+documents the contract.
 
 ### E2. Features configurable via `blip.mod`
 

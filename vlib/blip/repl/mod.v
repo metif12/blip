@@ -37,6 +37,7 @@ pub mut:
 	quiet bool
 }
 
+// stability: internal
 pub fn new(h host.Host) &Repl {
 	return &Repl{
 		machine: machine.new_standalone(h)
@@ -48,6 +49,7 @@ pub fn new(h host.Host) &Repl {
 // new_with_machine drives a machine somebody else made. A host that wants two
 // REPLs -- a UI and a script, say -- gets two machines and neither can see the
 // other's definitions.
+// stability: internal
 pub fn new_with_machine(m &machine.Machine, h host.Host) &Repl {
 	return &Repl{
 		machine: m
@@ -59,6 +61,7 @@ pub fn new_with_machine(m &machine.Machine, h host.Host) &Repl {
 // prompt shows how deep the current form is. It is `blip:1> ` at the top level
 // and `blip:2> ` while a bracket is open, which is the difference between "my
 // program is stuck" and "the REPL is waiting for me to type another line".
+// stability: internal
 pub fn prompt(buffer string) string {
 	d := reader.depth(buffer)
 	if d.n > 0 {
@@ -190,6 +193,7 @@ fn (mut r Repl) load_path(path string) {
 }
 
 // run is the read-eval-print loop. It returns the process exit code.
+// stability: internal
 pub fn (mut r Repl) run() int {
 	r.host.host_print('blip 0.1.0 -- ,h for commands, ,q to leave')
 	for {
@@ -212,6 +216,7 @@ pub fn (mut r Repl) run() int {
 
 // run_lines drives a REPL over a list of lines and returns what it printed. This
 // is the in-process half of the golden test: the same loop, without a subprocess.
+// stability: internal
 pub fn (mut r Repl) run_lines(lines []string) {
 	for line in lines {
 		if r.done {

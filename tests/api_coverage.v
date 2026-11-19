@@ -63,6 +63,62 @@ fn read_corpus(paths []string) string {
 	return sb.join('\n')
 }
 
+// stability_note_at reports whether the `pub fn` on line idx (0-based)
+// carries a stability note: a `stability: stable|internal` marker in the
+// `//` comment block directly above it. The block is what the E1 boundary
+// promises on: `stable` is frozen v2 API, `internal` may move.
+fn stability_note_at(lines []string, idx int) bool {
+	mut j := idx - 1
+	for j >= 0 {
+		t := lines[j].trim_space()
+		if !t.starts_with('//') {
+			return false
+		}
+		if t.contains('stability: stable') || t.contains('stability: internal') {
+			return true
+		}
+		j--
+	}
+	return false
+}
+
+// stability_missing lists every public function under dir whose declaration
+// has no stability note, as `path:line: name`. Method names repeat across
+// receivers, so the report carries the file (and line) rather than a bare
+// name: `Table.get` frozen and `StructVal.get` internal would otherwise be
+// indistinguishable.
+fn stability_missing(dir string) []string {
+	mut files := []string{}
+	collect(dir, mut files)
+	mut missing := []string{}
+	for f in files {
+		if !f.ends_with('.v') || f.ends_with('_test.v') {
+			continue
+		}
+		src := os.read_file(f) or { continue }
+		lines := src.split_into_lines()
+		for i, line in lines {
+			t := line.trim_space()
+			if !t.starts_with('pub fn ') {
+				continue
+			}
+			rest := t['pub fn '.len..]
+			mut head := rest
+			if rest.starts_with('(') {
+				end := rest.index(')') or { continue }
+				head = rest[end + 1..].trim_space()
+			}
+			open := head.index('(') or { continue }
+			name := head[..open]
+			if !stability_note_at(lines, i) {
+				missing << '${f}:${i + 1}: ${name}'
+			}
+		}
+	}
+	missing.sort()
+	return missing
+}
+
 // pub_fns returns every public function name declared under `dir`, deduped.
 //
 // Method names repeat across receivers -- `get` and `has` are defined on both
@@ -156,6 +212,19 @@ fn main() {
 			'some are not')
 	} else {
 		println('   not engaged: ${missing.join(' ')}')
+		s.fails++
+	}
+
+	// E1: the public-API boundary. Every `pub fn` carries a stability note
+	// (`stable` = frozen v2 promise, `internal` = may move), so a new
+	// public function without one turns this red the moment it is added --
+	// the author declares the stability at the declaration site.
+	unstable := stability_missing('vlib/blip')
+	if unstable.len == 0 {
+		s.record(true, 'every public function carries a stability note',
+			'some do not')
+	} else {
+		println('   no stability note: ${unstable.join(' ')}')
 		s.fails++
 	}
 

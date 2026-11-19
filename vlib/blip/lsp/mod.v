@@ -141,6 +141,7 @@ mut:
 	current_raw_id      string
 }
 
+// stability: internal
 pub fn new_test_server() Server {
 	return Server{
 		open_files:     map[string]string{}
@@ -148,6 +149,7 @@ pub fn new_test_server() Server {
 	}
 }
 
+// stability: internal
 pub fn diagnose(src string) []LspDiagnostic {
 	res := reader.read_all(src)
 	mut out := []LspDiagnostic{}
@@ -196,6 +198,7 @@ pub fn diagnose(src string) []LspDiagnostic {
 	return out
 }
 
+// stability: internal
 pub fn (mut s Server) captured() []string {
 	return s.captured_output
 }
@@ -240,6 +243,7 @@ fn (mut s Server) publish(uri string, diags []LspDiagnostic) {
 	s.send_framed(sb)
 }
 
+// stability: internal
 pub fn (mut s Server) handle(content string) bool {
 	msg := json2.decode[Incoming](content) or { return false }
 	method := msg.method
@@ -870,6 +874,7 @@ fn read_request(mut r StdinReader) ?string {
 	return r.read_exact(length)
 }
 
+// stability: internal
 pub fn serve() {
 	mut s := Server{
 		open_files: map[string]string{}

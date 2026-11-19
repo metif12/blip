@@ -134,6 +134,7 @@ fn (mut m Machine) transform_let_assert(kids []blip.NodeId) !blip.NodeId {
 // transform would have to guess -- from the number of body forms, which is what
 // the first version did, and `(list-ref r 2)` on a one-element result is what
 // that produced.
+// stability: internal
 pub fn (mut m Machine) transform_let(kids []blip.NodeId) !blip.NodeId {
 	if kids.len < 2 {
 		return error('let needs a binding group and a body: (let ([a 1]) body...)')
@@ -294,6 +295,7 @@ pub mut:
 //
 // Accessors rather than a match also means a destructuring binding costs nothing
 // at run time and cannot fail at run time, which is what a binding should be.
+// stability: internal
 pub fn (mut m Machine) destructuring(pattern blip.NodeId, value blip.NodeId) ![]Destructured {
 	d := m.arena.node(pattern)
 	if d.tag == .sym {
@@ -410,6 +412,7 @@ pub fn (mut m Machine) destructuring(pattern blip.NodeId, value blip.NodeId) ![]
 //	>= 0  body[slot] has just finished
 //	-1    #:finally has just finished -- return val2
 //	-3    the catch clause has just finished -- run #:finally, or return val2
+// stability: internal
 pub fn (mut m Machine) match_clause(subject blip.NodeId, pattern blip.NodeId) blip.NodeId {
 	fail := m.node_of('error', [m.string_node('pattern did not match'), m.call_node(m.sym_node('format'), [
 		m.string_node('~a does not match ~a'),
@@ -429,6 +432,7 @@ pub fn (mut m Machine) match_clause(subject blip.NodeId, pattern blip.NodeId) bl
 // `(let ([b (+ a 1)]) b)`, whose `a` is then genuinely unbound in the enclosing
 // scope. That is why the failure read as "unbound identifier: a" and was
 // misdiagnosed for a while as the `[...]`-in-two-positions problem.
+// stability: internal
 pub fn (mut m Machine) transform_let_star(kids []blip.NodeId) blip.NodeId {
 	return m.transform_let_star_at(kids, 0)
 }
@@ -461,6 +465,7 @@ fn (mut m Machine) transform_let_star_at(kids []blip.NodeId, binds_at int) blip.
 // exist: `(letrec ([e ...] [o ...]) ...)` failed with "cannot set unbound
 // identifier" unless `e` happened to be defined globally first, and it leaked
 // every letrec binding into the global frame.
+// stability: internal
 pub fn (mut m Machine) transform_letrec(kids []blip.NodeId) blip.NodeId {
 	binds := m.arena.kids(kids[1])
 	if binds.len == 0 {
@@ -494,6 +499,7 @@ pub fn (mut m Machine) transform_letrec(kids []blip.NodeId) blip.NodeId {
 }
 
 // cond => nested ifs.
+// stability: internal
 pub fn (mut m Machine) transform_cond(kids []blip.NodeId) blip.NodeId {
 	mut items := []blip.NodeId{}
 	mut ci := 1
@@ -547,6 +553,7 @@ fn (mut m Machine) cond_from(items []blip.NodeId) blip.NodeId {
 }
 
 // case => cond with `=` against the subject.
+// stability: internal
 pub fn (mut m Machine) transform_case(kids []blip.NodeId) blip.NodeId {
 	subject := kids[1]
 	mut items := []blip.NodeId{}
@@ -599,6 +606,7 @@ pub fn (mut m Machine) transform_case(kids []blip.NodeId) blip.NodeId {
 // (let ([name init]) body...), and transform_let_at already builds the lambda
 // application. Binding the name in the new frame is what makes the body able to
 // refer to itself.
+// stability: internal
 pub fn (mut m Machine) transform_loop(kids []blip.NodeId) blip.NodeId {
 	// (loop name init test body...) has a DIFFERENT shape from let -- the name
 	// and init are separate arguments, not a binding list -- so it cannot share
@@ -649,6 +657,7 @@ pub fn (mut m Machine) transform_loop(kids []blip.NodeId) blip.NodeId {
 }
 
 // dotimes => (loop i 0 (< i n) body...)
+// stability: internal
 pub fn (mut m Machine) transform_dotimes(kids []blip.NodeId) !blip.NodeId {
 	if kids.len < 3 {
 		return error('dotimes needs a loop variable and a count')
@@ -683,6 +692,7 @@ fn (m &Machine) is_binding_form(b blip.NodeId) bool {
 	return tag == .list || tag == .vector
 }
 
+// stability: internal
 pub fn (mut m Machine) binding_name(b blip.NodeId) blip.NodeId {
 	if m.is_binding_form(b) {
 		k := m.arena.kids(b)
@@ -694,6 +704,7 @@ pub fn (mut m Machine) binding_name(b blip.NodeId) blip.NodeId {
 }
 
 // binding_value extracts the value expression of a binding form.
+// stability: internal
 pub fn (mut m Machine) binding_value(b blip.NodeId) blip.NodeId {
 	if m.is_binding_form(b) {
 		k := m.arena.kids(b)
@@ -704,6 +715,7 @@ pub fn (mut m Machine) binding_value(b blip.NodeId) blip.NodeId {
 	return b
 }
 
+// stability: internal
 pub fn (m &Machine) is_destructuring(b blip.NodeId) bool {
 	if !m.is_binding_form(b) {
 		return false
@@ -717,6 +729,7 @@ pub fn (m &Machine) is_destructuring(b blip.NodeId) bool {
 }
 
 // binding_pattern is the left side of a destructuring binding.
+// stability: internal
 pub fn (m &Machine) binding_pattern(b blip.NodeId) blip.NodeId {
 	return m.arena.kids_view(b)[0]
 }

@@ -33,6 +33,7 @@ fn is_defmacro_form(a &reader.Arena, id reader.NodeId) bool {
 }
 
 // then converts the expanded Value back to AST via value_to_datum.
+// stability: internal
 pub fn expand_macro_at_embed(src string, h host.Host) !string {
 	mut m := machine.new_standalone(h)
 	expanded := m.run_str(src)!

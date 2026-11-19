@@ -32,6 +32,7 @@ fn (mut m Machine) eval_import(kids []blip.NodeId) ! {
 }
 
 // where labels the current source for an error message.
+// stability: internal
 pub fn (m &Machine) where() string {
 	if m.source == '' {
 		return 'blip'
@@ -68,6 +69,7 @@ fn (m &Machine) decorate_error(msg string) string {
 
 // render_node prints a form back to source, for an error message that has to name
 // a pattern or a message string.
+// stability: internal
 pub fn (m &Machine) render_node(n blip.NodeId) string {
 	if n == blip.no_node {
 		return ''
@@ -153,6 +155,7 @@ fn (m &Machine) require_paths(n blip.NodeId) []string {
 // It is compiled into a `match` over a temporary, because destructuring is what
 // the pattern matcher already knows how to do and writing a second binder for
 // lists, tables and structs would be three implementations to keep in step.
+// stability: internal
 pub fn (m &Machine) resolve_path(path string) string {
 	if path.starts_with('/') || m.source == '' {
 		return path
@@ -182,6 +185,7 @@ pub fn (m &Machine) resolve_path(path string) string {
 // "site/build.blip") lands where the author meant. Lexical on purpose: no
 // filesystem access, no symlink resolution, and `/` and `\` both work on
 // either platform.
+// stability: internal
 pub fn clean_path(path string) string {
 	is_abs := path.starts_with('/') || (path.len >= 2 && path[1] == `:`)
 	mut parts := []string{}

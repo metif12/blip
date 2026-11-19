@@ -1411,6 +1411,7 @@ fn main() {
 	s.std_table_covers()
 	s.std_test_covers()
 	s.numeric_tower()
+	s.public_api_boundary()
 
 	if s.fails > 0 {
 		println('${s.checks} checks, ${s.fails} FAILURE(S)')
@@ -1418,6 +1419,94 @@ fn main() {
 		return
 	}
 	println('unit: all ${s.checks} checks passed')
+}
+
+// ---- E1: the public-API boundary (roadmap Track E1) ----------------------
+//
+// The frozen v2 surface is `stability: stable`; everything else is
+// `stability: internal` and may move. `api_coverage` fails any `pub fn`
+// without a note. This fixture proves the frozen half is sufficient: it
+// parses, inspects, and rewrites a form using only reader/arena calls,
+// evaluates it with a machine built over the same arena, and renders the
+// answer -- evaluator, embedder, and editor all stay out of it. A second
+// half pins the markers themselves for exactly the API used here, so the
+// freeze cannot rot unnoticed.
+fn (mut s Suite) public_api_boundary() {
+	mut a := reader.Arena{}
+	forms := a.read_source('(def answer 40) (+ answer 2)', 'e1')
+	s.record('e1 parses two forms cleanly', forms.forms.len == 2 && forms.diags.len == 0,
+		'${forms.forms.len} forms, ${forms.diags.len} diagnostics')
+	defkids := a.kids(forms.forms[0])
+	lit := defkids[2]
+	s.record('e1 inspects the literal', a.node(lit).i == 40, '${a.node(lit).i}')
+	// Rewrite 40 to 41 through the arena reference the reader hands out.
+	// Nothing re-parses: the machine below runs these same nodes.
+	a.node(lit).i = 41
+	mut m := machine.new_machine(&a)
+	got := m.run(forms.forms) or { blip.nil_value() }
+	s.record('e1 evaluates the rewrite', printer.write(got) == '43', printer.write(got))
+	for q in ['read_source', 'kids', 'node', 'new_machine', 'run', 'write'] {
+		s.record('stable: ${q}', has_stable_note(q), 'marked stable')
+	}
+}
+
+// has_stable_note reports whether `name` is declared as a `pub fn` with a
+// `stability: stable` marker in its comment block somewhere under vlib.
+// Only the frozen surface may answer yes; the fixture above names every
+// API it touches, so this pins the freeze where it is used.
+fn has_stable_note(name string) bool {
+	mut paths := []string{}
+	collect_unit('vlib/blip', mut paths)
+	for path in paths {
+		if !path.ends_with('.v') || path.ends_with('_test.v') {
+			continue
+		}
+		src := os.read_file(path) or { continue }
+		lines := src.split_into_lines()
+		for i, line in lines {
+			t := line.trim_space()
+			if !t.starts_with('pub fn ') {
+				continue
+			}
+			rest := t['pub fn '.len..]
+			mut head := rest
+			if rest.starts_with('(') {
+				end := rest.index(')') or { continue }
+				head = rest[end + 1..].trim_space()
+			}
+			open := head.index('(') or { continue }
+			if head[..open] != name {
+				continue
+			}
+			mut j := i - 1
+			for j >= 0 {
+				u := lines[j].trim_space()
+				if !u.starts_with('//') {
+					break
+				}
+				if u.contains('stability: stable') {
+					return true
+				}
+				j--
+			}
+		}
+	}
+	return false
+}
+
+fn collect_unit(dir string, mut out []string) {
+	entries := os.ls(dir) or { return }
+	for e in entries {
+		p := os.join_path(dir, e)
+		if os.is_dir(p) {
+			if e in ['.git', 'site_out', 'v', 'tmp', 'dist', 'node_modules', 'blip_modules'] {
+				continue
+			}
+			collect_unit(p, mut out)
+			continue
+		}
+		out << p
+	}
 }
 
 // ---- packages: versions, checksums, workspaces (roadmap Track G) ---------

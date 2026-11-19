@@ -56,6 +56,7 @@ pub mut:
 // feature answers whether a capability is on. Absent means on: the
 // manifest only ever switches things OFF, so an old manifest without a
 // features stanza keeps working when new switches arrive.
+// stability: stable
 pub fn (m Manifest) feature(name string) bool {
 	if name in m.features {
 		return m.features[name]
@@ -63,6 +64,7 @@ pub fn (m Manifest) feature(name string) bool {
 	return true
 }
 
+// stability: stable
 pub fn (m Manifest) feature_line(name string) int {
 	if name in m.feature_lines {
 		return m.feature_lines[name]
@@ -73,6 +75,7 @@ pub fn (m Manifest) feature_line(name string) int {
 // parse reads a blip.mod source string into a Manifest, or returns the
 // first shape violation. Reader diagnostics come back as blip.mod
 // positions, the same way `blip check` reports file positions.
+// stability: stable
 pub fn parse(src string) !Manifest {
 	res := reader.read_all(src)
 	if res.diags.len > 0 {

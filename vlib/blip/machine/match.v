@@ -533,6 +533,7 @@ fn (m &Machine) is_capturing_tail(n blip.NodeId) bool {
 // pattern_predicate is the set of names a list pattern may use as a test. It is a
 // list rather than "anything bound to a primitive" so that `match` cannot change
 // meaning because someone defined a function named `list` or `vector`.
+// stability: internal
 pub fn pattern_predicate(name string) bool {
 	return name in [
 		'<',

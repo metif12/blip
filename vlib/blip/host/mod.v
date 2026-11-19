@@ -45,29 +45,35 @@ pub interface Host {
 // can be a few lines rather than a mock framework.
 pub struct ConsoleHost {}
 
+// stability: stable
 pub fn (c &ConsoleHost) host_print(s string) {
 	println(s)
 }
 
+// stability: stable
 pub fn (c &ConsoleHost) host_write(s string) {
 	print(s)
 }
 
 $if wasm32 {
+// stability: stable
 	pub fn (c &ConsoleHost) host_read_line() ?string {
 		return none
 	}
 } $else {
+// stability: stable
 	pub fn (c &ConsoleHost) host_read_line() ?string {
 		return os.get_line()
 	}
 }
 
 $if wasm32 {
+// stability: stable
 	pub fn (c &ConsoleHost) host_load(path string) !string {
 		return error('not available in wasm build')
 	}
 } $else {
+// stability: stable
 	pub fn (c &ConsoleHost) host_load(path string) !string {
 		return os.read_file(path)
 	}
@@ -89,6 +95,7 @@ pub struct CaptureHost {
 	state &CaptureState_
 }
 
+// stability: stable
 pub fn new_capture() &CaptureHost {
 	return &CaptureHost{
 		state: &CaptureState_{
@@ -102,11 +109,13 @@ pub fn new_capture() &CaptureHost {
 
 // lines is what a golden test compares against: the printed lines, in order, with
 // no prompt mixed in.
+// stability: stable
 pub fn (h &CaptureHost) lines() []string {
 	return h.state.out
 }
 
 // transcript is everything written, prompts included.
+// stability: stable
 pub fn (h &CaptureHost) transcript() string {
 	return h.state.raw
 }
@@ -123,12 +132,14 @@ pub fn (h &CaptureHost) transcript() string {
 // The alternative was rejected: a stateless CaptureHost, with the golden test
 // spawning a real process and scraping its stdout. That makes every REPL check
 // cost a process spawn, and the REPL is where all the interesting behaviour is.
+// stability: stable
 pub fn (h &CaptureHost) give_file(path string, src string) {
 	mut st := h.state
 	st.files[path] = src
 }
 
 // give_input queues lines for host_read_line.
+// stability: stable
 pub fn (h &CaptureHost) give_input(lines []string) {
 	mut st := h.state
 	for line in lines {
@@ -136,6 +147,7 @@ pub fn (h &CaptureHost) give_input(lines []string) {
 	}
 }
 
+// stability: stable
 pub fn (h &CaptureHost) host_print(s string) {
 	mut st := h.state
 	st.out << s
@@ -144,11 +156,13 @@ pub fn (h &CaptureHost) host_print(s string) {
 
 // host_write buffers into the transcript but not into `out`: a prompt is not
 // output. Mixing the two would make a golden test assert on its own prompt.
+// stability: stable
 pub fn (h &CaptureHost) host_write(s string) {
 	mut st := h.state
 	st.raw += s
 }
 
+// stability: stable
 pub fn (h &CaptureHost) host_read_line() ?string {
 	mut st := h.state
 	if st.in.len == 0 {
@@ -159,6 +173,7 @@ pub fn (h &CaptureHost) host_read_line() ?string {
 	return first
 }
 
+// stability: stable
 pub fn (h &CaptureHost) host_load(path string) !string {
 	if path in h.state.files {
 		return h.state.files[path]

@@ -44,6 +44,12 @@ Pure functions see only their args; context functions also see the machine (host
 removed := e.restrict_to(['+', '-', '*', 'print'])
 ```
 
+## Stability
+
+Every public V function carries a stability note in its doc comment: `stability: stable` is the frozen v2 promise, `stability: internal` may move. The frozen surface is the reader, arena, and datum (`blip/reader`), the value constructors and readers (`blip.integer`, `as_int`, `blip.table`, ...), parse-inspect-rewrite-evaluate (`machine.new_machine`, `run_str`, `run`, `eval_one`, `check_text`, `datum_to_value`), the host interface and capture host, the manifest parser, and the whole `blip/embed` facade. Everything else is internal: the machine internals, the emitter, the package and toolchain modules. `tests/api_coverage.v` fails any `pub fn` without a note, and `tests/unit.v` proves the frozen half is sufficient by parsing, rewriting, and evaluating a form through stable calls only.
+
+## Serving the web
+
 Values cross the boundary with constructors (`blip.string`, `blip.integer`, `blip.vector`, `blip.table`, ...) and readers (`embed.to_bool`, `embed.to_int`, `embed.to_str`, ...), rendered with `embed.show`. Results use the `(ok v)` / `(err why)` shapes. Errors are strings, classified with `embed.is_unbound_error`, `embed.is_limit_error`, and `embed.is_parse_error`.
 
 ## Serving the web

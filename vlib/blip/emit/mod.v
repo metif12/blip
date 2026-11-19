@@ -107,10 +107,12 @@ mut:
 // instead of being re-derived and forgotten, which is how the gate ended up
 // running examples with no `lookup-sym` and calling the silence a failure.
 $if wasm32 {
+// stability: internal
 	pub fn compile_program(src string) !Result {
 		return error('not available in wasm build')
 	}
 } $else {
+// stability: internal
 	pub fn compile_program(src string) !Result {
 		std_src := os.read_file('lib/std.blip') or {
 			return error('cannot read lib/std.blip: ${err.msg()}')
@@ -120,6 +122,7 @@ $if wasm32 {
 }
 
 // compile turns blip source into a JavaScript module.
+// stability: internal
 pub fn compile(src string) !Result {
 	return compile_with_base(src, '')
 }
@@ -127,10 +130,12 @@ pub fn compile(src string) !Result {
 // compile_file compiles one file, resolving `require` relative to its own
 // directory, the way `blip run file` does.
 $if wasm32 {
+// stability: internal
 	pub fn compile_file(path string) !Result {
 		return error('not available in wasm build')
 	}
 } $else {
+// stability: internal
 	pub fn compile_file(path string) !Result {
 		src := os.read_file(path) or { return error('cannot read ${path}: ${err.msg()}') }
 		std_src := os.read_file('lib/std.blip') or {

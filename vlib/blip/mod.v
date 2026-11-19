@@ -66,6 +66,7 @@ pub interface Payload {
 // Value is not a sum type.
 pub struct NoPayload {}
 
+// stability: internal
 pub fn (n &NoPayload) payload_tag() Tag {
 	return .nil
 }
@@ -78,6 +79,7 @@ pub:
 	s   string
 }
 
+// stability: internal
 pub fn (p &StringPayload) payload_tag() Tag {
 	return p.tag
 }
@@ -94,6 +96,7 @@ pub mut:
 	cdr Value
 }
 
+// stability: internal
 pub fn (p &Pair) payload_tag() Tag {
 	return p.tag
 }
@@ -106,6 +109,7 @@ pub mut:
 	data []Value
 }
 
+// stability: internal
 pub fn (v &Vector) payload_tag() Tag {
 	return v.tag
 }
@@ -125,6 +129,7 @@ pub mut:
 	d i64
 }
 
+// stability: internal
 pub fn (p &RatPayload) payload_tag() Tag {
 	return p.tag
 }
@@ -134,6 +139,7 @@ pub fn (p &RatPayload) payload_tag() Tag {
 // V integers underneath, shared by the reader (datum) and the prims
 // (values), because normalizing in two places two ways is how 2/4 stops
 // equaling 1/2.
+// stability: internal
 pub fn igcd(a i64, b i64) i64 {
 	mut x := if a < 0 { -a } else { a }
 	mut y := if b < 0 { -b } else { b }
@@ -149,6 +155,7 @@ pub fn igcd(a i64, b i64) i64 {
 // zero is 0/1. A zero denominator cannot happen (the reader rejects it,
 // make_rational errors it), so this takes the fast path and treats one as
 // 0/1 rather than branching on every literal.
+// stability: stable
 pub fn rational(n i64, d i64) Value {
 	if d == 0 {
 		return Value{
@@ -179,6 +186,7 @@ pub fn rational(n i64, d i64) Value {
 
 // make_rational is the fallible half: a zero denominator is an error, not
 // a value, because silently answering 0/1 for x/0 would hide a bug.
+// stability: stable
 pub fn make_rational(n i64, d i64) !Value {
 	if d == 0 {
 		return error('rational with zero denominator')
@@ -217,10 +225,12 @@ mut:
 	values map[string]Value
 }
 
+// stability: internal
 pub fn (s &StructVal) payload_tag() Tag {
 	return .struct_
 }
 
+// stability: internal
 pub fn (s &StructVal) get(k string) Value {
 	if k in s.values {
 		return s.values[k]
@@ -228,11 +238,13 @@ pub fn (s &StructVal) get(k string) Value {
 	return nil_value()
 }
 
+// stability: internal
 pub fn (s &StructVal) has(k string) bool {
 	return k in s.values
 }
 
 // at returns a field by its index in the declaration.
+// stability: internal
 pub fn (s &StructVal) at(i int) Value {
 	return s.values[s.fields[i]]
 }
@@ -240,6 +252,7 @@ pub fn (s &StructVal) at(i int) Value {
 // update returns a copy with one field replaced. Structs are immutable, so
 // `p.y := 99` builds a new value and leaves the original alone -- which is the
 // whole reason the syntax exists instead of `set!`.
+// stability: internal
 pub fn (s &StructVal) with(k string, v Value) &StructVal {
 	mut mm := map[string]Value{}
 	for f in s.fields {
@@ -265,10 +278,12 @@ pub fn (s &StructVal) with(k string, v Value) &StructVal {
 // returns, so the write has to land in the map the caller is still holding.
 // A V map is a reference, so writing through this receiver reaches the same
 // StructVal the variable points at.
+// stability: internal
 pub fn (mut s StructVal) set(k string, v Value) {
 	s.values[k] = v
 }
 
+// stability: internal
 pub fn (t &Table) payload_tag() Tag {
 	return t.tag
 }
@@ -276,6 +291,7 @@ pub fn (t &Table) payload_tag() Tag {
 // keys is insertion-ordered, not sorted. Insertion order is deterministic
 // (construction order), so output is stable without sorting; `sort-table`
 // in the std is the explicit sort for callers that want alphabetical.
+// stability: stable
 pub fn (t &Table) keys() []string {
 	mut out := []string{}
 	for k in t.order {
@@ -288,6 +304,7 @@ pub fn (t &Table) keys() []string {
 
 // get returns nil for an absent key. Absent is nil, not an error, which is what
 // makes `(get tbl k)` total.
+// stability: stable
 pub fn (t &Table) get(k string) Value {
 	if k in t.values {
 		return t.values[k]
@@ -295,6 +312,7 @@ pub fn (t &Table) get(k string) Value {
 	return nil_value()
 }
 
+// stability: stable
 pub fn (t &Table) has(k string) bool {
 	return k in t.values
 }
@@ -304,6 +322,7 @@ pub fn (t &Table) has(k string) bool {
 // because the payloads are heap structs). They live here rather than in
 // prims because the struct is declared here, and prims cannot reach
 // through an immutable reference to a field of another module's struct.
+// stability: internal
 pub fn (v &Vector) set_at(i int, val Value) {
 	unsafe {
 		mut w := v
@@ -311,6 +330,7 @@ pub fn (v &Vector) set_at(i int, val Value) {
 	}
 }
 
+// stability: internal
 pub fn (v &Vector) push(val Value) {
 	unsafe {
 		mut w := v
@@ -324,6 +344,7 @@ pub fn (v &Vector) push(val Value) {
 	}
 }
 
+// stability: internal
 pub fn (v &Vector) pop() Value {
 	unsafe {
 		mut w := v
@@ -335,6 +356,7 @@ pub fn (v &Vector) pop() Value {
 	}
 }
 
+// stability: internal
 pub fn (t &Table) set_at(k string, val Value) {
 	unsafe {
 		mut tt := t
@@ -349,6 +371,7 @@ pub fn (t &Table) set_at(k string, val Value) {
 	}
 }
 
+// stability: internal
 pub fn (t &Table) delete_at(k string) {
 	unsafe {
 		mut tt := t
@@ -390,6 +413,7 @@ pub:
 	end   int
 }
 
+// stability: internal
 pub fn (v Value) source_location() ?SourceLocation {
 	if v.origin.line == 0 {
 		return none
@@ -399,6 +423,7 @@ pub fn (v Value) source_location() ?SourceLocation {
 
 // with_origin preserves an existing origin: looking up a setting keeps its
 // defining expression rather than replacing it with the lookup location.
+// stability: internal
 pub fn (v Value) with_origin(origin SourceLocation) Value {
 	if v.origin.line > 0 || origin.line == 0 {
 		return v
@@ -411,6 +436,7 @@ pub fn (v Value) with_origin(origin SourceLocation) Value {
 
 // ---- constructors ----------------------------------------------------------
 
+// stability: stable
 pub fn nil_value() Value {
 	return Value{
 		tag:     .nil
@@ -428,6 +454,7 @@ pub fn nil_value() Value {
 //
 // The alternative, printing nil as `()`, makes every absent lookup and every
 // missing argument indistinguishable from an empty sequence at a glance.
+// stability: stable
 pub fn empty_list() Value {
 	return Value{
 		tag:     .emptylist
@@ -435,6 +462,7 @@ pub fn empty_list() Value {
 	}
 }
 
+// stability: stable
 pub fn boolean(b bool) Value {
 	return Value{
 		tag:     .boolean
@@ -443,6 +471,7 @@ pub fn boolean(b bool) Value {
 	}
 }
 
+// stability: stable
 pub fn integer(n i64) Value {
 	return Value{
 		tag:     .integer
@@ -451,6 +480,7 @@ pub fn integer(n i64) Value {
 	}
 }
 
+// stability: stable
 pub fn float(f f64) Value {
 	return Value{
 		tag:     .float
@@ -459,6 +489,7 @@ pub fn float(f f64) Value {
 	}
 }
 
+// stability: stable
 pub fn rune(r u32) Value {
 	return Value{
 		tag:     .rune
@@ -467,6 +498,7 @@ pub fn rune(r u32) Value {
 	}
 }
 
+// stability: stable
 pub fn string(s string) Value {
 	return Value{
 		tag:     .string
@@ -477,6 +509,7 @@ pub fn string(s string) Value {
 	}
 }
 
+// stability: stable
 pub fn symbol(name string) Value {
 	return Value{
 		tag:     .symbol
@@ -487,6 +520,7 @@ pub fn symbol(name string) Value {
 	}
 }
 
+// stability: stable
 pub fn keyword(name string) Value {
 	return Value{
 		tag:     .keyword
@@ -497,6 +531,7 @@ pub fn keyword(name string) Value {
 	}
 }
 
+// stability: stable
 pub fn cons(car Value, cdr Value) Value {
 	return Value{
 		tag:     .pair
@@ -511,6 +546,7 @@ pub fn cons(car Value, cdr Value) Value {
 // list_from builds a cons chain right to left. An empty input gives the empty
 // list, not nil: `list_from` is how a cons chain's base case is built, so the
 // base case has to be a sequence.
+// stability: stable
 pub fn list_from(items []Value) Value {
 	if items.len == 0 {
 		return empty_list()
@@ -524,6 +560,7 @@ pub fn list_from(items []Value) Value {
 	return out
 }
 
+// stability: stable
 pub fn vector(items []Value) Value {
 	return Value{
 		tag:     .vector
@@ -534,6 +571,7 @@ pub fn vector(items []Value) Value {
 	}
 }
 
+// stability: stable
 pub fn table(m map[string]Value) Value {
 	return Value{
 		tag:     .table
@@ -545,6 +583,7 @@ pub fn table(m map[string]Value) Value {
 	}
 }
 
+// stability: stable
 pub fn buffer(m map[string]Value) Value {
 	return Value{
 		tag:     .buffer
@@ -561,6 +600,7 @@ pub fn buffer(m map[string]Value) Value {
 // kept-or-appended order. The bare constructors above take a V map, which
 // carries no order, so they fall back to sorted keys -- the one order that
 // is deterministic without source information.
+// stability: internal
 pub fn table_ordered(m map[string]Value, order []string) Value {
 	return Value{
 		tag:     .table
@@ -572,6 +612,7 @@ pub fn table_ordered(m map[string]Value, order []string) Value {
 	}
 }
 
+// stability: internal
 pub fn buffer_ordered(m map[string]Value, order []string) Value {
 	return Value{
 		tag:     .buffer
@@ -602,6 +643,7 @@ fn sorted_keys(m map[string]Value) []string {
 // what keeps the checker quiet rather than wrong.
 pub const type_names = ['int', 'float', 'string', 'bool', 'any']
 
+// stability: internal
 pub fn is_type_name(s string) bool {
 	return s in type_names
 }
@@ -609,6 +651,7 @@ pub fn is_type_name(s string) bool {
 // type_compatible reports whether a value known to have type `have` may flow
 // into a position declared `want`. Unknown on either side is agreement, not
 // conflict: the checker only speaks when both sides are known and differ.
+// stability: internal
 pub fn type_compatible(have string, want string) bool {
 	if have == 'any' || want == 'any' {
 		return true
@@ -645,6 +688,7 @@ fn tag_name(t Tag) string {
 }
 
 @[inline]
+// stability: stable
 pub fn (v Value) as_int() !i64 {
 	if v.tag != .integer && v.tag != .rune {
 		return error('as_int: called on a ${tag_name(v.tag)}, not an integer')
@@ -653,6 +697,7 @@ pub fn (v Value) as_int() !i64 {
 }
 
 @[inline]
+// stability: stable
 pub fn (v Value) as_float() !f64 {
 	if v.tag != .float {
 		return error('as_float: called on a ${tag_name(v.tag)}, not a float')
@@ -661,6 +706,7 @@ pub fn (v Value) as_float() !f64 {
 }
 
 @[inline]
+// stability: stable
 pub fn (v Value) as_rational() !&RatPayload {
 	if v.tag != .rat {
 		return error('as_rational: called on a ${tag_name(v.tag)}, not a rational')
@@ -672,6 +718,7 @@ pub fn (v Value) as_rational() !&RatPayload {
 }
 
 @[inline]
+// stability: stable
 pub fn (v Value) as_bool() !bool {
 	if v.tag != .boolean {
 		return error('as_bool: called on a ${tag_name(v.tag)}, not a boolean')
@@ -691,6 +738,7 @@ fn string_payload(p Payload) !&StringPayload {
 }
 
 @[inline]
+// stability: stable
 pub fn (v Value) as_string() !string {
 	if v.tag !in [.string, .symbol, .keyword, .primitive] {
 		return error('as_string: called on a ${tag_name(v.tag)}, not a string')
@@ -700,6 +748,7 @@ pub fn (v Value) as_string() !string {
 }
 
 @[inline]
+// stability: stable
 pub fn (v Value) as_pair() !&Pair {
 	if v.tag != .pair {
 		return error('as_pair: called on a ${tag_name(v.tag)}, not a pair')
@@ -711,6 +760,7 @@ pub fn (v Value) as_pair() !&Pair {
 }
 
 @[inline]
+// stability: stable
 pub fn (v Value) as_vector() !&Vector {
 	if v.tag != .vector && v.tag != .array {
 		return error('as_vector: called on a ${tag_name(v.tag)}, not a vector')
@@ -722,6 +772,7 @@ pub fn (v Value) as_vector() !&Vector {
 }
 
 @[inline]
+// stability: stable
 pub fn (v Value) as_table() !&Table {
 	if v.tag != .table && v.tag != .buffer {
 		return error('as_table: called on a ${tag_name(v.tag)}, not a table')
@@ -732,6 +783,7 @@ pub fn (v Value) as_table() !&Table {
 	return error('as_table: payload is not a table')
 }
 
+// stability: stable
 pub fn struct_value(name string, fields []string, vals map[string]Value) Value {
 	return Value{
 		tag:     .struct_
@@ -744,6 +796,7 @@ pub fn struct_value(name string, fields []string, vals map[string]Value) Value {
 }
 
 @[inline]
+// stability: stable
 pub fn (v Value) as_struct() !&StructVal {
 	if v.tag != .struct_ {
 		return error('as_struct: called on a ${tag_name(v.tag)}, not a struct')
@@ -758,11 +811,13 @@ pub fn (v Value) as_struct() !&StructVal {
 // `(quote ())` are all true. Ruby and JavaScript say the opposite, which is why
 // everyone arriving from them has to relearn this.
 @[inline]
+// stability: stable
 pub fn (v Value) truthy() bool {
 	return !(v.tag == .boolean && v.i == 0)
 }
 
 @[inline]
+// stability: stable
 pub fn (v Value) is_nil() bool {
 	return v.tag == .nil
 }
@@ -770,6 +825,7 @@ pub fn (v Value) is_nil() bool {
 // is_empty_seq is what `null?` asks: true for the empty list AND for nil, because
 // both mean "no elements here", and the examples assert `(null? '())` is true.
 @[inline]
+// stability: stable
 pub fn (v Value) is_empty_seq() bool {
 	return v.tag == .nil || v.tag == .emptylist
 }
@@ -808,6 +864,7 @@ pub mut:
 	version u64
 }
 
+// stability: internal
 pub fn (mut ea EnvArena) new_env(parent EnvId) EnvId {
 	ea.frames << Env{
 		parent: parent
@@ -825,6 +882,7 @@ pub fn (mut ea EnvArena) new_env(parent EnvId) EnvId {
 // compared for equality by the lookup cache, so one bump invalidates exactly
 // like N bumps. The slices are cloned so the frame never aliases the
 // closure's params or the caller's args.
+// stability: internal
 pub fn (mut ea EnvArena) new_frame(parent EnvId, names []string, vals []Value) EnvId {
 	ea.version++
 	ea.frames << Env{
@@ -837,6 +895,7 @@ pub fn (mut ea EnvArena) new_frame(parent EnvId, names []string, vals []Value) E
 	return EnvId(ea.frames.len - 1)
 }
 
+// stability: internal
 pub fn (ea &EnvArena) get(id EnvId) &Env {
 	if id == no_env {
 		return unsafe { nil }
@@ -844,6 +903,7 @@ pub fn (ea &EnvArena) get(id EnvId) &Env {
 	return &ea.frames[int(id)]
 }
 
+// stability: internal
 pub fn (mut ea EnvArena) define(id EnvId, name string, val Value) {
 	mut frame := ea.get(id)
 	ea.version++
@@ -869,6 +929,7 @@ pub fn (mut ea EnvArena) define(id EnvId, name string, val Value) {
 	frame.index[name] = frame.names.len - 1
 }
 
+// stability: internal
 pub fn (mut ea EnvArena) lookup(id EnvId, name string) ?Value {
 	mut cur := id
 	for cur != no_env {
@@ -890,6 +951,7 @@ pub fn (mut ea EnvArena) lookup(id EnvId, name string) ?Value {
 
 // set assigns to the frame that owns the binding, so a `set!` inside a closure
 // is visible on that closure's next call.
+// stability: internal
 pub fn (mut ea EnvArena) set(id EnvId, name string, val Value) bool {
 	mut cur := id
 	for cur != no_env {
@@ -952,10 +1014,12 @@ pub:
 
 pub const no_default = NodeId(-2)
 
+// stability: internal
 pub fn (c &Closure) payload_tag() Tag {
 	return .closure
 }
 
+// stability: internal
 pub fn new_closure(params []string, body NodeId, env EnvId, name string) Value {
 	return Value{
 		tag:     .closure
@@ -972,6 +1036,7 @@ pub fn new_closure(params []string, body NodeId, env EnvId, name string) Value {
 // new_rest_closure is the variadic constructor. `params` EXCLUDES the rest
 // name; the rest name is kept separately so binding it cannot collide with an
 // ordinary parameter.
+// stability: internal
 pub fn new_rest_closure(params []string, rest_name string, body NodeId, env EnvId, name string) Value {
 	return Value{
 		tag:     .closure
@@ -988,6 +1053,7 @@ pub fn new_rest_closure(params []string, rest_name string, body NodeId, env EnvI
 }
 
 // labelled builds the closure for a parameter list that has labelled parameters.
+// stability: internal
 pub fn labelled(params []string, body NodeId, env EnvId, name string, opt_from int, opt_names []string, opt_defaults []NodeId) Value {
 	return Value{
 		tag:     .closure
@@ -1005,6 +1071,7 @@ pub fn labelled(params []string, body NodeId, env EnvId, name string, opt_from i
 }
 
 @[inline]
+// stability: internal
 pub fn (v Value) as_closure() !&Closure {
 	if v.tag != .closure {
 		return error('as_closure: called on a ${tag_name(v.tag)}, not a closure')
@@ -1022,6 +1089,7 @@ pub type PrimFn = fn (args []Value) !Value
 
 // A primitive Value carries only its name; the implementation lives in the
 // machine's table keyed by that name.
+// stability: internal
 pub fn new_prim(name string) Value {
 	return Value{
 		tag:     .primitive
@@ -1084,6 +1152,7 @@ pub const strict_float = strconv.AtoF64Param{
 	allow_extra_chars: false
 }
 
+// stability: internal
 pub fn format_error(path string, src string, line int, col int, msg string, length int) string {
 	if line <= 0 {
 		return 'error: ${msg}'

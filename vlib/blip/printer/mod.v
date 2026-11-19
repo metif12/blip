@@ -193,6 +193,7 @@ fn write_table_body(v blip.Value, active []u64, seen map[u64]int, depth int) str
 }
 
 // write is the entry point for runtime values.
+// stability: stable
 pub fn write(v blip.Value) string {
 	return write_value(v, []u64{}, map[u64]int{}, 0)
 }
@@ -226,6 +227,7 @@ fn char_literal(cp i32) string {
 
 // ------------------------------------------------------------------ strings
 
+// stability: internal
 pub fn quote_string(s string) string {
 	// Byte constants rather than match arms on locals, because V match arms
 	// require compile-time-constant patterns.
@@ -265,6 +267,7 @@ pub fn quote_string(s string) string {
 
 // write_datum renders a parsed form back to source. Round-tripping is the
 // property worth testing: read(write(x)) must equal x.
+// stability: stable
 pub fn write_datum(a &reader.Arena, id reader.NodeId) string {
 	d := a.node(id)
 	match d.tag {
@@ -340,6 +343,7 @@ fn close_for(open string) string {
 // pp_form pretty-prints one datum, breaking a long list across lines at the
 // 80-column budget. This is the single implementation behind `blip fmt` and
 // the LSP hover/completion rendering; both used to carry their own copy.
+// stability: internal
 pub fn pp_form(a &reader.Arena, id reader.NodeId, depth int) string {
 	d := a.node(id)
 	match d.tag {

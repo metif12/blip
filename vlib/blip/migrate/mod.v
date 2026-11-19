@@ -341,6 +341,7 @@ fn walk(a &reader.Arena, id reader.NodeId, src string, mut edits []Edit, mut war
 
 // migrate_source rewrites v1 blip to v2, iterating to a fixpoint so forms
 // copied raw by an expansion are migrated on later passes.
+// stability: internal
 pub fn migrate_source(src string) !MigrateResult {
 	mut warnings := []string{}
 	mut text := src
@@ -395,6 +396,7 @@ fn collect_files(dir string, mut out []string) {
 // the filesystem, otherwise the migrated text lands at the new path
 // and the old file is removed. A pre-existing `.blip` beside the `.lip`
 // is a conflict the tool will not resolve by overwriting -- it errors.
+// stability: internal
 pub fn migrate_path(target string, check_only bool) ![]FileReport {
 	mut files := []string{}
 	if os.is_dir(target) {
@@ -431,6 +433,7 @@ pub fn migrate_path(target string, check_only bool) ![]FileReport {
 
 // ensure_mod stamps the module manifest: (module NAME) plus (blip VERSION).
 // An existing manifest keeps its module name; a missing one is created.
+// stability: internal
 pub fn ensure_mod(dir string, version int) !string {
 	mod := os.join_path(dir, 'blip.mod')
 	mut name := os.file_name(dir)

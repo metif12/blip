@@ -125,6 +125,7 @@ fn (mut m Machine) macex(n blip.NodeId) !blip.Value {
 // primitive that takes a machine cannot be expressed in the prims table at all.
 // The definitions land in the current frame, so `(define (f p) (point-x p))` can
 // see `point-x` -- a struct you cannot name from another function is not a type.
+// stability: stable
 pub fn (mut m Machine) datum_to_value(id blip.NodeId) !blip.Value {
 	mut built := map[blip.NodeId]blip.Value{}
 	mut work := []Frame{}
@@ -271,6 +272,7 @@ fn (mut m Machine) assemble(id blip.NodeId, kids []blip.NodeId, built map[blip.N
 // control state. Without the restore, evaluating an unquote would throw away the
 // continuation frames of the form that contained it, and the macro expansion would
 // return into the wrong place.
+// stability: internal
 pub fn (mut m Machine) quasi_to_value(id blip.NodeId) !blip.Value {
 	d := m.arena.node(id)
 	if d.tag == .unquote || d.tag == .unquote_splice {
@@ -316,6 +318,7 @@ pub fn (mut m Machine) quasi_to_value(id blip.NodeId) !blip.Value {
 // Status: pure shapes + table/buffer/struct implemented; closure/primitive
 // remain refused (they are not data literals). The returned node carries the
 // value's origin, so expansion does not launder source spans.
+// stability: stable
 pub fn (mut m Machine) value_to_datum(v blip.Value) !blip.NodeId {
 	id := m.value_to_datum_inner(v)!
 	m.arena.nodes[int(id)].origin = v.origin

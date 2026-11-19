@@ -52,6 +52,7 @@ pub mut:
 // new builds an interpreter with the embedded prelude and default limits. The
 // prelude is trusted: a failure to load it is ignored rather than surfaced,
 // because there is nothing the embedder could do about it.
+// stability: stable
 pub fn new(h host.Host) &Interp {
 	mut e := &Interp{
 		m: machine.new_standalone(h)
@@ -64,6 +65,7 @@ pub fn new(h host.Host) &Interp {
 // keep the machine defaults; prelude .file loads prelude_path through the
 // host (an error surfaces), .none skips the prelude, .embedded uses the
 // compiled-in copy. fs/env false start from the minimal core (E3).
+// stability: stable
 pub fn new_with_config(h host.Host, cfg Config) !&Interp {
 	mut e := &Interp{
 		m: machine.new_standalone(h)
@@ -99,28 +101,33 @@ pub fn new_with_config(h host.Host, cfg Config) !&Interp {
 // load_prelude evaluates the embedded standard library into the running
 // machine. new/new_with_config already do this; it exists for interpreters
 // that started with prelude .none and changed their mind.
+// stability: stable
 pub fn (mut e Interp) load_prelude() !blip.Value {
 	return e.m.run_str(embedded_std)
 }
 
 // eval parses and evaluates src in the running machine and returns the last
 // value. Definitions accumulate across calls.
+// stability: stable
 pub fn (mut e Interp) eval(src string) !blip.Value {
 	return e.m.run_str(src)
 }
 
 // eval_text evaluates src and renders the result the way print would.
+// stability: stable
 pub fn (mut e Interp) eval_text(src string) !string {
 	return show(e.eval(src)!)
 }
 
 // call invokes a closure (or primitive) value with args, run to completion.
+// stability: stable
 pub fn (mut e Interp) call(f blip.Value, args []blip.Value) !blip.Value {
 	return e.m.call_value(f, args)
 }
 
 // call_named resolves name in the current env and calls it. It reports
 // "unbound identifier" exactly like a program reference would.
+// stability: stable
 pub fn (mut e Interp) call_named(name string, args []blip.Value) !blip.Value {
 	f := e.lookup(name) or {
 		return error('unbound identifier: ${name}')
@@ -129,22 +136,26 @@ pub fn (mut e Interp) call_named(name string, args []blip.Value) !blip.Value {
 }
 
 // define binds name to val in the globals, visible to later evals.
+// stability: stable
 pub fn (mut e Interp) define(name string, val blip.Value) {
 	e.m.envs.define(e.m.globals, name, val)
 	e.m.cache_ok = false
 }
 
 // lookup resolves name in the current env chain, or none.
+// stability: stable
 pub fn (mut e Interp) lookup(name string) ?blip.Value {
 	return e.m.envs.lookup(e.m.env, name)
 }
 
 // load reads path through the host and evaluates it in the running machine.
+// stability: stable
 pub fn (mut e Interp) load(path string) !blip.Value {
 	return e.m.load(path)
 }
 
 // set_limits bounds untrusted code. Zero keeps the current value.
+// stability: stable
 pub fn (mut e Interp) set_limits(max_steps int, max_kont int) {
 	if max_steps > 0 {
 		e.m.max_steps = max_steps
@@ -155,32 +166,39 @@ pub fn (mut e Interp) set_limits(max_steps int, max_kont int) {
 }
 
 // output is everything print/display wrote since the last clear_output.
+// stability: stable
 pub fn (mut e Interp) output() []string {
 	return e.m.out
 }
 
+// stability: stable
 pub fn (mut e Interp) clear_output() {
 	e.m.out = []string{}
 }
 
 // register_prim installs a pure primitive; register_ctx_prim a machine-aware
 // one (host/env/limits visible). Either replaces the same-named entry.
+// stability: stable
 pub fn (mut e Interp) register_prim(name string, f blip.PrimFn) {
 	e.m.register_prim(name, f)
 }
 
+// stability: stable
 pub fn (mut e Interp) register_ctx_prim(name string, f machine.CtxPrimFn) {
 	e.m.register_ctx_prim(name, f)
 }
 
+// stability: stable
 pub fn (mut e Interp) unregister_prim(name string) {
 	e.m.unregister_prim(name)
 }
 
+// stability: stable
 pub fn (mut e Interp) has_prim(name string) bool {
 	return e.m.has_prim(name)
 }
 
+// stability: stable
 pub fn (mut e Interp) prim_names() []string {
 	return e.m.prim_names()
 }
@@ -188,6 +206,7 @@ pub fn (mut e Interp) prim_names() []string {
 // restrict_to is the sandbox: only the kept names still resolve. Builtins
 // handled inside the machine (apply/error/...) stay; everything else named
 // and missing is gone. Returns the removed names.
+// stability: stable
 pub fn (mut e Interp) restrict_to(keep []string) []string {
 	return e.m.restrict_to(keep)
 }
@@ -195,11 +214,13 @@ pub fn (mut e Interp) restrict_to(keep []string) []string {
 // apply_manifest enforces a blip.mod's `(features ...)` stanza (roadmap
 // E2): `fs`/`env` off remove their prims, unknown names error naming the
 // manifest line. Stored on the machine for `blip check` (E2b).
+// stability: stable
 pub fn (mut e Interp) apply_manifest(mf manifest.Manifest) ! {
 	e.m.apply_manifest(mf)!
 }
 
 // capabilities lists every manifest capability the machine knows.
+// stability: stable
 pub fn capabilities() []string {
 	return machine.capabilities()
 }
@@ -207,29 +228,35 @@ pub fn capabilities() []string {
 // ---- value helpers ---------------------------------------------------------
 
 // show renders a value the way print would.
+// stability: stable
 pub fn show(v blip.Value) string {
 	return printer.write(v)
 }
 
+// stability: stable
 pub fn to_bool(v blip.Value) bool {
 	return v.truthy()
 }
 
 // to_int answers the integer (or rune code point), or an error.
+// stability: stable
 pub fn to_int(v blip.Value) !i64 {
 	return v.as_int() or { return error(err.msg()) }
 }
 
+// stability: stable
 pub fn to_float(v blip.Value) !f64 {
 	return v.as_float() or { return error(err.msg()) }
 }
 
 // to_str answers the string/symbol/keyword/primitive payload, or an error.
+// stability: stable
 pub fn to_str(v blip.Value) !string {
 	return v.as_string() or { return error(err.msg()) }
 }
 
 // to_strs reads a vector/list of strings into V strings.
+// stability: stable
 pub fn to_strs(v blip.Value) ![]string {
 	mut out := []string{}
 	if v.tag == .vector || v.tag == .array {
@@ -251,6 +278,7 @@ pub fn to_strs(v blip.Value) ![]string {
 	return error('to_strs: called on a ${v.tag}, not a sequence')
 }
 
+// stability: stable
 pub fn from_strs(items []string) blip.Value {
 	mut vals := []blip.Value{cap: items.len}
 	for s in items {
@@ -260,6 +288,7 @@ pub fn from_strs(items []string) blip.Value {
 }
 
 // from_table builds an immutable table from parallel keys/values.
+// stability: stable
 pub fn from_table(keys []string, vals []blip.Value) blip.Value {
 	mut m := map[string]blip.Value{}
 	mut i := 0
@@ -271,6 +300,7 @@ pub fn from_table(keys []string, vals []blip.Value) blip.Value {
 }
 
 // is_ok/is_err read the (ok v)/(err why) shapes the prelude uses.
+// stability: stable
 pub fn is_ok(v blip.Value) bool {
 	if v.tag != .pair {
 		return false
@@ -284,6 +314,7 @@ pub fn is_ok(v blip.Value) bool {
 	return s == 'ok'
 }
 
+// stability: stable
 pub fn is_err(v blip.Value) bool {
 	if v.tag != .pair {
 		return false
@@ -297,6 +328,7 @@ pub fn is_err(v blip.Value) bool {
 	return s == 'err'
 }
 
+// stability: stable
 pub fn ok_value(v blip.Value) !blip.Value {
 	if !is_ok(v) {
 		return error('ok_value: not an (ok ...) result')
@@ -308,6 +340,7 @@ pub fn ok_value(v blip.Value) !blip.Value {
 	return blip.nil_value()
 }
 
+// stability: internal
 pub fn err_message(v blip.Value) !string {
 	if !is_err(v) {
 		return error('err_message: not an (err ...) result')
@@ -328,14 +361,17 @@ pub fn err_message(v blip.Value) !string {
 // The machine reports errors as strings; these read the three shapes an
 // embedder branches on. Parse errors carry a line:col from format_error;
 // unbound names and limits are plain messages.
+// stability: internal
 pub fn is_unbound_error(err string) bool {
 	return err.contains('unbound identifier')
 }
 
+// stability: internal
 pub fn is_limit_error(err string) bool {
 	return err.contains('step limit exceeded') || err.contains('continuation too deep')
 }
 
+// stability: internal
 pub fn is_parse_error(err string) bool {
 	return err.contains('unexpected byte') || err.contains('unclosed') || err.contains('unterminated')
 }

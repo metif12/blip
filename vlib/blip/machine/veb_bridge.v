@@ -15,6 +15,7 @@ import blip
 import blip.printer
 
 // veb_to_value converts a request's fields into a blip table.
+// stability: internal
 pub fn veb_to_value(method string, path string, body string) blip.Value {
 	mut m := map[string]blip.Value{}
 	m['method'] = blip.string(method)
@@ -25,6 +26,7 @@ pub fn veb_to_value(method string, path string, body string) blip.Value {
 
 // value_to_veb_body extracts the response body from a handler result. A
 // string is the body (status 200); a table may carry :status and :body.
+// stability: internal
 pub fn value_to_veb_body(resp blip.Value) string {
 	if resp.tag == .string {
 		return resp.as_string() or { return printer.write(resp) }
@@ -39,12 +41,14 @@ pub fn value_to_veb_body(resp blip.Value) string {
 }
 
 // veb_route stores a handler closure under `path` on this machine.
+// stability: internal
 pub fn (mut m Machine) veb_route(path string, handler blip.Value) {
 	m.veb_handlers[path] = handler
 }
 
 // veb_dispatch runs the handler for `path` with `req` and returns the
 // response value. Returns an error value when no handler is registered.
+// stability: internal
 pub fn (mut m Machine) veb_dispatch(path string, req blip.Value) blip.Value {
 	handler := m.veb_handlers[path] or {
 		return blip.list_from([blip.symbol('err'), blip.string('no handler for ${path}')])

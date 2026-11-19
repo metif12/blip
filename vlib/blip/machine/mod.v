@@ -162,12 +162,14 @@ pub mut:
 
 // new_machine builds a machine over an arena the caller already owns. The suites
 // use it because they read their own source.
+// stability: stable
 pub fn new_machine(a &reader.Arena) &Machine {
 	return new_machine_with(a, &host.ConsoleHost{})
 }
 
 // new_machine_with is new_machine plus a host. Everything else about the machine
 // is the same; only where print goes and where `load` reads from differ.
+// stability: stable
 pub fn new_machine_with(a &reader.Arena, h host.Host) &Machine {
 	// The reference fields (arena, globals, env, host) must be initialised inside
 	// an unsafe block.
@@ -198,6 +200,7 @@ pub fn new_machine_with(a &reader.Arena, h host.Host) &Machine {
 // The arena is a heap reference rather than a field the caller passes in, because
 // a second source read APPENDS to it: every NodeId already stored in a closure or
 // a continuation frame has to stay valid, so there can only ever be one.
+// stability: stable
 pub fn new_standalone(h host.Host) &Machine {
 	a := &reader.Arena{
 		nodes:    []reader.Datum{}
@@ -231,6 +234,7 @@ fn (mut m Machine) reset() {
 }
 
 // run evaluates top-level forms in order and returns the last value.
+// stability: stable
 pub fn (mut m Machine) run(forms []blip.NodeId) !blip.Value {
 	mut last := blip.nil_value()
 	// An index loop, not `for f in forms`: the element type is a type alias from
@@ -253,6 +257,7 @@ pub fn (mut m Machine) run(forms []blip.NodeId) !blip.Value {
 // appended to the machine's own arena rather than read into a fresh one: a
 // closure defined by the first run_str holds a NodeId, and a second arena would
 // renumber it.
+// stability: stable
 pub fn (mut m Machine) run_str(src string) !blip.Value {
 	m.src_text = src
 	res := m.arena.read_source(src, m.where())
@@ -262,6 +267,7 @@ pub fn (mut m Machine) run_str(src string) !blip.Value {
 // run_forms evaluates forms already read into this machine's arena. It reports
 // read diagnostics as an error rather than printing them, because a caller that
 // embeds a machine has no one to print to.
+// stability: internal
 pub fn (mut m Machine) run_checked(res reader.Forms) !blip.Value {
 	if res.diags.len > 0 {
 		d := res.diags[0]
@@ -287,6 +293,7 @@ pub fn (mut m Machine) run_checked(res reader.Forms) !blip.Value {
 // v2 loads `.blip` files only (roadmap A2). A `.lip` or `.vl` path is
 // refused with a migration line instead of a warning: rename to `.blip`
 // and run `blip migrate` on the file.
+// stability: stable
 pub fn (mut m Machine) load(path string) !blip.Value {
 	if path.ends_with('.lip') || path.ends_with('.vl') {
 		return error('blip: ${path}: v2 loads .blip files only; rename to .blip and run `blip migrate` on it')
@@ -351,6 +358,7 @@ $if wasm32 {
 // The same machine, not a fresh one: definitions cannot cross into a second
 // machine, so importing into a separate one would leave every name in the
 // package unbound at the call site.
+// stability: stable
 pub fn (mut m Machine) eval_one(f blip.NodeId) !blip.Value {
 	m.reset()
 	m.form = f
@@ -362,6 +370,7 @@ pub fn (mut m Machine) eval_one(f blip.NodeId) !blip.Value {
 // evaluating each in turn and returning the last value. Unlike run_str it does
 // not stop at the first failure: the REPL needs to keep going, and so does a
 // file that prints a warning and carries on.
+// stability: internal
 pub fn (mut m Machine) eval_string_lenient(src string) !blip.Value {
 	res := m.arena.read_source(src, m.where())
 	mut last := blip.nil_value()
@@ -874,6 +883,7 @@ fn (mut m Machine) sort_by(args []blip.Value) ! {
 // wrong here: the caller is in the middle of call_primitive and would be
 // overwritten. So this saves the control state, applies, drives to completion,
 // and puts the state back. That is why eval_one had to save and restore too.
+// stability: internal
 pub fn (mut m Machine) call_value(f blip.Value, args []blip.Value) !blip.Value {
 	saved_k := m.kstack
 	saved_ctl := m.ctl
@@ -1220,6 +1230,7 @@ fn (mut m Machine) eval_field_access(what string) ! {
 	return error('unbound identifier: ${base_name} (in field access ${what})')
 }
 
+// stability: internal
 pub fn (m &Machine) field_of(v blip.Value, field string) !blip.Value {
 	if v.tag == .struct_ {
 		s := v.as_struct() or { return error(err.msg()) }
@@ -2249,6 +2260,7 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 
 // ------------------------------------------------------------ special forms
 
+// stability: internal
 pub fn special_form(name string) bool {
 	match name {
 		'quote', 'if', 'define', 'set!', 'lambda', 'fn', 'λ', 'begin', 'let', 'let*', 'letrec', 'and',
@@ -2930,6 +2942,7 @@ fn (m &Machine) is_erased_annotation(id blip.NodeId) bool {
 	return blip.is_type_name(m.arena.node(kids[1]).value)
 }
 
+// stability: internal
 pub fn (mut m Machine) parse_params(plist []blip.NodeId, who string) !ParamSpec {
 	mut spec := ParamSpec{
 		names:        []string{}
@@ -3093,6 +3106,7 @@ fn (mut m Machine) eval_lambda(kids []blip.NodeId) ! {
 // One place, because a rest parameter and a labelled parameter are different
 // constructors and picking the wrong one is silent: a labelled closure built by
 // the plain constructor has arity 3 and rejects every call with two arguments.
+// stability: internal
 pub fn (mut m Machine) make_closure(spec ParamSpec, body blip.NodeId, env blip.EnvId, name string) blip.Value {
 	if spec.opt_from >= 0 {
 		return blip.labelled(spec.names, body, env, name, spec.opt_from, spec.opt_names,
@@ -3116,23 +3130,28 @@ pub fn (mut m Machine) make_closure(spec ParamSpec, body blip.NodeId, env blip.E
 // a name that does not exist. The first version used dots and every `use` and
 // every `let` destructuring failed with "unbound identifier: use (in field access
 // use.1)".
+// stability: internal
 pub fn (mut m Machine) fresh(base string) string {
 	m.gensym++
 	return base + '_' + m.gensym.str()
 }
 
+// stability: stable
 pub fn (mut m Machine) sym_node(name string) blip.NodeId {
 	return m.locate_node(m.arena.str_leaf(.sym, name))
 }
 
+// stability: stable
 pub fn (mut m Machine) nil_node() blip.NodeId {
 	return m.locate_node(m.arena.leaf(.nil))
 }
 
+// stability: stable
 pub fn (mut m Machine) int_node(n i64) blip.NodeId {
 	return m.locate_node(m.arena.int_leaf(.int, n))
 }
 
+// stability: stable
 pub fn (mut m Machine) string_node(s string) blip.NodeId {
 	return m.locate_node(m.arena.str_leaf(.str, s))
 }
@@ -3140,6 +3159,7 @@ pub fn (mut m Machine) string_node(s string) blip.NodeId {
 // list_of2 is list_of with the two lists zipped. Binding forms and argument lists
 // are always written as pairs, and a helper that zips them keeps
 // transform_let_assert and transform_use from each building the pair by hand.
+// stability: stable
 pub fn (mut m Machine) list_of2(names []blip.NodeId, vals []blip.NodeId) blip.NodeId {
 	mut items := []blip.NodeId{}
 	mut i := 0
@@ -3151,6 +3171,7 @@ pub fn (mut m Machine) list_of2(names []blip.NodeId, vals []blip.NodeId) blip.No
 }
 
 // node_of builds a list headed by the named symbol, followed by `tail`.
+// stability: stable
 pub fn (mut m Machine) node_of(head string, tail []blip.NodeId) blip.NodeId {
 	mut items := []blip.NodeId{}
 	items << m.sym_node(head)
@@ -3163,6 +3184,7 @@ pub fn (mut m Machine) node_of(head string, tail []blip.NodeId) blip.NodeId {
 	return m.list_of(items)
 }
 
+// stability: stable
 pub fn (mut m Machine) list_of(items []blip.NodeId) blip.NodeId {
 	id := m.arena.open(.list)
 	m.arena.finish(id, items)
@@ -3170,6 +3192,7 @@ pub fn (mut m Machine) list_of(items []blip.NodeId) blip.NodeId {
 	return m.locate_node(id)
 }
 
+// stability: stable
 pub fn (mut m Machine) call_node(callee blip.NodeId, args []blip.NodeId) blip.NodeId {
 	mut items := []blip.NodeId{}
 	items << callee
@@ -3181,6 +3204,7 @@ pub fn (mut m Machine) call_node(callee blip.NodeId, args []blip.NodeId) blip.No
 
 // make_begin synthesises (begin e ...). A one-expression body is returned as-is,
 // and that is exactly what keeps a tail call a tail call.
+// stability: stable
 pub fn (mut m Machine) make_begin(forms []blip.NodeId) blip.NodeId {
 	if forms.len == 0 {
 		return m.nil_node()

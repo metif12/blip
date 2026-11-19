@@ -4,6 +4,7 @@ module blip
 // made inside primitives (string-split, range, result wrappers). Existing
 // origins stop the walk, so returning an argument does not scan its contents.
 // The worklist and visited set handle long lists and mutable cyclic containers.
+// stability: internal
 pub fn (v Value) with_tree_origin(origin SourceLocation) Value {
 	if v.origin.line > 0 || origin.line == 0 {
 		return v

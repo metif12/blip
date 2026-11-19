@@ -24,17 +24,20 @@ const strict_float = strconv.AtoF64Param{}
 // fs_prim_names lists the file-system prims gated by the `fs`
 // capability (roadmap E2/E3). Pure string helpers like `html-escape`
 // stay in core: they touch no filesystem.
+// stability: internal
 pub fn fs_prim_names() []string {
 	return ['read-file', 'write-file', 'file-exists?']
 }
 
 // env_prim_names lists the environment prims gated by the `env`
 // capability (roadmap E2/E3).
+// stability: internal
 pub fn env_prim_names() []string {
 	return ['env']
 }
 
 // register_fs installs the `fs` capability into a prim table.
+// stability: internal
 pub fn register_fs(mut p map[string]blip.PrimFn) {
 	p['read-file'] = prim_read_file
 	p['write-file'] = prim_write_file
@@ -42,6 +45,7 @@ pub fn register_fs(mut p map[string]blip.PrimFn) {
 }
 
 // register_env installs the `env` capability into a prim table.
+// stability: internal
 pub fn register_env(mut p map[string]blip.PrimFn) {
 	p['env'] = prim_env
 }
@@ -50,6 +54,7 @@ pub fn register_env(mut p map[string]blip.PrimFn) {
 // A minimal core (no filesystem, no environment) builds from this and
 // passes the subset gate: arithmetic, collections, and strings work,
 // while `read-file`/`env` cleanly resolve as unbound.
+// stability: internal
 pub fn core_table() map[string]blip.PrimFn {
 	mut p := map[string]blip.PrimFn{}
 	p['source-location'] = prim_source_location
@@ -201,6 +206,7 @@ pub fn core_table() map[string]blip.PrimFn {
 // table returns every primitive, keyed by name: the core plus the
 // gated IO capabilities. Embedders that want the minimal core use
 // core_table directly (or new_standalone_core on the machine side).
+// stability: internal
 pub fn table() map[string]blip.PrimFn {
 	mut p := core_table()
 	register_fs(mut p)
@@ -326,6 +332,7 @@ fn rat_parts(v blip.Value) !(i64, i64) {
 
 // compare orders numbers and strings. Anything else is an error rather than a
 // silent false, because a silent false here becomes a mystery much later.
+// stability: internal
 pub fn compare(a blip.Value, b blip.Value) !int {
 	// Direct .i access: as_int on an .integer always succeeds with .i, so
 	// this computes the same cmp_i64 with no error-union unwrapping. Rune
@@ -576,6 +583,7 @@ fn prim_eq(args []blip.Value) !blip.Value {
 }
 
 // value_eq is structural equality on contents, not identity.
+// stability: internal
 pub fn value_eq(a blip.Value, b blip.Value) bool {
 	// An integer and a float are never equal even when numerically equal: that
 	// distinction is the whole point of having a numeric tower.
@@ -762,6 +770,7 @@ fn list_slice(v blip.Value) ![]blip.Value {
 // everywhere, which silently changes the type of every result: `(map f '(1 2))`
 // would answer with a vector, and `(map f ...)` composed with `filter` and `fold`
 // would then need the result to be a list anyway.
+// stability: internal
 pub fn seq(v blip.Value) ![]blip.Value {
 	match v.tag {
 		.pair {
@@ -788,6 +797,7 @@ pub fn seq(v blip.Value) ![]blip.Value {
 }
 
 // is_seq reports whether `v` is something the higher-order primitives can walk.
+// stability: internal
 pub fn is_seq(v blip.Value) bool {
 	return v.tag in [.pair, .emptylist, .nil, .vector, .array]
 }
@@ -1712,6 +1722,7 @@ fn prim_sort(args []blip.Value) !blip.Value {
 
 // sort_by takes a KEY fntion, which needs the machine, so this is only the
 // key-extracting half: the machine calls key on each element first.
+// stability: internal
 pub fn sort_by_keyed(items []blip.Value, keys []blip.Value) !blip.Value {
 	mut order := []int{}
 	mut i := 0

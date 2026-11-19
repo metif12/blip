@@ -99,6 +99,7 @@ fn ck_prim_sig(name string) ?CkSig {
 // diagnostic per mismatch, in source order. Strict mode (`blip check
 // --strict`, the `#:strict` of the design question) reads `m.check_strict,
 // set by the caller like `applied_manifest`: warnings become errors.
+// stability: stable
 pub fn (mut m Machine) check_source(forms []blip.NodeId) []CheckDiag {
 	mut diags := []CheckDiag{}
 	mut sigs := map[string]CkSig{}
@@ -116,6 +117,7 @@ pub fn (mut m Machine) check_source(forms []blip.NodeId) []CheckDiag {
 // file yields nothing here (the caller reports the syntax error instead).
 // The LSP uses this; the CLI equivalent lives in main.v because it also
 // threads manifests and file names.
+// stability: stable
 pub fn check_text(src string, strict bool) []CheckDiag {
 	h := host.new_capture()
 	mut m := new_standalone(h)

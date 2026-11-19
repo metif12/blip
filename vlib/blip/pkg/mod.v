@@ -49,6 +49,7 @@ pub:
 
 // parse_spec splits `owner/repo[@ref]`, defaulting ref to HEAD. An empty
 // owner means the spec is not a remote package spec.
+// stability: internal
 pub fn parse_spec(spec string) (string, string, string) {
 	mut ref := 'HEAD'
 	mut path := spec
@@ -71,6 +72,7 @@ pub fn parse_spec(spec string) (string, string, string) {
 // not an error: a fresh project has no lock yet. Three-field lines (the
 // v1 shape, no checksum) read with an empty checksum; G2 treats a missing
 // checksum as a failure that `pkg update` fixes, loudly.
+// stability: internal
 pub fn read_lock(dir string) []Pin {
 	src := os.read_file(os.join_path(dir, 'blip.lock')) or { return []Pin{} }
 	mut out := []Pin{}
@@ -99,6 +101,7 @@ pub fn read_lock(dir string) []Pin {
 
 // write_lock rewrites blip.lock in dir, sorted by name so two runs over
 // the same universe produce byte-identical files.
+// stability: internal
 pub fn write_lock(dir string, pins []Pin) ! {
 	mut ordered := pins.clone()
 	ordered.sort(a.name < b.name)
@@ -110,6 +113,7 @@ pub fn write_lock(dir string, pins []Pin) ! {
 }
 
 // pin_of finds a package in a pin list, or none.
+// stability: internal
 pub fn pin_of(pins []Pin, name string) ?Pin {
 	for p in pins {
 		if p.name == name {
@@ -123,6 +127,7 @@ pub fn pin_of(pins []Pin, name string) ?Pin {
 // mirror override exists so fixtures (and private mirrors) do not touch
 // the network: with BLIP_PKG_MIRROR=/srv/mirror, `acme/db` clones from
 // /srv/mirror/acme/db.
+// stability: internal
 pub fn package_url(name string) string {
 	base := os.getenv('BLIP_PKG_MIRROR')
 	if base != '' {
@@ -163,6 +168,7 @@ fn version_parts(v string) ?[]int {
 // compare_versions orders versions numerically, treating a missing tail
 // as zeros (`1.2` == `1.2.0`). Unparseable input compares as 0/0/..., so
 // it only ever equals itself through the literal path in satisfies.
+// stability: internal
 pub fn compare_versions(a string, b string) int {
 	pa := version_parts(a) or { []int{} }
 	pb := version_parts(b) or { []int{} }
@@ -189,6 +195,7 @@ pub fn compare_versions(a string, b string) int {
 // a bare `1.2` are exact (modulo the `v` prefix), and anything else -- a
 // branch, a sha -- matches literally. `path:` reqs never satisfy here;
 // the universe handles them before resolution.
+// stability: internal
 pub fn satisfies(tag string, req string) bool {
 	r := req.trim_space()
 	if r.starts_with('path:') {
@@ -217,6 +224,7 @@ pub fn satisfies(tag string, req string) bool {
 // resolve to one pin (the max); an exact plus a floor it meets resolves
 // to the exact. Nothing satisfying is an error naming every req, because
 // "cannot resolve" without the reqs is unactionable.
+// stability: internal
 pub fn resolve(name string, reqs []string, tags []string) !string {
 	mut best := ''
 	for t in tags {
@@ -244,6 +252,7 @@ pub fn resolve(name string, reqs []string, tags []string) !string {
 // tree, sorted by slash-separated relative path, each as
 // `relpath + NUL + content + NUL`. Sorting makes it deterministic;
 // skipping `.git` makes it about the shipped content, not the history.
+// stability: internal
 pub fn checksum_dir(dir string) !string {
 	mut rels := []string{}
 	collect_files(dir, '', mut rels)
@@ -276,6 +285,7 @@ fn collect_files(base string, rel string, mut out []string) {
 // verify_dir recomputes a package checksum and fails loudly on mismatch.
 // The message names the package, not a hash: a hash in the output answers
 // nothing, while the name tells the user which line of whose lock to fix.
+// stability: internal
 pub fn verify_dir(dir string, name string, want string) ! {
 	if want == '' {
 		return error('blip: ${name} has no checksum recorded; run `blip pkg update`')
@@ -289,6 +299,7 @@ pub fn verify_dir(dir string, name string, want string) ! {
 // copy_package copies a local directory into place for a `path:` dep,
 // skipping history. Re-copying over an existing dir removes it first, so
 // a stale file the source deleted does not linger in the installed copy.
+// stability: internal
 pub fn copy_package(src string, dst string) ! {
 	if os.is_dir(dst) {
 		os.rmdir_all(dst)!
@@ -316,6 +327,7 @@ fn copy_tree(src string, dst string) ! {
 // list_remote_tags maps tag name to commit sha for a package URL, preferring
 // the peeled (`^{}`) commit for annotated tags. `git ls-remote` works
 // against local paths too, which is what keeps the fixtures offline.
+// stability: internal
 pub fn list_remote_tags(url string) !map[string]string {
 	r := os.exec(['git', 'ls-remote', '--tags', url])
 	if r.exit_code != 0 {
@@ -345,6 +357,7 @@ pub fn list_remote_tags(url string) !map[string]string {
 }
 
 // ensure_cloned clones url into dir unless it already holds a repo.
+// stability: internal
 pub fn ensure_cloned(url string, dir string) ! {
 	if os.is_dir(os.join_path(dir, '.git')) {
 		return
@@ -359,6 +372,7 @@ pub fn ensure_cloned(url string, dir string) ! {
 // checkout_sha moves a clone to exactly sha, detached. Checking out the
 // sha rather than the tag is what makes the install reproducible: a tag
 // can move, a sha cannot.
+// stability: internal
 pub fn checkout_sha(dir string, sha string) ! {
 	r := os.exec(['git', '-C', dir, 'checkout', '--quiet', sha])
 	if r.exit_code != 0 {
@@ -367,6 +381,7 @@ pub fn checkout_sha(dir string, sha string) ! {
 }
 
 // head_sha answers the commit a directory currently holds.
+// stability: internal
 pub fn head_sha(dir string) string {
 	r := os.exec(['git', '-C', dir, 'rev-parse', 'HEAD'])
 	if r.exit_code != 0 {
@@ -377,6 +392,7 @@ pub fn head_sha(dir string) string {
 
 // fetch_all updates a clone's view of its origin, so `update` sees tags
 // published since the clone.
+// stability: internal
 pub fn fetch_all(dir string) ! {
 	r := os.exec(['git', '-C', dir, 'fetch', '--quiet', '--tags', 'origin'])
 	if r.exit_code != 0 {
@@ -398,6 +414,7 @@ pub mut:
 // whose universe to build. Member entries are directory names under root;
 // a member without its own blip.mod is an error naming the directory,
 // because a silent skip would resolve a universe the tree does not have.
+// stability: internal
 pub fn collect_universe(root string) !Universe {
 	mod_path := os.join_path(root, 'blip.mod')
 	src := os.read_file(mod_path) or {
@@ -433,6 +450,7 @@ pub fn collect_universe(root string) !Universe {
 }
 
 // dep_names lists the universe's packages, sorted for determinism.
+// stability: internal
 pub fn (u Universe) dep_names() []string {
 	mut names := u.reqs.keys()
 	names.sort()
@@ -440,6 +458,7 @@ pub fn (u Universe) dep_names() []string {
 }
 
 // is_path_req reports a `path:` requirement and its directory.
+// stability: internal
 pub fn is_path_req(req string) (bool, string) {
 	if req.starts_with('path:') {
 		return true, req[5..]
@@ -452,6 +471,7 @@ pub fn is_path_req(req string) (bool, string) {
 // resolve to the max tag meeting every req. The error names the package
 // and every requester, because a conflict the message does not locate is
 // a conflict nobody can fix.
+// stability: internal
 pub fn resolve_universe(root string, u Universe) ![]Pin {
 	mut pins := []Pin{}
 	for name in u.dep_names() {
@@ -545,6 +565,7 @@ fn rel_to_root(root string, abs string) string {
 // exact-sha checkout, paths by fresh copy. Every remote gets its checksum
 // recorded (G2); path copies are checksummed too, so `verify` judges them
 // by the same rule.
+// stability: internal
 pub fn install_pins(root string, mut pins []Pin) ! {
 	for i, p in pins {
 		dst := os.join_path(os.join_path(os.join_path(root, 'blip_modules'), os.dir(p.name)),
@@ -568,6 +589,7 @@ pub fn install_pins(root string, mut pins []Pin) ! {
 // update resolves the whole universe to fresh pins and installs them: the
 // deterministic `pkg update` behind G1. Re-resolving (not reusing the old
 // lock) is what moves pins forward; the lock is rewritten sorted.
+// stability: internal
 pub fn update(root string) ![]Pin {
 	u := collect_universe(root)!
 	if u.dep_names().len == 0 {
@@ -583,6 +605,7 @@ pub fn update(root string) ![]Pin {
 // pins are enforced by exact sha, path pins re-synced from their sources.
 // A missing lock is an error pointing at `update`, because installing
 // with nothing pinned would resolve -- the opposite of reproducible.
+// stability: internal
 pub fn install(root string) ![]Pin {
 	mut pins := read_lock(root)
 	if pins.len == 0 {
@@ -613,6 +636,7 @@ pub fn install(root string) ![]Pin {
 // verify checks every locked remote against its recorded checksum and
 // reports each mismatch. No lock, or an entry with no checksum, is a
 // failure with a fix (`update`), not silence.
+// stability: internal
 pub fn verify(root string) ![]string {
 	pins := read_lock(root)
 	if pins.len == 0 {
@@ -635,6 +659,7 @@ pub fn verify(root string) ![]string {
 // ad-hoc path that needs no manifest. An already-installed package at
 // the same ref is verified, not re-cloned -- and a checksum mismatch
 // fails instead of silently overwriting, the same rule as everywhere.
+// stability: internal
 pub fn install_one(root string, spec string) !Pin {
 	owner, repo, ref := parse_spec(spec)
 	if owner == '' {
@@ -715,6 +740,7 @@ pub:
 // becomes two wrappers around `blip run`, so the same install works on
 // POSIX and Windows shells. An existing wrapper is an error, not an
 // overwrite -- two packages claiming one name must be resolved by hand.
+// stability: internal
 pub fn install_tool(root string, spec string) ![]InstalledTool {
 	pin := install_one(root, spec)!
 	_, repo, _ := parse_spec(spec)
@@ -769,6 +795,7 @@ pub fn install_tool(root string, spec string) ![]InstalledTool {
 
 // remove_one deletes an installed package and drops its lock line,
 // pruning the emptied owner dir like before.
+// stability: internal
 pub fn remove_one(root string, spec string) !string {
 	owner, repo, _ := parse_spec(spec)
 	name := if owner != '' { '${owner}/${repo}' } else { spec }
