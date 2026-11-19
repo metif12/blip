@@ -1,0 +1,58 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <!--
+    blip for Windows. Built by `wix build` (WiX v4) from the repo root:
+      wix build packaging/msi/blip.wxs -o blip-<ver>.msi \
+        -d ProductVersion=<N.N.N.N> -d BinDir=dist -d RepoDir=.
+    ProductVersion needs all four parts (2.0.0 becomes 2.0.0.0); the
+    release workflow derives it from the tag. UpgradeCode is fixed for
+    the life of the product: a new Product Id per build plus
+    MajorUpgrade is what makes reinstalls upgrade instead of pile up.
+    Stable component GUIDs for the same reason. No UI and no signing:
+    `msiexec /qn` is the install path CI smokes; signing is the known
+    Track F blocker, not a v2 promise.
+  -->
+  <Package Name="blip" Language="1033" Version="$(var.ProductVersion)"
+           Manufacturer="metif12" UpgradeCode="49EEE4A5-4BD4-4C13-BE7A-E424EAA17F39"
+           Scope="perMachine">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of blip is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Feature Id="Main" Title="blip" Level="1">
+      <ComponentRef Id="MainFiles" />
+      <ComponentRef Id="LibFiles" />
+      <ComponentRef Id="ProgramFiles" />
+      <ComponentRef Id="PathEnv" />
+    </Feature>
+  </Package>
+
+  <Fragment>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="blip">
+        <Component Id="MainFiles" Guid="310CF239-9BEC-4D91-B6DE-AD8CF57D3653">
+          <File Id="blip.exe" Source="$(var.BinDir)/blip.exe" KeyPath="yes" />
+          <File Id="readme" Source="$(var.RepoDir)/README.md" />
+        </Component>
+        <Directory Id="LibDir" Name="lib">
+          <Component Id="LibFiles" Guid="08ADECA8-E9B7-48D8-942A-9425526C1B2A">
+            <File Id="stdlib" Source="$(var.RepoDir)/lib/std.blip" KeyPath="yes" />
+          </Component>
+        </Directory>
+        <Directory Id="ProgramsDir" Name="programs">
+          <Component Id="ProgramFiles" Guid="22D48FAD-1DE7-49B1-9417-26F964E03900">
+            <File Id="prog_brainfuck" Source="$(var.RepoDir)/programs/brainfuck.blip" KeyPath="yes" />
+            <File Id="prog_config" Source="$(var.RepoDir)/programs/config.blip" />
+            <File Id="prog_csv" Source="$(var.RepoDir)/programs/csv_to_table.blip" />
+            <File Id="prog_json" Source="$(var.RepoDir)/programs/json.blip" />
+            <File Id="prog_lint" Source="$(var.RepoDir)/programs/lint_commit.blip" />
+            <File Id="prog_markdown" Source="$(var.RepoDir)/programs/markdown.blip" />
+            <File Id="prog_peg" Source="$(var.RepoDir)/programs/peg.blip" />
+            <File Id="prog_pratt" Source="$(var.RepoDir)/programs/pratt.blip" />
+          </Component>
+        </Directory>
+        <Component Id="PathEnv" Guid="EE70893A-B55D-47B9-8752-F93EECE90E2E">
+          <RegistryValue Root="HKLM" Key="SOFTWARE\Blip" Name="Installed" Value="1" Type="integer" KeyPath="yes" />
+          <Environment Id="BlipPath" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+  </Fragment>
+</Wix>

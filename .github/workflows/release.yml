@@ -170,8 +170,67 @@ jobs:
             blip_*.deb
             SHA256SUMS
 
+  msi:
+    # The Windows installer: WiX v4 builds it, msiexec installs it, and the
+    # smoke runs the installed binary (never the build tree), then removes
+    # it again. Signing is the known Track F blocker and is not attempted.
+    needs: [build]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: blip-dist
+          path: dist
+
+      - name: Install WiX
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 4.0.5
+          Add-Content $env:GITHUB_PATH "$env:USERPROFILE\.dotnet\tools"
+
+      - name: Build the MSI
+        shell: pwsh
+        run: |
+          if ("${{ github.ref }}" -like 'refs/tags/v*') { $raw = "${{ github.ref }}".Substring('refs/tags/v'.Length) } else { $raw = '0.0.0' }
+          $nums = @($raw -split '\.' | ForEach-Object { if ($_ -match '^\d+$') { [int]$_ } else { 0 } })
+          while ($nums.Count -lt 4) { $nums += 0 }
+          $ver = ($nums[0..3] -join '.')
+          echo "packaging blip $ver"
+          wix build packaging/msi/blip.wxs -o "blip_${ver}_amd64.msi" -d ProductVersion=$ver -d BinDir=dist -d RepoDir=.
+          Get-ChildItem blip_*.msi
+
+      - name: Smoke test the installed package
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem blip_*.msi | Select-Object -First 1
+          msiexec /i $msi.FullName /qn /norestart
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $exe = 'C:\Program Files\blip\blip.exe'
+          & $exe version
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Set-Content -Path $env:TEMP\msi_smoke.blip -Value '(println "msi smoke ok")' -NoNewline
+          if ((& $exe run "$env:TEMP\msi_smoke.blip") -ne '"msi smoke ok"') { Write-Error 'run mismatch'; exit 1 }
+          & $exe test examples/01_basics.blip
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $regPath = (Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment').Path
+          if ($regPath -notlike '*\blip*') { Write-Error 'PATH not registered'; exit 1 }
+          msiexec /x $msi.FullName /qn /norestart
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          if (Test-Path $exe) { Write-Error 'uninstall left the binary behind'; exit 1 }
+          Get-FileHash $msi.FullName -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $($msi.Name)" } | Out-File SHA256SUMS.msi -Encoding ascii
+          Get-Content SHA256SUMS.msi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blip-msi-dist
+          path: |
+            blip_*.msi
+            SHA256SUMS.msi
+
   publish:
-    needs: [build, clib]
+    needs: [build, clib, msi]
     # Only tags publish. A manual dispatch builds and verifies, then stops, so a
     # dry run can never create a release by accident.
     if: startsWith(github.ref, 'refs/tags/v')
@@ -181,6 +240,11 @@ jobs:
         with:
           name: blip-dist
           path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: blip-msi-dist
+          path: dist/msi
 
       - uses: actions/download-artifact@v4
         with:
@@ -196,7 +260,9 @@ jobs:
             dist/blip-windows.zip
             dist/blip-site.tar.gz
             dist/blip_*.deb
+            dist/msi/blip_*.msi
             dist/SHA256SUMS
+            dist/msi/SHA256SUMS.msi
             dist/clib/blip-clib-linux.tar.gz
             dist/clib/blip-clib-windows.zip
             dist/clib/SHA256SUMS.clib-linux
@@ -215,6 +281,11 @@ jobs:
             Build and usage commands are in `docs/c-lib.md`; the smoke test
             in `.github/workflows/clib.yml` runs the example against the
             packaged library on Linux and Windows.
+
+            `blip_*.deb` installs on Debian/Ubuntu (`sudo dpkg -i`); the
+            `.msi` of the same number installs on Windows. Both were
+            smoke-tested installed -- version, run, and the example
+            suite -- before they were attached here.
 
   # The C library release. Same compiler pins as `verify` above and the same
   # build-and-smoke recipe as `.github/workflows/clib.yml` (that file is the

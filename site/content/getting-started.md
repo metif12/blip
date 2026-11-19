@@ -16,6 +16,10 @@ Windows (PowerShell):
 irm https://metif12.github.io/blip/install.ps1 | iex
 ```
 
+Or install the `.msi` from a release (same versioned artifacts as the `.deb`
+below) by double-clicking it, or headless with
+`msiexec /i blip_<version>_amd64.msi /qn`.
+
 Debian/Ubuntu, from a release (the `.deb` attached to each version tag):
 
 ```

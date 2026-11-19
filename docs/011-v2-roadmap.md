@@ -511,8 +511,14 @@ it is the known blocker, not because v2 promises it.
   `.deb` with checksums. Verified end to end in WSL Ubuntu 24.04 with
   the pinned stock toolchain: build, `dpkg-deb --build`, install,
   smoke (version, run, and `blip test` of an example against the
-  installed prelude), uninstall. MSI is the next format, in its own
-  change.
+   installed prelude), uninstall.
+- MSI — **done**: `packaging/msi/blip.wxs` (WiX v4, fixed UpgradeCode,
+   stable component GUIDs, per-machine install to Program Files with
+   PATH registration, no UI, unsigned per the known blocker); CI
+   installs with `msiexec /qn`, smokes version/run/test plus
+   PATH-registration and clean uninstall, and publishes with
+   checksums. Verified locally: `wix build`, MSI table inspection,
+   admin-install extraction, and binary smoke from the extracted tree.
 
 ## Track G — packages, tools, workspaces (agreed, registry later)
 
