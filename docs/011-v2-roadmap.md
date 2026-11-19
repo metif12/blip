@@ -154,8 +154,7 @@ deterministic tooling) is already unique; fibers and PEG complete it.
    compared); every example is machine-vs-node compared by
    `check_example`; the sandbox is pinned (`embed_api` restrict_to,
    `embedding` per-machine step limits).
-2. **Error pipelines: `Result` + `use` + `match*` + `let assert`.**
-   Gleam has `use` without `match*`; Racket has `match*` without the
+2. **Error pipelines: `Result` + `use` + `match*` + `let assert`.**   Gleam has `use` without `match*`; Racket has `match*` without the
    `Result` convention. Together they make flat fallible pipelines
    (`05_pipelines`) without nesting. Missing piece is std: move
    `map-result`/`unwrap-or`/`flatten`/`all-results`/`lazy_*` from the
@@ -469,7 +468,13 @@ removes the gated prims (use fails as `unbound identifier`);
 blip.mod:<line> (feature 'fs' is off)`; the CLI auto-applies `./blip.mod`
 in `run`/`test`/`check` (after the prelude loads) and warns in `repl`.
 Pins: `contracts.v` manifest check cases, `hostile.v` CLI auto-apply
-from a project dir, `embedding.v` runtime refusals.
+from a project dir, `embedding.v` runtime refusals. Since Track B4 the
+switch list covers fibers too: `(features (fibers #f))` disables
+`spawn`/`resume`/`yield`/`fiber-status`/`fiber-done?`, failing cleanly
+as `unbound identifier` at run time (builtins never sat in the prims
+table, so a `call_primitive` gate covers them) and naming the manifest
+line under `blip check`. Pins: the fibers-off runtime case in
+`embedding.v`, three fibers check cases in `contracts.v`.
 
 ### E3. Modular core
 

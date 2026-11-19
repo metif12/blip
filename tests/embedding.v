@@ -404,22 +404,55 @@ fn (mut s Suite) manifest_env_off_disables_env() bool {
 	return false
 }
 
-// E2a: an unknown capability is a hard error naming the blip.mod line,
-// not a silent no-op. `fibers` does not exist until Track B4 lands.
-fn (mut s Suite) manifest_unknown_feature_errors() bool {
+// The fibers switch (landed with Track B4): a manifest with `fibers` off
+// disables the whole family -- spawn, resume, and yield alike -- and a
+// later use fails cleanly as `unbound identifier`, the same error a
+// removed table prim produces. Builtins never sat in the prims table, so
+// unregistering could not touch them; the capability check in
+// call_primitive covers them instead.
+fn (mut s Suite) manifest_fibers_off_disables_fibers() bool {
 	_, mut m, _, _ := pair()
 	mf := manifest.parse('(module m)\n(blip 2)\n(features (fibers #f))') or {
+		s.fail('fibers off disables fibers', err.msg())
+		return false
+	}
+	m.apply_manifest(mf) or {
+		s.fail('fibers off disables fibers', err.msg())
+		return false
+	}
+	if m.applied_manifest.feature('fibers') {
+		s.fail('fibers off disables fibers', 'stored manifest still has fibers on')
+		return false
+	}
+	m.run_str('(spawn (fn [] 1))') or {
+		if err.msg().contains('unbound identifier: spawn') {
+			return s.record('fibers off disables fibers', true, 'spawn unbound after apply', '')
+		}
+		s.fail('fibers off disables fibers', 'wrong error: ${err.msg()}')
+		return false
+	}
+	s.fail('fibers off disables fibers', 'spawn still ran')
+	return false
+}
+
+// E2a: an unknown capability is a hard error naming the blip.mod line,
+// not a silent no-op. `fibers` used to play this role (it did not exist
+// until Track B4 landed); now that it is a real switch the probe uses
+// `nope`.
+fn (mut s Suite) manifest_unknown_feature_errors() bool {
+	_, mut m, _, _ := pair()
+	mf := manifest.parse('(module m)\n(blip 2)\n(features (nope #f))') or {
 		s.fail('unknown feature errors', err.msg())
 		return false
 	}
 	m.apply_manifest(mf) or {
-		if err.msg().contains('blip.mod:3') && err.msg().contains("unknown feature 'fibers'") {
-			return s.record('unknown feature errors', true, 'fibers refused at blip.mod:3', '')
+		if err.msg().contains('blip.mod:3') && err.msg().contains("unknown feature 'nope'") {
+			return s.record('unknown feature errors', true, 'nope refused at blip.mod:3', '')
 		}
 		s.fail('unknown feature errors', 'wrong error: ${err.msg()}')
 		return false
 	}
-	s.fail('unknown feature errors', 'apply accepted fibers')
+	s.fail('unknown feature errors', 'apply accepted nope')
 	return false
 }
 
@@ -459,6 +492,7 @@ fn main() {
 	s.the_host_supplies_input()
 	s.manifest_fs_off_disables_file_prims()
 	s.manifest_env_off_disables_env()
+	s.manifest_fibers_off_disables_fibers()
 	s.manifest_unknown_feature_errors()
 	s.manifest_fs_on_keeps_file_prims()
 

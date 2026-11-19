@@ -284,6 +284,8 @@ A fiber is a suspended computation: `spawn` takes a thunk and answers an id, `re
 
 One boundary: `yield` inside a `map` callback (or macro expansion) is refused rather than silently corrupted — the callback lives in a host-side loop the saved state cannot resume. Yield in straight-line code and plain function calls suspends fine.
 
+A project that never wants concurrency switches it off in `blip.mod`: `(features (fibers #f))` makes the whole family unbound.
+
 ## Modules
 
 `provide` exports names, `require` loads a file, `only-in` imports selected names, `prefix-in` qualifies a whole module. Resolution is file-relative — `./x.blip` means next to this file — and each module loads once.

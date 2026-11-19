@@ -348,10 +348,10 @@ fn main() {
 
 	// E3 modular core: Config fs/env false start without IO; the
 	// capabilities list names exactly what the machine gates.
-	if embed.capabilities() != ['env', 'fs'] {
+	if embed.capabilities() != ['env', 'fs', 'fibers'] {
 		s.fail('embed capabilities', embed.capabilities().str())
 	} else {
-		s.ok('embed capabilities', 'env, fs')
+		s.ok('embed capabilities', 'env, fs, fibers')
 	}
 	{
 		h6 := host.new_capture()

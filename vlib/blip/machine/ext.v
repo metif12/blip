@@ -85,13 +85,15 @@ pub fn (mut m Machine) restrict_to(keep []string) []string {
 // in a stable order.
 // stability: internal
 pub fn capabilities() []string {
-	return ['env', 'fs']
+	return ['env', 'fs', 'fibers']
 }
 
 // capability_prims maps a manifest capability to the prim names it gates.
-// v2 knows two: `fs` (file IO) and `env` (environment). Fibers land with
-// Track B4; naming one before then is an unknown-feature error, not a
-// silent no-op -- a manifest must be exact, and a typo must fail.
+// `fs` is file IO, `env` is the environment, `fibers` is the whole fiber
+// family (spawn/resume/yield/fiber-status/fiber-done?): switching it off
+// removes concurrent suspension the same way switching off `fs` removes
+// file access. An unknown capability is an error from apply_manifest, not
+// a silent no-op -- a manifest must be exact, and a typo must fail.
 // stability: internal
 pub fn capability_prims(name string) ?[]string {
 	match name {
@@ -100,6 +102,9 @@ pub fn capability_prims(name string) ?[]string {
 		}
 		'env' {
 			return prims.env_prim_names()
+		}
+		'fibers' {
+			return ['spawn', 'resume', 'fiber-status', 'fiber-done?', 'yield']
 		}
 		else {
 			return none
@@ -113,11 +118,15 @@ pub fn capability_prims(name string) ?[]string {
 // not the switch, so it needs prim -> feature.
 // stability: internal
 pub fn prim_capability(name string) ?string {
-	if name in prims.fs_prim_names() {
-		return 'fs'
-	}
-	if name in prims.env_prim_names() {
-		return 'env'
+	// One loop over the capability table, not a branch per feature: a new
+	// switch in capability_prims is picked up here with no second edit
+	// to forget.
+	for cap in capabilities() {
+		if prs := capability_prims(cap) {
+			if name in prs {
+				return cap
+			}
+		}
 	}
 	return none
 }
@@ -133,15 +142,20 @@ pub fn prim_capability(name string) ?string {
 // `register_prim` after this call wins, so the file declares intent and
 // code keeps control. The manifest is stored on the machine for E2b
 // `blip check`, which names the manifest line in its diagnostic.
+// capability_prims is the single table both directions share: apply_manifest
+// removes by it, check reports by it (E2b names the manifest line), and the
+// call_primitive gate below covers machine builtins that never sat in the
+// prims table (the fibers family). A new switch needs one match arm, and
+// all three directions follow.
 // stability: internal
 pub fn (mut m Machine) apply_manifest(mf manifest.Manifest) ! {
 	for name in mf.features.keys() {
 		gated := capability_prims(name) or {
 			line := mf.feature_line(name)
 			if line > 0 {
-				return error("blip.mod:${line}: unknown feature '${name}' (known: env, fs)")
+				return error("blip.mod:${line}: unknown feature '${name}' (known: env, fs, fibers)")
 			}
-			return error("blip.mod: unknown feature '${name}' (known: env, fs)")
+			return error("blip.mod: unknown feature '${name}' (known: env, fs, fibers)")
 		}
 		if !mf.features[name] {
 			for p in gated {

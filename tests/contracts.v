@@ -258,6 +258,12 @@ fn main() {
 		'(write-file "x" "y")', "feature 'fs' is off")
 	s.check_manifest('check env off names manifest', '(module m)\n(blip 2)\n(features (env #f))',
 		'(env "HOME")', 'blip.mod:3')
+	s.check_manifest('check fibers off names manifest', '(module m)\n(blip 2)\n(features (fibers #f))',
+		'(spawn (fn [] 1))', 'blip.mod:3')
+	s.check_manifest('check fibers off names the feature', '(module m)\n(blip 2)\n(features (fibers #f))',
+		'(resume 1)', "feature 'fibers' is off")
+	s.check_manifest('check fibers on stays silent', '(module m)\n(blip 2)\n(features (fibers #t))',
+		'(spawn (fn [] 1))', '')
 	s.check_manifest('check fs on stays silent', '(module m)\n(blip 2)\n(features (fs #t))',
 		'(read-file "x")', '')
 	s.check_manifest('check absent stays silent', '(module m)\n(blip 2)', '(read-file "x")', '')

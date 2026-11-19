@@ -1860,6 +1860,17 @@ fn (mut m Machine) call_primitive(name string, args []blip.Value) ! {
 		m.ret()
 		return
 	}
+	// Capabilities gate machine builtins too (roadmap E2, fibers switch):
+	// unregister_prim only removes table entries, and builtins never had
+	// one. A disabled capability reports the same clean `unbound
+	// identifier` a removed prim would. This sits AFTER the fast path so
+	// an embedder re-registration (manifest < code) still wins: a name
+	// the embedder put back in the table never reaches here.
+	if feat := prim_capability(name) {
+		if !m.applied_manifest.feature(feat) {
+			return error('unbound identifier: ${name}')
+		}
+	}
 	// Builtins that need to call back into the interpreter are handled here
 	// rather than through the plain-function table.
 	match name {

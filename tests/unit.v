@@ -840,14 +840,17 @@ fn (mut s Suite) modular_core() {
 	prims.register_env(mut p)
 	s.record('register_env adds env', 'env' in p, 'env installed')
 	// E3: machine capabilities mirror the prim groups.
-	s.record('capabilities list env and fs', machine.capabilities() == ['env', 'fs'],
+	s.record('capabilities list env, fs, fibers', machine.capabilities() == ['env', 'fs', 'fibers'],
 		machine.capabilities().str())
 	fsp := machine.capability_prims('fs') or { []string{} }
 	s.record('capability_prims fs matches', fsp == prims.fs_prim_names(), fsp.str())
-	if _ := machine.capability_prims('fibers') {
-		s.record('capability_prims rejects fibers', false, 'fibers resolved')
+	fbp := machine.capability_prims('fibers') or { []string{} }
+	s.record('capability_prims fibers lists the family',
+		fbp == ['spawn', 'resume', 'fiber-status', 'fiber-done?', 'yield'], fbp.str())
+	if _ := machine.capability_prims('nope') {
+		s.record('capability_prims rejects unknown', false, 'nope resolved')
 	} else {
-		s.record('capability_prims rejects fibers', true, 'fibers unknown until B4')
+		s.record('capability_prims rejects unknown', true, 'nope unknown')
 	}
 	s.record('prim_capability maps read-file to fs', machine.prim_capability('read-file') or {
 		''
